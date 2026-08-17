@@ -1,67 +1,83 @@
 # Three.js WebGL Pathtracer
 
-Toy/demo Realtime WebGL-based Pathtracer integrated with Three.js, for educaitonal purposes.
+An educational, real-time WebGL path tracer integrated with Three.js. It is an original implementation that currently follows the concepts in Peter Shirley's [Ray Tracing in One Weekend](https://raytracing.github.io/) while adapting them to an iterative GLSL renderer.
 
-Live demo is available here: https://sbobyn.github.io/three-pathtracer/
+Live demo: https://sbobyn.github.io/three-pathtracer/
 
-So far, the Pathtracer closely follows Peter Shirely's [Ray Tracing in One Weekend](https://raytracing.github.io/) (part 1). See the todos below for what's planned next.
+![Path tracer demo](three-pathtracer.gif)
 
-![gif demo](three-pathtracer.gif)
+## Current capabilities
 
-## Detail
-
-The pathtracer itself is contained in `main.fs`. So far, it closely follows RTIOW,
-except that it's written in GLSL so there's some changes to the data structures,
-no recursion, etc. and the random number generation is based off of the hash functionsa
-from this ShaderToy: https://www.shadertoy.com/view/4djSRW
-
-Right now it supports:
+The path tracer is implemented in `src/shaders/main.fs` and currently supports:
 
 - ray-sphere intersection
-- diffuse, metal, dielectric materials
-- depth-of-field / defocus blur
+- diffuse, metal, and dielectric materials
+- depth of field / defocus blur
+- progressive accumulation with ping-pong render targets
+- accumulation reset when the camera moves
 
-Additionally progressive pathtracing is `ShaderCanvas.ts`:
+The Three.js application provides:
 
-- two render targets are used, swapped each frame
-- the previous render target is uploaded as a texture to the current redner target
-  to accumulate to
-- accumulation is reset when the camera moves
+- a `THREE.Scene` scene graph for scene and camera management
+- a switchable raster preview
+- orbit camera controls
+- raycaster-based object selection
+- transform controls for selected objects
+- selection outlines via `OutlinePass`
+- a `lil-gui` debug UI for renderer settings and object editing
 
-The Three.js integration includes:a
+The hash-based random-number generator was adapted from [this ShaderToy](https://www.shadertoy.com/view/4djSRW).
 
-- `THREE.Scene` scene graph used to manage scenes (spheres, camera)
-  - a Three.js renderer is used as a debug renderer (can be toggled in the gui)
-- camera orbit controls via `THREE.OrbitControls`
-- object picking via `THREE.Raycaster`
-- transform controls on selected object via `THREE.TransformControls`
-- outline on selected object via postprocessing [OutlinePass](https://threejs.org/examples/webgl_postprocessing_outline.html)
+## Running locally
 
-In `PtApp`, a debug gui is implemented via `lil-gui` which can be used to change the pathtracer settings and edit selected object's transform and material properties.
-
-# Running locally
-
-With pnpm:
+Prerequisites: Node.js 20.17 or newer and pnpm.
 
 ```sh
-$pnpm i
-$pnpm dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-## To Do Next
+The development server defaults to `http://localhost:3005/three-pathtracer/`.
 
-- [ ] skybox/environent map
-- [ ] integrate threejs [sky example](https://threejs.org/examples/?q=sun#webgl_shaders_sky) for environment map using [THREE.CubeCamera](https://threejs.org/docs/#api/en/cameras/CubeCamera)
+Quality checks:
 
-From [RTIOW Part 2](https://raytracing.github.io/books/RayTracingTheNextWeek.html), add:
+```sh
+pnpm typecheck
+pnpm build
+pnpm verify
+```
 
-- [ ] Textures
-- [ ] Quads
-- [ ] Area lights
+`pnpm verify` runs both the TypeScript check and production build.
 
-Then
+## Verified baseline
 
-- [ ] Add ray-triangle intersection
-- [ ] Add mesh-loading
-- [ ] Convert to compute shader + replace hittable-related uniforms (spheres, tris) with textures
-- [ ] Add bvh to accelerate hit testing using https://github.com/gkjohnson/three-mesh-bvh
+The baseline has been manually verified in a Chromium browser on macOS with Three.js r177 and WebGL:
+
+- `Part1Simple` renders in raster and path-traced modes.
+- `Part1Final` renders in raster and path-traced modes.
+- orbit controls, object selection, transform mode, sphere radius editing, resolution scale, and depth-of-field controls respond without browser warnings or errors.
+- TypeScript checking and the production Vite build pass.
+
+Reference captures and their constraints are documented in [`docs/reference/README.md`](docs/reference/README.md).
+
+Known baseline limitations:
+
+- `Part1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
+- Visual verification is manual; there is no automated image-regression suite yet.
+- The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
+- Accumulation precision, post-processing accumulation, and event-listener/resize lifecycle behavior still need further investigation.
+- A WebGL-capable browser is required. There is no WebGPU backend yet.
+
+## Roadmap
+
+Broad future directions include:
+
+- textures, quads, and area lights inspired by *Ray Tracing: The Next Week*
+- original triangle intersection and mesh data paths
+- BVH construction, traversal, and visualization
+- glTF mesh rendering built on the triangle, BVH, material, and texture systems
+- clearer state ownership and a UI decoupled from path-tracer behavior
+- a WebGPU backend and reproducible WebGL/WebGPU benchmarks
+- rasterized approximations for side-by-side quality and performance comparisons
+
+External projects may inform architecture research, but code and renderer design remain original unless attribution explicitly says otherwise.

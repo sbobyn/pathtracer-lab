@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { GUI, Controller } from "lil-gui";
 import PtRenderer from "./PtRenderer";
-import PtScene from "./PtScene";
+import PtScene, {
+  type PtPreviewMaterial,
+  type PtSphereMesh,
+} from "./PtScene";
 import { PresetPtScenes } from "./PresetPtScenes";
 import { defaultState, type PtState } from "./PtState";
 
@@ -12,10 +15,9 @@ const materialLabelDict = {
 };
 
 export default class PtApp {
-  private selectedObject: THREE.Object3D | null;
+  private selectedObject: PtSphereMesh | null;
   private selectedPosition: THREE.Vector3;
-  private selectedRadius: number;
-  private selectedColor: string;
+  public selectedRadius: number;
 
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
@@ -48,13 +50,12 @@ export default class PtApp {
     this.intersectGroup = ptScene.intersectGroup;
     this.selectedPosition = new THREE.Vector3(-1, -1, -1);
     this.selectedRadius = -1;
-    this.selectedColor = "";
 
     this.activePtScene = ptScene;
 
     this.gui = new GUI({ title: "Settings" });
 
-    let currentSceneName = { value: "Part1Simple" };
+    const currentSceneName = { value: "Part1Simple" };
 
     this.gui
       .add(currentSceneName, "value", Object.keys(PresetPtScenes))
@@ -215,7 +216,8 @@ export default class PtApp {
       .add(this, "selectedRadius", 0)
       .onChange((value: number) => {
         if (this.selectedObject) {
-          this.activePtScene.spheres[this.selectedObject.index].radius = value;
+          const sphereIndex = this.selectedObject.userData.sphereIndex;
+          this.activePtScene.spheres[sphereIndex].radius = value;
           const scale = value / this.selectedObject.geometry.parameters.radius;
           this.selectedObject.scale.set(scale, scale, scale);
           ptRenderer.shaderCanvas.resetAccumulation();
@@ -248,10 +250,11 @@ export default class PtApp {
       if (ptRenderer.transformControls.mode === "scale") {
         const scale = this.selectedObject.scale.x;
         this.selectedObject.scale.set(scale, scale, scale);
-        this.activePtScene.spheres[this.selectedObject.index].radius =
+        const sphereIndex = this.selectedObject.userData.sphereIndex;
+        this.activePtScene.spheres[sphereIndex].radius =
           scale * this.selectedObject.geometry.parameters.radius;
         this.selectedRadius =
-          this.activePtScene.spheres[this.selectedObject.index].radius;
+          this.activePtScene.spheres[sphereIndex].radius;
         this.selectedRadiusGui.updateDisplay();
       } else {
         this.selectedPosition.copy(this.selectedObject.position);
@@ -271,7 +274,15 @@ export default class PtApp {
     );
 
     if (intersects.length > 0) {
-      this.selectedObject = intersects[0].object;
+      const object = intersects[0].object;
+      if (
+        !(object instanceof THREE.Mesh) ||
+        typeof object.userData.sphereIndex !== "number"
+      ) {
+        return;
+      }
+      this.selectedObject = object as PtSphereMesh;
+      const sphereIndex = this.selectedObject.userData.sphereIndex;
 
       ptRenderer.outlinePass.selectedObjects = [this.selectedObject];
       ptRenderer.transformControls.attach(this.selectedObject);
@@ -279,15 +290,11 @@ export default class PtApp {
       // radius display must be manually updated
 
       this.selectedRadius =
-        this.activePtScene.spheres[this.selectedObject.index].radius;
+        this.activePtScene.spheres[sphereIndex].radius;
       this.selectedRadiusGui.updateDisplay();
-      this.selectedColor =
-        this.activePtScene.materials[
-          this.activePtScene.spheres[this.selectedObject.index].materialId
-        ].albedo.getHexString();
       this.populateMaterialGUI(
         this.selectedObject.material,
-        this.activePtScene.spheres[this.selectedObject.index].materialId,
+        this.activePtScene.spheres[sphereIndex].materialId,
         ptRenderer
       );
     } else {
@@ -298,7 +305,7 @@ export default class PtApp {
   }
 
   populateMaterialGUI(
-    material: THREE.MeshStandardMaterial,
+    material: PtPreviewMaterial,
     materialId: number,
     ptRenderer: PtRenderer
   ) {
@@ -316,7 +323,7 @@ export default class PtApp {
     });
 
     if (materialType === "Metal") {
-      if ("roughness" in material) {
+      if (material instanceof THREE.MeshStandardMaterial) {
         this.materialFolder.add(material, "roughness", 0, 1).onChange(() => {
           this.activePtScene.materials[materialId].fuzz = material.roughness;
           ptRenderer.shaderCanvas.resetAccumulation();
@@ -325,7 +332,7 @@ export default class PtApp {
     }
 
     if (materialType === "Dielectric") {
-      if ("ior" in material) {
+      if (material instanceof THREE.MeshPhysicalMaterial) {
         this.materialFolder.add(material, "ior", 0, 2.5).onChange(() => {
           this.activePtScene.materials[materialId].ior = material.ior;
           ptRenderer.shaderCanvas.resetAccumulation();

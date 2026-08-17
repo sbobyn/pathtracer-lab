@@ -2,6 +2,21 @@ import * as THREE from "three";
 import PtSphere from "./PtSphere";
 import PtMaterial from "./PtMaterial";
 
+export type PtPreviewMaterial =
+  | THREE.MeshBasicMaterial
+  | THREE.MeshLambertMaterial
+  | THREE.MeshStandardMaterial
+  | THREE.MeshPhysicalMaterial;
+
+export type PtSphereMesh = THREE.Mesh<
+  THREE.SphereGeometry,
+  PtPreviewMaterial
+> & {
+  userData: {
+    sphereIndex: number;
+  };
+};
+
 export default class PtScene {
   scene: THREE.Scene;
   intersectGroup: THREE.Group;
@@ -45,7 +60,7 @@ export default class PtScene {
       const sphere = spheres[i];
       const materialDef = materials[sphere.materialId];
 
-      let material: THREE.Material;
+      let material: PtPreviewMaterial;
       if (materialDef.type === 0) {
         material = new THREE.MeshLambertMaterial({
           color: materialDef.albedo,
@@ -72,12 +87,15 @@ export default class PtScene {
         material = new THREE.MeshBasicMaterial({ color: 0xff00ff });
       }
 
-      const sphereMesh = new THREE.Mesh(sphereGeometry, material);
+      const sphereMesh = new THREE.Mesh(
+        sphereGeometry,
+        material
+      ) as PtSphereMesh;
       sphereMesh.position.copy(sphere.position);
       sphere.position = sphereMesh.position; // Ensure reference is the same. TODO : cleaner solution
       sphereMesh.scale.set(sphere.radius, sphere.radius, sphere.radius);
 
-      sphereMesh.index = i; // For identification in ray intersection. TODO : cleaner solution
+      sphereMesh.userData.sphereIndex = i;
 
       this.intersectGroup.add(sphereMesh);
     }
