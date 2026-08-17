@@ -121,6 +121,7 @@ export default class PtRenderer {
       fragmentShader: `#define MAX_SPHERES ${this.ptScene.spheres.length}
        ${fragShader}`,
       uniforms: this.uniforms,
+      renderer: this.renderer,
       resolutionScale: this.settings.resolutionScale,
     });
   }

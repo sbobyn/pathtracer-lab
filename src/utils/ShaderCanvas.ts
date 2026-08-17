@@ -17,6 +17,8 @@ export class ShaderCanvas {
   private pingRenderTarget: THREE.WebGLRenderTarget;
   private pongRenderTarget: THREE.WebGLRenderTarget;
 
+  public readonly accumulationTextureType: THREE.TextureDataType;
+
   constructor({
     width,
     height,
@@ -30,6 +32,7 @@ export class ShaderCanvas {
       }
     `,
     uniforms,
+    renderer,
     resolutionScale = 1.0,
   }: {
     width: number;
@@ -37,6 +40,7 @@ export class ShaderCanvas {
     fragmentShader: string;
     vertexShader?: string;
     uniforms: PtUniforms;
+    renderer: THREE.WebGLRenderer;
     resolutionScale?: number;
   }) {
     this.width = width;
@@ -66,6 +70,18 @@ export class ShaderCanvas {
     const mesh = new THREE.Mesh(geometry, this.material);
     this.scene.add(mesh);
 
+    this.accumulationTextureType = renderer.extensions.has(
+      "EXT_color_buffer_float"
+    )
+      ? THREE.HalfFloatType
+      : THREE.UnsignedByteType;
+
+    if (this.accumulationTextureType === THREE.UnsignedByteType) {
+      console.warn(
+        "Floating-point color buffers are unavailable; path-tracing accumulation will use reduced-precision RGBA8 storage."
+      );
+    }
+
     this.pingRenderTarget = new THREE.WebGLRenderTarget(
       width * resolutionScale,
       height * resolutionScale,
@@ -73,6 +89,7 @@ export class ShaderCanvas {
         minFilter: THREE.NearestFilter,
         magFilter: THREE.NearestFilter,
         format: THREE.RGBAFormat,
+        type: this.accumulationTextureType,
         depthBuffer: false,
       }
     );

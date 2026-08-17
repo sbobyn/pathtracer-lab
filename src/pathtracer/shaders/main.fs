@@ -335,7 +335,7 @@ void main() {
 
     if (uFrameCount > 1) {
         vec3 accumColor = texture2D(uAccumTexture, gl_FragCoord.xy / uResolution).rgb;
-        color = mix(accumColor, color, 1.0 / float(uFrameCount + 1));
+        color = mix(accumColor, color, 1.0 / float(uFrameCount));
     }
 
     gl_FragColor = vec4(color, 1.0);
