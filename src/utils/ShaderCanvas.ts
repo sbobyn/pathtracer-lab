@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import type PtUniforms from "../pathtracer/PtUniforms";
 
+const RANDOM_SEQUENCE_MODULUS_X = 65_521;
+const RANDOM_SEQUENCE_MODULUS_Y = 65_519;
+
 export class ShaderCanvas {
   private scene: THREE.Scene;
   private canvasCamera: THREE.OrthographicCamera;
@@ -16,6 +19,7 @@ export class ShaderCanvas {
   private resolutionScale: number;
   private pingRenderTarget: THREE.WebGLRenderTarget;
   private pongRenderTarget: THREE.WebGLRenderTarget;
+  private randomSequenceIndex = 0;
 
   public readonly accumulationTextureType: THREE.TextureDataType;
 
@@ -63,6 +67,7 @@ export class ShaderCanvas {
         },
         uAccumTexture: { value: null },
         uFrameCount: { value: 0 },
+        uRandomSequence: { value: new THREE.Vector2(0, 0) },
         ...uniforms,
       },
     });
@@ -112,6 +117,8 @@ export class ShaderCanvas {
 
     this.material.uniforms.uTime.value = this.clock.getElapsedTime();
     this.material.uniforms.uFrameCount.value++;
+    this.randomSequenceIndex++;
+    this.updateRandomSequenceUniform();
     this.material.uniforms.uAccumTexture.value = this.pingRenderTarget.texture;
 
     renderer.render(this.scene, this.canvasCamera);
@@ -161,5 +168,23 @@ export class ShaderCanvas {
 
   public resetAccumulation() {
     this.material.uniforms.uFrameCount.value = 0;
+    this.setRandomSequenceIndex(0);
+  }
+
+  /** Sets completed sample batches; the next render advances to the following index. */
+  public setRandomSequenceIndex(index: number) {
+    if (!Number.isSafeInteger(index) || index < 0) {
+      throw new RangeError("Random sequence index must be a non-negative safe integer.");
+    }
+
+    this.randomSequenceIndex = index;
+    this.updateRandomSequenceUniform();
+  }
+
+  private updateRandomSequenceUniform() {
+    this.material.uniforms.uRandomSequence.value.set(
+      this.randomSequenceIndex % RANDOM_SEQUENCE_MODULUS_X,
+      this.randomSequenceIndex % RANDOM_SEQUENCE_MODULUS_Y
+    );
   }
 }

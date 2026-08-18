@@ -65,6 +65,7 @@ uniform float uNumSamples;
 uniform bool uEnableDoF;
 uniform sampler2D uAccumTexture;
 uniform int uFrameCount;
+uniform vec2 uRandomSequence;
 
 uniform Camera uCamera;
 uniform World uWorld;
@@ -281,7 +282,11 @@ vec3 rayColor(Ray
 
         if (didHit) { // hit a sphere
             r.origin = hit.position;
-            r.direction = scatter(r, hit, seed * 256. + float(depth));
+            vec2 bounceSeed = seed + vec2(
+                17.0 * float(depth) + 11.0,
+                59.0 * float(depth) + 23.0
+            );
+            r.direction = scatter(r, hit, bounceSeed);
             color *= uMaterials[hit.materialId].albedo;
         } else { // hit sky
             vec3 unitDir = normalize(r.direction);
@@ -303,8 +308,14 @@ vec3 rayColor(Ray
 void main() {
     vec3 color = vec3(0);
     for (int s = 0; s < int(uNumSamples); s++) {
-        vec2 seed2 = vNDC + vec2(float(s) + float(uFrameCount) * 7.777);
-        vec2 pixelOffset = hash22(seed2) - 0.5;
+        float sampleIndex = float(s);
+        vec2 temporalOffset = 4096.0 * hash22(
+            uRandomSequence
+                + vec2(0.754877666 * sampleIndex, 0.569840296 * sampleIndex)
+        );
+        vec2 sampleSeed = gl_FragCoord.xy + temporalOffset;
+
+        vec2 pixelOffset = hash22(sampleSeed + vec2(5.3983, 7.1298)) - 0.5;
         vec2 uv = vNDC + pixelOffset / uResolution; // sample within pixel
 
         // get pixel sample position
@@ -320,7 +331,8 @@ void main() {
         vec3 defocusOffset = vec3(0);
         if (uEnableDoF) {
             float defocusRadius = uCamera.aperture / 2.;
-            vec2 defocusDiskSample = defocusRadius * sampleUnitDisk(hash22(seed2 * 31.));
+            vec2 lensSample = hash22(sampleSeed + vec2(19.19, 73.73));
+            vec2 defocusDiskSample = defocusRadius * sampleUnitDisk(lensSample);
             defocusOffset = defocusDiskSample.x * uCamera.right + defocusDiskSample.y * uCamera.up;
         }
 
@@ -328,7 +340,7 @@ void main() {
         vec3 direction = normalize(pixelSample - origin);
 
         Ray ray = Ray(origin, direction);
-        color += rayColor(ray, uWorld, seed2);
+        color += rayColor(ray, uWorld, sampleSeed + vec2(101.13, 47.77));
     }
 
     color /= uNumSamples;
