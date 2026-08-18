@@ -139,6 +139,22 @@ export default class PtApp {
         ptRenderer.shaderCanvas.setResolutionScale(value);
       });
 
+    raytracingSettingsFolder
+      .add(settings, "accumulationFormat", ["rgba32f", "rgba16f", "rgba8"])
+      .onChange(() => {
+        ptRenderer.shaderCanvas.setAccumulationFormat(
+          settings.accumulationFormat
+        );
+      })
+      .name("Accumulation Format");
+
+    raytracingSettingsFolder
+      .add(settings, "maxAccumulationFrames", 0, 100_000, 1)
+      .onChange((value: number) => {
+        ptRenderer.shaderCanvas.setMaxAccumulationFrames(value);
+      })
+      .name("Max Accumulation Frames");
+
     raytracingToggleGUI.onChange((value: boolean) => {
       ptRenderer.ptPass.enabled = value;
       ptRenderer.renderPass.enabled = !value;

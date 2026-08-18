@@ -121,6 +121,8 @@ export default class PtRenderer {
       uniforms: this.uniforms,
       renderer: this.renderer,
       resolutionScale: this.settings.resolutionScale,
+      accumulationFormat: this.settings.accumulationFormat,
+      maxAccumulationFrames: this.settings.maxAccumulationFrames,
     });
   }
 

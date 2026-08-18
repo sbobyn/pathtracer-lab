@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type PtUniforms from "../pathtracer/PtUniforms";
+import type { AccumulationFormat } from "../pathtracer/PtState";
 
 const RANDOM_SEQUENCE_MODULUS_X = 65_521;
 const RANDOM_SEQUENCE_MODULUS_Y = 65_519;
@@ -20,8 +21,10 @@ export class ShaderCanvas {
   private pingRenderTarget: THREE.WebGLRenderTarget;
   private pongRenderTarget: THREE.WebGLRenderTarget;
   private randomSequenceIndex = 0;
+  private readonly floatColorBufferSupported: boolean;
+  private maxAccumulationFrames: number;
 
-  public readonly accumulationTextureType: THREE.TextureDataType;
+  public accumulationTextureType: THREE.TextureDataType;
 
   constructor({
     width,
@@ -38,6 +41,8 @@ export class ShaderCanvas {
     uniforms,
     renderer,
     resolutionScale = 1.0,
+    accumulationFormat = "rgba32f",
+    maxAccumulationFrames = 0,
   }: {
     width: number;
     height: number;
@@ -46,10 +51,13 @@ export class ShaderCanvas {
     uniforms: PtUniforms;
     renderer: THREE.WebGLRenderer;
     resolutionScale?: number;
+    accumulationFormat?: AccumulationFormat;
+    maxAccumulationFrames?: number;
   }) {
     this.width = width;
     this.height = height;
     this.resolutionScale = resolutionScale;
+    this.maxAccumulationFrames = maxAccumulationFrames;
     this.scene = new THREE.Scene();
     this.canvasCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
@@ -75,29 +83,13 @@ export class ShaderCanvas {
     const mesh = new THREE.Mesh(geometry, this.material);
     this.scene.add(mesh);
 
-    this.accumulationTextureType = renderer.extensions.has(
+    this.floatColorBufferSupported = renderer.extensions.has(
       "EXT_color_buffer_float"
-    )
-      ? THREE.HalfFloatType
-      : THREE.UnsignedByteType;
-
-    if (this.accumulationTextureType === THREE.UnsignedByteType) {
-      console.warn(
-        "Floating-point color buffers are unavailable; path-tracing accumulation will use reduced-precision RGBA8 storage."
-      );
-    }
-
-    this.pingRenderTarget = new THREE.WebGLRenderTarget(
-      width * resolutionScale,
-      height * resolutionScale,
-      {
-        minFilter: THREE.NearestFilter,
-        magFilter: THREE.NearestFilter,
-        format: THREE.RGBAFormat,
-        type: this.accumulationTextureType,
-        depthBuffer: false,
-      }
     );
+    this.accumulationTextureType =
+      this.resolveAccumulationTextureType(accumulationFormat);
+
+    this.pingRenderTarget = this.createRenderTarget();
     this.pongRenderTarget = this.pingRenderTarget.clone();
 
     this.screenMaterial = new THREE.MeshBasicMaterial({
@@ -113,6 +105,13 @@ export class ShaderCanvas {
   }
 
   public render(renderer: THREE.WebGLRenderer) {
+    if (
+      this.maxAccumulationFrames > 0 &&
+      this.material.uniforms.uFrameCount.value >= this.maxAccumulationFrames
+    ) {
+      return;
+    }
+
     renderer.setRenderTarget(this.pongRenderTarget);
 
     this.material.uniforms.uTime.value = this.clock.getElapsedTime();
@@ -140,6 +139,31 @@ export class ShaderCanvas {
   public setResolutionScale(scale: number) {
     this.resolutionScale = scale;
     this.updateRenderTargets();
+  }
+
+  public setAccumulationFormat(format: AccumulationFormat) {
+    const textureType = this.resolveAccumulationTextureType(format);
+    if (textureType === this.accumulationTextureType) return;
+
+    this.accumulationTextureType = textureType;
+    this.pingRenderTarget.dispose();
+    this.pongRenderTarget.dispose();
+
+    this.pingRenderTarget = this.createRenderTarget();
+    this.pongRenderTarget = this.pingRenderTarget.clone();
+    this.screenMaterial.map = this.pongRenderTarget.texture;
+    this.resetAccumulation();
+  }
+
+  public setMaxAccumulationFrames(maxFrames: number) {
+    if (!Number.isSafeInteger(maxFrames) || maxFrames < 0) {
+      throw new RangeError(
+        "Maximum accumulation frames must be a non-negative safe integer."
+      );
+    }
+
+    this.maxAccumulationFrames = maxFrames;
+    this.resetAccumulation();
   }
 
   public setShader(fragmentShader: string) {
@@ -185,6 +209,35 @@ export class ShaderCanvas {
     this.material.uniforms.uRandomSequence.value.set(
       this.randomSequenceIndex % RANDOM_SEQUENCE_MODULUS_X,
       this.randomSequenceIndex % RANDOM_SEQUENCE_MODULUS_Y
+    );
+  }
+
+  private resolveAccumulationTextureType(
+    format: AccumulationFormat
+  ): THREE.TextureDataType {
+    if (format === "rgba8") return THREE.UnsignedByteType;
+
+    if (!this.floatColorBufferSupported) {
+      console.warn(
+        `Floating-point color buffers are unavailable; ${format} accumulation will fall back to rgba8.`
+      );
+      return THREE.UnsignedByteType;
+    }
+
+    return format === "rgba32f" ? THREE.FloatType : THREE.HalfFloatType;
+  }
+
+  private createRenderTarget() {
+    return new THREE.WebGLRenderTarget(
+      this.width * this.resolutionScale,
+      this.height * this.resolutionScale,
+      {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        type: this.accumulationTextureType,
+        depthBuffer: false,
+      }
     );
   }
 }
