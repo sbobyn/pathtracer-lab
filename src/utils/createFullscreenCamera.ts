@@ -22,12 +22,6 @@ export function createFullScreenPerspectiveCamera({
   camera.position.copy(position);
   camera.lookAt(lookAt);
 
-  // Handle resize
-  window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  });
-
   return camera;
 }
 
@@ -57,16 +51,6 @@ export function createFullScreenOrthographicCamera({
 
   camera.position.copy(position);
   camera.lookAt(lookAt);
-
-  // Handle resize
-  window.addEventListener("resize", () => {
-    const aspect = window.innerWidth / window.innerHeight;
-    camera.left = (-frustumSize * aspect) / 2;
-    camera.right = (frustumSize * aspect) / 2;
-    camera.top = frustumSize / 2;
-    camera.bottom = -frustumSize / 2;
-    camera.updateProjectionMatrix();
-  });
 
   return camera;
 }

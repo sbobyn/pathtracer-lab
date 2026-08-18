@@ -36,6 +36,9 @@ export default class PtApp {
   private numSamplesGui: Controller;
 
   private activePtScene: PtScene;
+  private readonly ptRenderer: PtRenderer;
+  private readonly pointerDownHandler: (event: PointerEvent) => void;
+  private readonly transformChangeHandler: () => void;
 
   constructor(canvas: HTMLCanvasElement) {
     const ptScene = PresetPtScenes.Part1Simple();
@@ -43,6 +46,7 @@ export default class PtApp {
     settings.fov = ptScene.camera.fov; // TODO : fix. add cleaner init of PtState
 
     const ptRenderer = new PtRenderer(canvas, ptScene, settings);
+    this.ptRenderer = ptRenderer;
 
     this.selectedObject = null;
     this.raycaster = new THREE.Raycaster();
@@ -246,20 +250,20 @@ export default class PtApp {
     this.selctedObjectFolder.hide();
 
     // on this.mouse down check for intersection
-    window.addEventListener("pointerdown", (e) => {
+    this.pointerDownHandler = (e) => {
       if (this.gui.domElement.contains(e.target as Node)) return;
       if (ptRenderer.transformControls.dragging) return;
 
       this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
       this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
       this.checkIntersection(ptRenderer);
-    });
+    };
+    window.addEventListener("pointerdown", this.pointerDownHandler);
 
     ptRenderer.transformControls.mode = "translate";
 
-    ptRenderer.transformControls.addEventListener("change", () => {
+    this.transformChangeHandler = () => {
       if (!this.selectedObject) {
-        console.warn("No selected object in transformControls change event");
         return;
       }
 
@@ -278,7 +282,21 @@ export default class PtApp {
         selectedPositionYGUI.updateDisplay();
         selectedPositionZGUI.updateDisplay();
       }
-    });
+    };
+    ptRenderer.transformControls.addEventListener(
+      "change",
+      this.transformChangeHandler
+    );
+  }
+
+  public dispose() {
+    window.removeEventListener("pointerdown", this.pointerDownHandler);
+    this.ptRenderer.transformControls.removeEventListener(
+      "change",
+      this.transformChangeHandler
+    );
+    this.gui.destroy();
+    this.ptRenderer.dispose();
   }
 
   checkIntersection(ptRenderer: PtRenderer) {

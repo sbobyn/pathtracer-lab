@@ -4,4 +4,11 @@ const canvas = document.createElement("canvas");
 canvas.classList.add("webgl");
 document.querySelector("#app")?.appendChild(canvas);
 
-new PtApp(canvas);
+const app = new PtApp(canvas);
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    app.dispose();
+    canvas.remove();
+  });
+}

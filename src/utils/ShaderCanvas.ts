@@ -205,6 +205,21 @@ export class ShaderCanvas {
     this.updateRandomSequenceUniform();
   }
 
+  public dispose() {
+    this.pingRenderTarget.dispose();
+    this.pongRenderTarget.dispose();
+
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.geometry.dispose();
+    });
+    this.screenScene.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.geometry.dispose();
+    });
+
+    this.material.dispose();
+    this.screenMaterial.dispose();
+  }
+
   private updateRandomSequenceUniform() {
     this.material.uniforms.uRandomSequence.value.set(
       this.randomSequenceIndex % RANDOM_SEQUENCE_MODULUS_X,

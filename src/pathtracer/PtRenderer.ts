@@ -48,6 +48,36 @@ export default class PtRenderer {
 
   private canvas: HTMLCanvasElement;
 
+  private readonly handleResize = () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.updateCameraProjectionUniforms();
+
+    this.shaderCanvas.setDimensions(width, height);
+    this.composer.setSize(width, height);
+    this.composer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(pixelRatio);
+  };
+
+  private readonly handleOrbitChange = () => {
+    this.shaderCanvas.resetAccumulation();
+  };
+
+  private readonly handleTransformChange = () => {
+    if (this.transformControls.dragging) {
+      this.shaderCanvas.resetAccumulation();
+    }
+  };
+
+  private readonly handleDraggingChanged = (event: { value: unknown }) => {
+    this.orbitControls.enabled = !event.value;
+  };
+
   constructor(canvas: HTMLCanvasElement, ptScene: PtScene, ptState: PtState) {
     this.canvas = canvas;
     this.ptScene = ptScene;
@@ -78,7 +108,7 @@ export default class PtRenderer {
 
     this.clock = new THREE.Clock();
     this.stats = setupStats();
-    this.renderer.setAnimationLoop(this.renderLoop.bind(this));
+    this.renderer.setAnimationLoop(this.renderLoop);
 
     // Event listeners
     this.attachEventListeners();
@@ -109,7 +139,6 @@ export default class PtRenderer {
     this.updateComposerScene();
 
     this.setupGizmo();
-    this.attachEventListeners();
   }
 
   private setupShaderCanvas() {
@@ -133,8 +162,14 @@ export default class PtRenderer {
   }
 
   private setupControls() {
+    if (this.orbitControls) {
+      this.orbitControls.removeEventListener("change", this.handleOrbitChange);
+      this.orbitControls.dispose();
+    }
+
     this.orbitControls = new OrbitControls(this.camera, this.canvas);
     this.orbitControls.rotateSpeed = 0.5;
+    this.orbitControls.addEventListener("change", this.handleOrbitChange);
     // this.orbitControls.enableDamping = true;
 
     if (!this.transformControls) {
@@ -160,16 +195,11 @@ export default class PtRenderer {
   }
 
   private updateUniforms() {
-    const verticalFov = THREE.MathUtils.degToRad(this.camera.fov);
-    const halfHeight = Math.tan(verticalFov / 2);
-    const halfWidth = halfHeight * this.camera.aspect;
-
     this.uniforms.uCamera.value.position = this.camera.position;
     this.uniforms.uCamera.value.up = this.cameraUp;
     this.uniforms.uCamera.value.forward = this.cameraForward;
     this.uniforms.uCamera.value.right = this.cameraRight;
-    this.uniforms.uCamera.value.halfWidth = halfWidth;
-    this.uniforms.uCamera.value.halfHeight = halfHeight;
+    this.updateCameraProjectionUniforms();
     this.uniforms.uCamera.value.focusDistance = this.settings.focusDistance;
     this.uniforms.uCamera.value.aperture = this.settings.aperture;
 
@@ -271,7 +301,7 @@ export default class PtRenderer {
     this.gizmoScene.add(this.gizmo);
   }
 
-  private renderLoop() {
+  private readonly renderLoop = () => {
     this.stats.begin();
     this.renderer.clear();
 
@@ -298,36 +328,48 @@ export default class PtRenderer {
     this.renderer.render(this.gizmoScene, this.camera);
 
     this.stats.end();
-  }
+  };
 
   private attachEventListeners() {
-    window.addEventListener("resize", () => {
-      const verticalFov = THREE.MathUtils.degToRad(this.camera.fov);
-      const halfHeight = Math.tan(verticalFov / 2);
-      const halfWidth = halfHeight * this.camera.aspect;
-      this.uniforms.uCamera.value.halfHeight = halfHeight;
-      this.uniforms.uCamera.value.halfWidth = halfWidth;
+    window.addEventListener("resize", this.handleResize);
+    this.transformControls.addEventListener(
+      "change",
+      this.handleTransformChange
+    );
+    this.transformControls.addEventListener(
+      "dragging-changed",
+      this.handleDraggingChanged
+    );
+  }
 
-      this.shaderCanvas.setDimensions(window.innerWidth, window.innerHeight);
+  private updateCameraProjectionUniforms() {
+    const verticalFov = THREE.MathUtils.degToRad(this.camera.fov);
+    const halfHeight = Math.tan(verticalFov / 2);
+    this.uniforms.uCamera.value.halfHeight = halfHeight;
+    this.uniforms.uCamera.value.halfWidth = halfHeight * this.camera.aspect;
+  }
 
-      this.composer.setSize(window.innerWidth, window.innerHeight);
-      this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  public dispose() {
+    this.renderer.setAnimationLoop(null);
+    window.removeEventListener("resize", this.handleResize);
 
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    });
+    this.orbitControls.removeEventListener("change", this.handleOrbitChange);
+    this.orbitControls.dispose();
 
-    this.orbitControls.addEventListener("change", () => {
-      this.shaderCanvas.resetAccumulation();
-    });
+    this.transformControls.removeEventListener(
+      "change",
+      this.handleTransformChange
+    );
+    this.transformControls.removeEventListener(
+      "dragging-changed",
+      this.handleDraggingChanged
+    );
+    this.transformControls.detach();
+    this.transformControls.dispose();
 
-    this.transformControls.addEventListener("change", () => {
-      if (this.transformControls.dragging)
-        this.shaderCanvas.resetAccumulation();
-    });
-
-    this.transformControls.addEventListener("dragging-changed", (event) => {
-      this.orbitControls.enabled = !event.value;
-    });
+    this.shaderCanvas.dispose();
+    this.disposePostProcessing();
+    this.renderer.dispose();
+    this.stats.dom.remove();
   }
 }
