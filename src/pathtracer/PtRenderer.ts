@@ -24,8 +24,8 @@ export default class PtRenderer {
 
   public shaderCanvas!: ShaderCanvas;
 
-  private renderTarget: THREE.WebGLRenderTarget;
   private composer: EffectComposer;
+  private gammaCorrectionPass!: ShaderPass;
   public ptPass!: RenderPass;
   public renderPass!: RenderPass;
   public outlinePass!: OutlinePass;
@@ -62,15 +62,15 @@ export default class PtRenderer {
     this.setupShaderCanvas();
 
     // Setup Post Processing / Composer Passes
-    this.renderTarget = new THREE.WebGLRenderTarget(
+    const renderTarget = new THREE.WebGLRenderTarget(
       0,
       0, // will be set by composer.setSize later
       {
         samples: window.devicePixelRatio === 1 ? 2 : 0,
       }
     );
-    this.composer = new EffectComposer(this.renderer, this.renderTarget);
-    this.setupComposer();
+    this.composer = new EffectComposer(this.renderer, renderTarget);
+    this.initializeComposerPasses();
 
     this.setupGizmo();
 
@@ -106,9 +106,7 @@ export default class PtRenderer {
     this.updateShaderCanvas();
     this.shaderCanvas.updateMaterial();
 
-    this.setupComposer();
-    this.outlinePass.selectedObjects = [];
-    this.outlinePass.renderScene = this.ptScene.scene;
+    this.updateComposerScene();
 
     this.setupGizmo();
     this.attachEventListeners();
@@ -219,7 +217,7 @@ export default class PtRenderer {
     return uniforms;
   }
 
-  private setupComposer() {
+  private initializeComposerPasses() {
     this.renderPass = new RenderPass(this.ptScene.scene, this.camera);
     this.ptPass = new RenderPass(
       this.shaderCanvas.screenScene,
@@ -243,8 +241,26 @@ export default class PtRenderer {
 
     this.composer.addPass(this.outlinePass);
 
-    const gammaCorrectionPass = new ShaderPass(GammaCorrectionShader);
-    this.composer.addPass(gammaCorrectionPass);
+    this.gammaCorrectionPass = new ShaderPass(GammaCorrectionShader);
+    this.composer.addPass(this.gammaCorrectionPass);
+  }
+
+  private updateComposerScene() {
+    this.renderPass.scene = this.ptScene.scene;
+    this.renderPass.camera = this.camera;
+
+    this.outlinePass.selectedObjects = [];
+    this.outlinePass.renderScene = this.ptScene.scene;
+    this.outlinePass.renderCamera = this.camera;
+
+    this.renderPass.enabled = !this.settings.pathtracingEnabled;
+    this.ptPass.enabled = this.settings.pathtracingEnabled;
+  }
+
+  public disposePostProcessing() {
+    this.outlinePass.dispose();
+    this.gammaCorrectionPass.dispose();
+    this.composer.dispose();
   }
 
   private setupGizmo() {
