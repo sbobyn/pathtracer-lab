@@ -6,7 +6,9 @@ import PtScene, {
   type PtSphereMesh,
 } from "./PtScene";
 import { PresetPtScenes } from "./PresetPtScenes";
-import { defaultState, type PtState } from "./PtState";
+import PtActions from "./PtActions";
+import { createDefaultPtState } from "./PtState";
+import PtStore from "./PtStore";
 
 const materialLabelDict = {
   0: "Lambert",
@@ -37,16 +39,20 @@ export default class PtApp {
 
   private activePtScene: PtScene;
   private readonly ptRenderer: PtRenderer;
+  private readonly actions: PtActions;
   private readonly pointerDownHandler: (event: PointerEvent) => void;
   private readonly transformChangeHandler: () => void;
 
   constructor(canvas: HTMLCanvasElement) {
     const ptScene = PresetPtScenes.Part1Simple();
-    const settings: PtState = defaultState;
-    settings.fov = ptScene.camera.fov; // TODO : fix. add cleaner init of PtState
+    const initialState = createDefaultPtState();
+    initialState.settings.fov = ptScene.camera.fov;
+    const settings = { ...initialState.settings };
+    const store = new PtStore(initialState);
 
     const ptRenderer = new PtRenderer(canvas, ptScene, settings);
     this.ptRenderer = ptRenderer;
+    this.actions = new PtActions(store, ptRenderer);
 
     this.selectedObject = null;
     this.raycaster = new THREE.Raycaster();
@@ -65,56 +71,43 @@ export default class PtApp {
       .add(currentSceneName, "value", Object.keys(PresetPtScenes))
       .name("Scene")
       .onChange((sceneKey: string) => {
-        const newScene = PresetPtScenes[sceneKey]();
+        this.actions.setScene(sceneKey);
+        const newScene = ptRenderer.ptScene;
 
         // reset GUI state
         this.intersectGroup = newScene.intersectGroup;
         this.selctedObjectFolder.hide();
-        this.backgroundColorTopGui.setValue(newScene.backgroundColorTop);
-        this.backgroundColorBottomGui.setValue(newScene.backgroundColorBottom);
-        this.fovGui.setValue(newScene.camera.fov);
-        this.toggleDoFGui.setValue(false);
-        this.transformControlGui.setValue("translate");
-        this.numSamplesGui.setValue(1);
+        Object.assign(settings, this.actions.getState().settings);
+        this.backgroundColorTopGui.updateDisplay();
+        this.backgroundColorBottomGui.updateDisplay();
+        this.fovGui.updateDisplay();
+        this.toggleDoFGui.updateDisplay();
+        this.transformControlGui.updateDisplay();
+        this.numSamplesGui.updateDisplay();
+        apertureGUI.disable();
+        focusDistGUI.disable();
 
-        // swap in renderer
-        ptRenderer.setScene(newScene);
         this.activePtScene = newScene;
       });
 
     const raytracingToggleGUI = this.gui
       .add(settings, "pathtracingEnabled")
-      .onChange(() => {
-        ptRenderer.shaderCanvas.resetAccumulation();
-      });
+      .onChange((value: boolean) => this.actions.setPathtracingEnabled(value));
     this.backgroundColorTopGui = this.gui
       .addColor(settings, "backgroundColorTop")
       .onChange((value: string | number | THREE.Color) => {
-        const color = new THREE.Color(value);
-        this.activePtScene.scene.background = color;
-        ptRenderer.uniforms.uBackgroundColorTop.value = color;
-        this.activePtScene.dirLight.color = color;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setBackgroundColorTop(value);
       });
 
     this.backgroundColorBottomGui = this.gui
       .addColor(settings, "backgroundColorBottom")
       .onChange((value: string | number | THREE.Color) => {
-        const color = new THREE.Color(value);
-        ptRenderer.uniforms.uBackgroundColorBottom.value = color;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setBackgroundColorBottom(value);
       });
 
-    this.fovGui = this.gui.add(settings, "fov", 10, 120, 1).onChange(() => {
-      ptRenderer.camera.fov = settings.fov;
-      ptRenderer.camera.updateProjectionMatrix();
-      ptRenderer.uniforms.uCamera.value.halfHeight = Math.tan(
-        THREE.MathUtils.degToRad(ptRenderer.camera.fov) / 2
-      );
-      ptRenderer.uniforms.uCamera.value.halfWidth =
-        ptRenderer.uniforms.uCamera.value.halfHeight * ptRenderer.camera.aspect;
-      ptRenderer.shaderCanvas.resetAccumulation();
-    });
+    this.fovGui = this.gui
+      .add(settings, "fov", 10, 120, 1)
+      .onChange((value: number) => this.actions.setFov(value));
 
     const raytracingSettingsFolder = this.gui.addFolder("Raytracing Settings");
     if (!settings.pathtracingEnabled) {
@@ -123,45 +116,35 @@ export default class PtApp {
 
     this.numSamplesGui = raytracingSettingsFolder
       .add(settings, "numSamples", 1, 20, 1)
-      .onChange(() => {
-        ptRenderer.uniforms.uNumSamples.value = settings.numSamples;
-        ptRenderer.shaderCanvas.resetAccumulation();
-      })
+      .onChange((value: number) => this.actions.setNumSamples(value))
       .name("Samples");
 
     raytracingSettingsFolder
       .add(settings, "maxRayDepth", 1, 20, 1)
-      .onChange(() => {
-        ptRenderer.uniforms.uMaxRayDepth.value = settings.maxRayDepth;
-        ptRenderer.shaderCanvas.resetAccumulation();
-      })
+      .onChange((value: number) => this.actions.setMaxRayDepth(value))
       .name("Max Ray Depth");
 
     raytracingSettingsFolder
       .add(settings, "resolutionScale", [2.0, 1.0, 0.5, 0.25, 0.125, 0.0625])
       .onChange((value: number) => {
-        ptRenderer.shaderCanvas.setResolutionScale(value);
+        this.actions.setResolutionScale(value);
       });
 
     raytracingSettingsFolder
       .add(settings, "accumulationFormat", ["rgba32f", "rgba16f", "rgba8"])
       .onChange(() => {
-        ptRenderer.shaderCanvas.setAccumulationFormat(
-          settings.accumulationFormat
-        );
+        this.actions.setAccumulationFormat(settings.accumulationFormat);
       })
       .name("Accumulation Format");
 
     raytracingSettingsFolder
       .add(settings, "maxAccumulationFrames", 0, 100_000, 1)
       .onChange((value: number) => {
-        ptRenderer.shaderCanvas.setMaxAccumulationFrames(value);
+        this.actions.setMaxAccumulationFrames(value);
       })
       .name("Max Accumulation Frames");
 
     raytracingToggleGUI.onChange((value: boolean) => {
-      ptRenderer.ptPass.enabled = value;
-      ptRenderer.renderPass.enabled = !value;
       if (value) {
         raytracingSettingsFolder.show();
       } else {
@@ -176,19 +159,17 @@ export default class PtApp {
     const apertureGUI = raytracingSettingsFolder
       .add(settings, "aperture", 0, 0.1, 0.001)
       .onChange((value: number) => {
-        ptRenderer.uniforms.uCamera.value.aperture = value;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setAperture(value);
       });
     if (!settings.enableDepthOfField) apertureGUI.disable();
     const focusDistGUI = raytracingSettingsFolder
       .add(settings, "focusDistance", 0.1, 20, 0.1)
       .onChange((value: number) => {
-        ptRenderer.uniforms.uCamera.value.focusDistance = value;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setFocusDistance(value);
       });
     if (!settings.enableDepthOfField) focusDistGUI.disable();
     this.toggleDoFGui.onChange((value: boolean) => {
-      ptRenderer.uniforms.uEnableDoF.value = value;
+      this.actions.setDepthOfFieldEnabled(value);
       if (value) {
         apertureGUI.enable();
         focusDistGUI.enable();
@@ -196,52 +177,36 @@ export default class PtApp {
         apertureGUI.disable();
         focusDistGUI.disable();
       }
-      ptRenderer.shaderCanvas.resetAccumulation();
     });
 
     this.selctedObjectFolder = this.gui.addFolder("Selected Object");
 
     this.transformControlGui = this.selctedObjectFolder
-      .add(ptRenderer.transformControls, "mode", ["translate", "scale"])
+      .add(settings, "transformMode", ["translate", "scale"])
       .name("transform mode")
       .onChange((value: string) => {
-        if (value === "scale") {
-          ptRenderer.transformControls.showY = false;
-          ptRenderer.transformControls.showZ = false;
-        } else {
-          ptRenderer.transformControls.showY = true;
-          ptRenderer.transformControls.showZ = true;
-        }
+        this.actions.setTransformMode(value as "translate" | "scale");
       });
 
     const selectedPositionXGUI = this.selctedObjectFolder
       .add(this.selectedPosition, "x", -1)
       .onChange((value: number) => {
-        if (this.selectedObject) this.selectedObject.position.x = value;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setSelectedPosition("x", value);
       });
     const selectedPositionYGUI = this.selctedObjectFolder
       .add(this.selectedPosition, "y", -1)
       .onChange((value: number) => {
-        if (this.selectedObject) this.selectedObject.position.y = value;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setSelectedPosition("y", value);
       });
     const selectedPositionZGUI = this.selctedObjectFolder
       .add(this.selectedPosition, "z", -1)
       .onChange((value: number) => {
-        if (this.selectedObject) this.selectedObject.position.z = value;
-        ptRenderer.shaderCanvas.resetAccumulation();
+        this.actions.setSelectedPosition("z", value);
       });
     this.selectedRadiusGui = this.selctedObjectFolder
       .add(this, "selectedRadius", 0)
       .onChange((value: number) => {
-        if (this.selectedObject) {
-          const sphereIndex = this.selectedObject.userData.sphereIndex;
-          this.activePtScene.spheres[sphereIndex].radius = value;
-          const scale = value / this.selectedObject.geometry.parameters.radius;
-          this.selectedObject.scale.set(scale, scale, scale);
-          ptRenderer.shaderCanvas.resetAccumulation();
-        }
+        this.actions.setSelectedRadius(value);
       })
       .name("radius");
 
@@ -260,7 +225,7 @@ export default class PtApp {
     };
     window.addEventListener("pointerdown", this.pointerDownHandler);
 
-    ptRenderer.transformControls.mode = "translate";
+    this.actions.setTransformMode("translate");
 
     this.transformChangeHandler = () => {
       if (!this.selectedObject) {
@@ -268,15 +233,12 @@ export default class PtApp {
       }
 
       if (ptRenderer.transformControls.mode === "scale") {
-        const scale = this.selectedObject.scale.x;
-        this.selectedObject.scale.set(scale, scale, scale);
+        this.actions.syncSelectedTransform();
         const sphereIndex = this.selectedObject.userData.sphereIndex;
-        this.activePtScene.spheres[sphereIndex].radius =
-          scale * this.selectedObject.geometry.parameters.radius;
-        this.selectedRadius =
-          this.activePtScene.spheres[sphereIndex].radius;
+        this.selectedRadius = this.activePtScene.spheres[sphereIndex].radius;
         this.selectedRadiusGui.updateDisplay();
       } else {
+        this.actions.syncSelectedTransform();
         this.selectedPosition.copy(this.selectedObject.position);
         selectedPositionXGUI.updateDisplay();
         selectedPositionYGUI.updateDisplay();
@@ -318,8 +280,7 @@ export default class PtApp {
       this.selectedObject = object as PtSphereMesh;
       const sphereIndex = this.selectedObject.userData.sphereIndex;
 
-      ptRenderer.outlinePass.selectedObjects = [this.selectedObject];
-      ptRenderer.transformControls.attach(this.selectedObject);
+      this.actions.selectObject(this.selectedObject);
       this.selctedObjectFolder.show();
       // radius display must be manually updated
 
@@ -328,20 +289,18 @@ export default class PtApp {
       this.selectedRadiusGui.updateDisplay();
       this.populateMaterialGUI(
         this.selectedObject.material,
-        this.activePtScene.spheres[sphereIndex].materialId,
-        ptRenderer
+        this.activePtScene.spheres[sphereIndex].materialId
       );
     } else {
-      ptRenderer.outlinePass.selectedObjects = [];
-      ptRenderer.transformControls.detach();
+      this.selectedObject = null;
+      this.actions.selectObject(null);
       this.selctedObjectFolder.hide();
     }
   }
 
   populateMaterialGUI(
     material: PtPreviewMaterial,
-    materialId: number,
-    ptRenderer: PtRenderer
+    materialId: number
   ) {
     this.materialFolder.destroy();
     const materialType =
@@ -352,15 +311,13 @@ export default class PtApp {
     );
 
     this.materialFolder.addColor(material, "color").onChange(() => {
-      this.activePtScene.materials[materialId].albedo = material.color;
-      ptRenderer.shaderCanvas.resetAccumulation();
+      this.actions.setMaterialColor(materialId, material.color);
     });
 
     if (materialType === "Metal") {
       if (material instanceof THREE.MeshStandardMaterial) {
         this.materialFolder.add(material, "roughness", 0, 1).onChange(() => {
-          this.activePtScene.materials[materialId].fuzz = material.roughness;
-          ptRenderer.shaderCanvas.resetAccumulation();
+          this.actions.setMaterialFuzz(materialId, material.roughness);
         });
       }
     }
@@ -368,8 +325,7 @@ export default class PtApp {
     if (materialType === "Dielectric") {
       if (material instanceof THREE.MeshPhysicalMaterial) {
         this.materialFolder.add(material, "ior", 0, 2.5).onChange(() => {
-          this.activePtScene.materials[materialId].ior = material.ior;
-          ptRenderer.shaderCanvas.resetAccumulation();
+          this.actions.setMaterialIor(materialId, material.ior);
         });
       }
     }

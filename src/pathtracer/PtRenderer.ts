@@ -13,7 +13,7 @@ import {
 import PtScene from "./PtScene";
 import Stats from "stats.js";
 import { setupStats } from "../utils/setupStats";
-import type { PtState } from "./PtState";
+import type { PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
 
 export default class PtRenderer {
@@ -36,7 +36,7 @@ export default class PtRenderer {
   private gizmo!: THREE.Object3D;
   private gizmoScene!: THREE.Scene;
 
-  public settings: PtState;
+  public settings: PtSettings;
   public uniforms: PtUniforms;
 
   private cameraForward!: THREE.Vector3;
@@ -78,12 +78,12 @@ export default class PtRenderer {
     this.orbitControls.enabled = !event.value;
   };
 
-  constructor(canvas: HTMLCanvasElement, ptScene: PtScene, ptState: PtState) {
+  constructor(canvas: HTMLCanvasElement, ptScene: PtScene, settings: PtSettings) {
     this.canvas = canvas;
     this.ptScene = ptScene;
     this.camera = ptScene.camera;
 
-    this.settings = ptState;
+    this.settings = settings;
 
     this.setupRenderer();
     this.setupControls();
@@ -127,6 +127,51 @@ export default class PtRenderer {
     this.ptScene = ptScene;
     this.camera = ptScene.camera;
     this.reset();
+  }
+
+  public setPathtracingEnabled(enabled: boolean) {
+    this.settings.pathtracingEnabled = enabled;
+    this.ptPass.enabled = enabled;
+    this.renderPass.enabled = !enabled;
+    this.shaderCanvas.resetAccumulation();
+  }
+
+  public setFov(fov: number) {
+    this.settings.fov = fov;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
+    this.updateCameraProjectionUniforms();
+    this.shaderCanvas.resetAccumulation();
+  }
+
+  public setNumSamples(samples: number) {
+    this.settings.numSamples = samples;
+    this.uniforms.uNumSamples.value = samples;
+    this.shaderCanvas.resetAccumulation();
+  }
+
+  public setMaxRayDepth(depth: number) {
+    this.settings.maxRayDepth = depth;
+    this.uniforms.uMaxRayDepth.value = depth;
+    this.shaderCanvas.resetAccumulation();
+  }
+
+  public setDepthOfFieldEnabled(enabled: boolean) {
+    this.settings.enableDepthOfField = enabled;
+    this.uniforms.uEnableDoF.value = enabled;
+    this.shaderCanvas.resetAccumulation();
+  }
+
+  public setAperture(aperture: number) {
+    this.settings.aperture = aperture;
+    this.uniforms.uCamera.value.aperture = aperture;
+    this.shaderCanvas.resetAccumulation();
+  }
+
+  public setFocusDistance(distance: number) {
+    this.settings.focusDistance = distance;
+    this.uniforms.uCamera.value.focusDistance = distance;
+    this.shaderCanvas.resetAccumulation();
   }
 
   private reset() {
