@@ -11,9 +11,20 @@ import type {
   TransformMode,
 } from "./PtState";
 import { PtInvalidationLevel } from "./PtInvalidation";
+import CommandHistory from "./CommandHistory";
+
+interface TransformSnapshot {
+  readonly position: THREE.Vector3;
+  readonly scale: THREE.Vector3;
+}
 
 export default class PtActions {
   private selectedObject: PtSphereMesh | null = null;
+  private readonly history = new CommandHistory(100);
+  private pendingTransform: {
+    object: PtSphereMesh;
+    before: TransformSnapshot;
+  } | null = null;
 
   constructor(
     private readonly store: PtStore,
@@ -32,11 +43,29 @@ export default class PtActions {
     return this.renderer.getInvalidationHistory();
   }
 
+  public getHistory() {
+    return this.history.getSnapshot();
+  }
+
+  public undo() {
+    this.cancelSelectedTransform();
+    return this.history.undo();
+  }
+
+  public redo() {
+    this.cancelSelectedTransform();
+    return this.history.redo();
+  }
+
   public setScene(sceneKey: string) {
     const createScene = PresetPtScenes[sceneKey];
     if (!createScene) throw new RangeError(`Unknown scene preset: ${sceneKey}`);
 
     const scene = createScene();
+    this.pendingTransform = null;
+    // Presets are whole-scene replacements, so commands referring to the old
+    // scene are intentionally discarded rather than replayed into a new one.
+    this.history.clear();
     this.selectedObject = null;
     this.renderer.transformControls.detach();
     this.renderer.outlinePass.selectedObjects = [];
@@ -163,6 +192,7 @@ export default class PtActions {
 
   public setSelectedPosition(axis: "x" | "y" | "z", value: number) {
     if (!this.selectedObject) return;
+    this.beginSelectedTransform();
     this.selectedObject.position[axis] = value;
     this.renderer.invalidate(
       PtInvalidationLevel.Geometry,
@@ -173,6 +203,7 @@ export default class PtActions {
 
   public setSelectedRadius(radius: number) {
     if (!this.selectedObject) return;
+    this.beginSelectedTransform();
     const sphereIndex = this.selectedObject.userData.pathTracer.primitiveIndex;
     const scale = radius / this.selectedObject.geometry.parameters.radius;
     this.selectedObject.scale.setScalar(scale);
@@ -190,6 +221,54 @@ export default class PtActions {
       this.selectedObject.scale.setScalar(scale);
     }
     this.publishSelection();
+  }
+
+  public beginSelectedTransform() {
+    if (!this.selectedObject || this.pendingTransform) return;
+    this.pendingTransform = {
+      object: this.selectedObject,
+      before: this.captureTransform(this.selectedObject),
+    };
+  }
+
+  public commitSelectedTransform() {
+    const pending = this.pendingTransform;
+    this.pendingTransform = null;
+    if (!pending) return false;
+
+    const after = this.captureTransform(pending.object);
+    if (this.transformsEqual(pending.before, after)) return false;
+
+    const apply = (snapshot: TransformSnapshot) => {
+      pending.object.position.copy(snapshot.position);
+      pending.object.scale.copy(snapshot.scale);
+      this.renderer.invalidate(
+        PtInvalidationLevel.Geometry,
+        `sphere ${pending.object.userData.pathTracer.primitiveIndex} transform history applied`
+      );
+      if (this.selectedObject === pending.object) this.publishSelection();
+    };
+
+    this.history.record({
+      label: `Transform sphere ${pending.object.userData.pathTracer.primitiveIndex}`,
+      execute: () => apply(after),
+      undo: () => apply(pending.before),
+    });
+    return true;
+  }
+
+  public cancelSelectedTransform() {
+    const pending = this.pendingTransform;
+    this.pendingTransform = null;
+    if (!pending) return false;
+    pending.object.position.copy(pending.before.position);
+    pending.object.scale.copy(pending.before.scale);
+    this.renderer.invalidate(
+      PtInvalidationLevel.Geometry,
+      `sphere ${pending.object.userData.pathTracer.primitiveIndex} transform canceled`
+    );
+    if (this.selectedObject === pending.object) this.publishSelection();
+    return true;
   }
 
   public setMaterialColor(materialId: number, color: THREE.Color) {
@@ -239,6 +318,17 @@ export default class PtActions {
       ...state,
       selection: { sphereIndex, position: { x, y, z }, radius },
     }));
+  }
+
+  private captureTransform(object: PtSphereMesh): TransformSnapshot {
+    return {
+      position: object.position.clone(),
+      scale: object.scale.clone(),
+    };
+  }
+
+  private transformsEqual(a: TransformSnapshot, b: TransformSnapshot) {
+    return a.position.equals(b.position) && a.scale.equals(b.scale);
   }
 
   private emptySelection(): PtState["selection"] {

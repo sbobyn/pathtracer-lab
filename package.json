@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "verify:rng": "node scripts/check-random-seeds.mjs",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
-    "verify": "pnpm verify:rng && pnpm typecheck && pnpm build"
+    "verify": "pnpm test && pnpm verify:rng && pnpm typecheck && pnpm build"
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.3.0",

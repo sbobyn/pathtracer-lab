@@ -119,17 +119,21 @@ export default class PtGui implements PtUiAdapter {
         .onChange((mode: TransformMode) => actions.setTransformMode(mode)),
       this.selectionFolder
         .add(this.model.selectedPosition, "x", -1)
-        .onChange((value: number) => actions.setSelectedPosition("x", value)),
+        .onChange((value: number) => actions.setSelectedPosition("x", value))
+        .onFinishChange(() => actions.commitSelectedTransform()),
       this.selectionFolder
         .add(this.model.selectedPosition, "y", -1)
-        .onChange((value: number) => actions.setSelectedPosition("y", value)),
+        .onChange((value: number) => actions.setSelectedPosition("y", value))
+        .onFinishChange(() => actions.commitSelectedTransform()),
       this.selectionFolder
         .add(this.model.selectedPosition, "z", -1)
-        .onChange((value: number) => actions.setSelectedPosition("z", value)),
+        .onChange((value: number) => actions.setSelectedPosition("z", value))
+        .onFinishChange(() => actions.commitSelectedTransform()),
       this.selectionFolder
         .add(this.model, "selectedRadius", 0)
         .name("radius")
         .onChange((radius: number) => actions.setSelectedRadius(radius))
+        .onFinishChange(() => actions.commitSelectedTransform())
     );
 
     this.materialFolder = this.selectionFolder.addFolder("Material");

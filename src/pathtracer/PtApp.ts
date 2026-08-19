@@ -35,6 +35,23 @@ export default class PtApp {
     if (this.selectedObject) this.actions.syncSelectedTransform();
   };
 
+  private readonly draggingChangedHandler = (event: { value: unknown }) => {
+    if (event.value) this.actions.beginSelectedTransform();
+    else this.actions.commitSelectedTransform();
+  };
+
+  private readonly keyDownHandler = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      if (this.actions.cancelSelectedTransform()) event.preventDefault();
+      return;
+    }
+
+    if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+    if (event.key.toLowerCase() !== "z") return;
+    const changed = event.shiftKey ? this.actions.redo() : this.actions.undo();
+    if (changed) event.preventDefault();
+  };
+
   constructor(
     canvas: HTMLCanvasElement,
     createUi: PtUiFactory = (actions) => new PtGui(actions)
@@ -63,17 +80,27 @@ export default class PtApp {
     });
 
     window.addEventListener("pointerdown", this.pointerDownHandler);
+    window.addEventListener("keydown", this.keyDownHandler);
     this.ptRenderer.transformControls.addEventListener(
       "change",
       this.transformChangeHandler
+    );
+    this.ptRenderer.transformControls.addEventListener(
+      "dragging-changed",
+      this.draggingChangedHandler
     );
   }
 
   public dispose() {
     window.removeEventListener("pointerdown", this.pointerDownHandler);
+    window.removeEventListener("keydown", this.keyDownHandler);
     this.ptRenderer.transformControls.removeEventListener(
       "change",
       this.transformChangeHandler
+    );
+    this.ptRenderer.transformControls.removeEventListener(
+      "dragging-changed",
+      this.draggingChangedHandler
     );
     this.unsubscribe();
     this.ui.dispose();
