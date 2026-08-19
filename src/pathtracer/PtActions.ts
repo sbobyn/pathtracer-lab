@@ -47,7 +47,9 @@ export default class PtActions {
   constructor(
     private readonly store: PtStore,
     private readonly renderer: PtRenderer
-  ) {}
+  ) {
+    this.publishSceneObjects();
+  }
 
   public getState() {
     return this.store.getState();
@@ -118,6 +120,7 @@ export default class PtActions {
         transformMode: "translate",
       },
       selection: this.emptySelection(),
+      sceneObjects: this.createSceneObjectState(),
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
     this.publishHistory();
@@ -255,6 +258,16 @@ export default class PtActions {
     this.publishSelection();
   }
 
+  public selectSphere(sphereIndex: number) {
+    const object = this.renderer.ptScene
+      .getSphereMeshes()
+      .find(
+        (sphere) =>
+          sphere.userData.pathTracer.primitiveIndex === sphereIndex
+      );
+    this.selectObject(object ?? null);
+  }
+
   public removeSelectedObject() {
     const object = this.selectedObject;
     if (!object) return false;
@@ -266,11 +279,13 @@ export default class PtActions {
 
     const remove = () => {
       scene.removeSphereMesh(object);
+      this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere removed");
     };
     const restore = () => {
       scene.insertSphereMesh(object, index);
+      this.publishSceneObjects();
       this.selectObject(object);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere restored");
     };
@@ -301,11 +316,13 @@ export default class PtActions {
 
     const insert = () => {
       scene.insertSphereMesh(object, index);
+      this.publishSceneObjects();
       this.selectObject(object);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere duplicated");
     };
     const remove = () => {
       scene.removeSphereMesh(object);
+      this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
       this.renderer.invalidate(
         PtInvalidationLevel.Scene,
@@ -412,6 +429,7 @@ export default class PtActions {
       PtInvalidationLevel.Material,
       `material ${materialId} color changed`
     );
+    this.publishSelection();
   }
 
   public setMaterialFuzz(materialId: number, fuzz: number) {
@@ -424,6 +442,7 @@ export default class PtActions {
       PtInvalidationLevel.Material,
       `material ${materialId} fuzz changed`
     );
+    this.publishSelection();
   }
 
   public setMaterialIor(materialId: number, ior: number) {
@@ -434,6 +453,7 @@ export default class PtActions {
       PtInvalidationLevel.Material,
       `material ${materialId} index of refraction changed`
     );
+    this.publishSelection();
   }
 
   public beginMaterialEdit(materialId: number) {
@@ -495,10 +515,51 @@ export default class PtActions {
     const sphereIndex = this.selectedObject.userData.pathTracer.primitiveIndex;
     const { x, y, z } = this.selectedObject.position;
     const radius = sphereRadius(this.selectedObject);
+    const { materialId, materialType } = getMaterialMetadata(
+      this.selectedObject.material
+    );
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    const materialKinds = ["Lambert", "Metal", "Dielectric"] as const;
     this.store.update((state) => ({
       ...state,
-      selection: { sphereIndex, position: { x, y, z }, radius },
+      selection: {
+        objectId: `sphere:${sphereIndex}`,
+        sphereIndex,
+        position: { x, y, z },
+        radius,
+        material: {
+          id: materialId,
+          kind: materialKinds[materialType] ?? "Unknown",
+          color: `#${material.color.getHexString()}`,
+          roughness:
+            material instanceof THREE.MeshStandardMaterial
+              ? material.roughness
+              : null,
+          ior:
+            material instanceof THREE.MeshPhysicalMaterial
+              ? material.ior
+              : null,
+        },
+      },
     }));
+  }
+
+  private createSceneObjectState(): PtState["sceneObjects"] {
+    return this.renderer.ptScene.getSphereMeshes().map((sphere) => {
+      const sphereIndex = sphere.userData.pathTracer.primitiveIndex;
+      return {
+        id: `sphere:${sphereIndex}`,
+        label: `Sphere ${sphereIndex}`,
+        kind: "sphere" as const,
+        sphereIndex,
+        traceable: true,
+      };
+    });
+  }
+
+  private publishSceneObjects() {
+    const sceneObjects = this.createSceneObjectState();
+    this.store.update((state) => ({ ...state, sceneObjects }));
   }
 
   private captureTransform(object: PtSphereMesh): TransformSnapshot {
@@ -605,9 +666,11 @@ export default class PtActions {
 
   private emptySelection(): PtState["selection"] {
     return {
+      objectId: null,
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,
+      material: null,
     };
   }
 

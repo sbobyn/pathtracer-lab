@@ -1,5 +1,22 @@
 export type AccumulationFormat = "rgba8" | "rgba16f" | "rgba32f";
 export type TransformMode = "translate" | "scale";
+export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Unknown";
+
+export interface PtSceneObjectState {
+  id: string;
+  label: string;
+  kind: "sphere";
+  sphereIndex: number;
+  traceable: boolean;
+}
+
+export interface PtSelectionMaterialState {
+  id: number;
+  kind: PtMaterialKind;
+  color: string;
+  roughness: number | null;
+  ior: number | null;
+}
 
 /** Serializable render and camera preferences. */
 export interface PtSettings {
@@ -20,9 +37,11 @@ export interface PtSettings {
 
 /** Serializable editor selection; Three.js objects remain outside the store. */
 export interface PtSelectionState {
+  objectId: string | null;
   sphereIndex: number | null;
   position: { x: number; y: number; z: number };
   radius: number | null;
+  material: PtSelectionMaterialState | null;
 }
 
 /** Read-only editor history summary suitable for any UI adapter. */
@@ -36,6 +55,7 @@ export interface PtHistoryState {
 /** Serializable application state shared by UI adapters and application actions. */
 export interface PtState {
   sceneKey: string;
+  sceneObjects: PtSceneObjectState[];
   settings: PtSettings;
   selection: PtSelectionState;
   history: PtHistoryState;
@@ -60,11 +80,14 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
 export function createDefaultPtState(): PtState {
   return {
     sceneKey: "Part1Simple",
+    sceneObjects: [],
     settings: { ...defaultSettings },
     selection: {
+      objectId: null,
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,
+      material: null,
     },
     history: {
       canUndo: false,

@@ -210,6 +210,93 @@ body {
   padding: 2px;
 }
 
+.editor-hierarchy {
+  display: grid;
+  gap: 3px;
+}
+
+.editor-hierarchy button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 6px 8px;
+  color: #d4d4d8;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+}
+
+.editor-hierarchy button:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.editor-hierarchy button[data-selected="true"] {
+  color: #e0f2fe;
+  background: rgb(14 165 233 / 18%);
+  border-color: rgb(56 189 248 / 45%);
+}
+
+.editor-hierarchy__capability {
+  color: #71717a;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.editor-panel__empty {
+  padding: 0 12px 12px;
+  color: #71717a;
+  font-size: 11px;
+}
+
+.editor-inspector__identity {
+  display: grid;
+  gap: 2px;
+  padding: 2px 0 9px;
+}
+
+.editor-inspector__identity strong {
+  font-size: 12px;
+}
+
+.editor-inspector__identity span {
+  color: #71717a;
+  font-size: 10px;
+}
+
+.editor-subpanel {
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.editor-subpanel summary {
+  padding: 8px 0;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  list-style: none;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.editor-inspector__commands {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+.editor-inspector__commands button {
+  padding: 5px 8px;
+  color: inherit;
+  background: #3f3f46;
+  border: 1px solid #52525b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
 .editor-shell__resize-handle {
   position: absolute;
   z-index: 3;

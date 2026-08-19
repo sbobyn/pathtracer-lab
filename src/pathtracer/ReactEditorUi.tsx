@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import * as THREE from "three";
 import type PtActions from "./PtActions";
 import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState } from "./PtState";
@@ -366,6 +367,163 @@ function CameraSettings({
   );
 }
 
+function SceneHierarchy({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  return (
+    <details className="editor-panel" open>
+      <summary>Hierarchy</summary>
+      <div className="editor-panel__content editor-hierarchy" role="tree">
+        {state.sceneObjects.map((object) => (
+          <button
+            key={object.id}
+            type="button"
+            role="treeitem"
+            aria-selected={state.selection.objectId === object.id}
+            data-selected={state.selection.objectId === object.id}
+            onClick={() => actions.selectSphere(object.sphereIndex)}
+          >
+            <span>{object.label}</span>
+            <span className="editor-hierarchy__capability">
+              {object.traceable ? "traceable" : "preview only"}
+            </span>
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function ObjectInspector({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  const selection = state.selection;
+  const material = selection.material;
+  if (selection.sphereIndex === null || selection.radius === null || !material) {
+    return (
+      <details className="editor-panel" open>
+        <summary>Inspector</summary>
+        <div className="editor-panel__empty">Select an object to inspect it.</div>
+      </details>
+    );
+  }
+
+  const transformNumber = (
+    label: string,
+    value: number,
+    setValue: (value: number) => void,
+    minimum?: number
+  ) => (
+    <label className="editor-control">
+      <span>{label}</span>
+      <input
+        type="number"
+        value={value}
+        min={minimum}
+        step={0.01}
+        onFocus={() => actions.beginSelectedTransform()}
+        onChange={(event) => setValue(event.currentTarget.valueAsNumber)}
+        onBlur={() => actions.commitSelectedTransform()}
+      />
+    </label>
+  );
+
+  return (
+    <details className="editor-panel" open>
+      <summary>Inspector</summary>
+      <div className="editor-panel__content">
+        <div className="editor-inspector__identity">
+          <strong>Sphere {selection.sphereIndex}</strong>
+          <span>Sphere · Path traced</span>
+        </div>
+        <details className="editor-subpanel" open>
+          <summary>Transform</summary>
+          {transformNumber("Position X", selection.position.x, (value) =>
+            actions.setSelectedPosition("x", value)
+          )}
+          {transformNumber("Position Y", selection.position.y, (value) =>
+            actions.setSelectedPosition("y", value)
+          )}
+          {transformNumber("Position Z", selection.position.z, (value) =>
+            actions.setSelectedPosition("z", value)
+          )}
+          {transformNumber("Radius", selection.radius, (value) =>
+            actions.setSelectedRadius(value), 0
+          )}
+        </details>
+        <details className="editor-subpanel" open>
+          <summary>Material · {material.kind}</summary>
+          <label className="editor-control">
+            <span>Color</span>
+            <input
+              type="color"
+              value={material.color}
+              onFocus={() => actions.beginMaterialEdit(material.id)}
+              onChange={(event) =>
+                actions.setMaterialColor(
+                  material.id,
+                  new THREE.Color(event.currentTarget.value)
+                )
+              }
+              onBlur={() => actions.commitMaterialEdit()}
+            />
+          </label>
+          {material.roughness !== null && (
+            <label className="editor-control">
+              <span>Roughness</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={material.roughness}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) =>
+                  actions.setMaterialFuzz(material.id, event.currentTarget.valueAsNumber)
+                }
+                onBlur={() => actions.commitMaterialEdit()}
+              />
+            </label>
+          )}
+          {material.ior !== null && (
+            <label className="editor-control">
+              <span>IOR</span>
+              <input
+                type="number"
+                min={1}
+                max={2.5}
+                step={0.01}
+                value={material.ior}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) =>
+                  actions.setMaterialIor(material.id, event.currentTarget.valueAsNumber)
+                }
+                onBlur={() => actions.commitMaterialEdit()}
+              />
+            </label>
+          )}
+        </details>
+        <div className="editor-inspector__commands">
+          <button type="button" onClick={() => actions.duplicateSelectedObject()}>
+            Duplicate
+          </button>
+          <button type="button" onClick={() => actions.removeSelectedObject()}>
+            Remove
+          </button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 type ResizeAxis = "width" | "height" | "both";
 
 interface PanelSize {
@@ -492,6 +650,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
           </button>
         </div>
         <SceneSettings state={state} actions={actions} />
+        <SceneHierarchy state={state} actions={actions} />
+        <ObjectInspector state={state} actions={actions} />
         <RenderSettings state={state} actions={actions} />
         <CameraSettings state={state} actions={actions} />
       </div>
