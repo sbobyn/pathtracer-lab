@@ -120,7 +120,7 @@ export default class PtActions {
         transformMode: "translate",
       },
       selection: this.emptySelection(),
-      sceneObjects: this.createSceneObjectState(),
+      sceneObjects: this.createSceneObjectState(sceneKey),
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
     this.publishHistory();
@@ -544,17 +544,83 @@ export default class PtActions {
     }));
   }
 
-  private createSceneObjectState(): PtState["sceneObjects"] {
-    return this.renderer.ptScene.getSphereMeshes().map((sphere) => {
+  private createSceneObjectState(
+    sceneLabel = this.store.getState().sceneKey
+  ): PtState["sceneObjects"] {
+    const fixedObjects: PtState["sceneObjects"] = [
+      {
+        id: "scene:root",
+        label: sceneLabel,
+        kind: "scene",
+        parentId: null,
+        depth: 0,
+        sphereIndex: null,
+        selectable: false,
+        traceable: false,
+        capability: "scene",
+      },
+      {
+        id: "camera:main",
+        label: "Perspective Camera",
+        kind: "camera",
+        parentId: "scene:root",
+        depth: 1,
+        sphereIndex: null,
+        selectable: false,
+        traceable: true,
+        capability: "path-tracing camera",
+      },
+      {
+        id: "light:ambient",
+        label: "Ambient Light",
+        kind: "light",
+        parentId: "scene:root",
+        depth: 1,
+        sphereIndex: null,
+        selectable: false,
+        traceable: false,
+        capability: "preview lighting",
+      },
+      {
+        id: "light:directional",
+        label: "Directional Light",
+        kind: "light",
+        parentId: "scene:root",
+        depth: 1,
+        sphereIndex: null,
+        selectable: false,
+        traceable: false,
+        capability: "preview lighting",
+      },
+      {
+        id: "group:traceables",
+        label: "Traceable Objects",
+        kind: "group",
+        parentId: "scene:root",
+        depth: 1,
+        sphereIndex: null,
+        selectable: false,
+        traceable: false,
+        capability: "group",
+      },
+    ];
+    const spheres: PtState["sceneObjects"] = this.renderer.ptScene
+      .getSphereMeshes()
+      .map((sphere) => {
       const sphereIndex = sphere.userData.pathTracer.primitiveIndex;
       return {
         id: `sphere:${sphereIndex}`,
         label: `Sphere ${sphereIndex}`,
         kind: "sphere" as const,
+        parentId: "group:traceables",
+        depth: 2,
         sphereIndex,
+        selectable: true,
         traceable: true,
+        capability: "path traced",
       };
     });
+    return [...fixedObjects, ...spheres];
   }
 
   private publishSceneObjects() {

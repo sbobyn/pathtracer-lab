@@ -1,13 +1,8 @@
 import * as THREE from "three";
 import PtActions from "./PtActions";
-import PtGui from "./PtGui";
 import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
-import {
-  getMaterialMetadata,
-  isPtSphereMesh,
-  type PtSphereMesh,
-} from "./PtScene";
+import { isPtSphereMesh, type PtSphereMesh } from "./PtScene";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
 import type { PtUiAdapter, PtUiFactory } from "./PtUiAdapter";
@@ -59,7 +54,7 @@ export default class PtApp {
 
   constructor(
     canvas: HTMLCanvasElement,
-    createUi: PtUiFactory = (actions) => new PtGui(actions)
+    createUi: PtUiFactory
   ) {
     const ptScene = PresetPtScenes.Part1Simple();
     const initialState = createDefaultPtState();
@@ -92,18 +87,6 @@ export default class PtApp {
           ? null
           : this.ptRenderer.ptScene.getSphereMeshes()[currentSphereIndex] ??
             null;
-      if (!this.selectedObject) {
-        this.ui.hideSelection();
-        return;
-      }
-      const { materialId, materialType } = getMaterialMetadata(
-        this.selectedObject.material
-      );
-      this.ui.showSelection(
-        this.selectedObject.material,
-        materialId,
-        materialType
-      );
     });
 
     window.addEventListener("pointerdown", this.pointerDownHandler);
@@ -149,7 +132,6 @@ export default class PtApp {
     if (!object || !isPtSphereMesh(object)) {
       this.selectedObject = null;
       this.actions.selectObject(null);
-      this.ui.hideSelection();
       return;
     }
 

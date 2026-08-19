@@ -206,9 +206,7 @@ function RenderSettings({
 }) {
   const { settings } = state;
   return (
-    <details className="editor-panel" open>
-      <summary id="render-settings-title">Render</summary>
-      <div className="editor-panel__content">
+      <div className="render-panel__content">
       <label className="editor-control editor-control--checkbox">
         <span>Path tracing</span>
         <input
@@ -303,7 +301,6 @@ function RenderSettings({
       </label>
       </fieldset>
       </div>
-    </details>
   );
 }
 
@@ -384,12 +381,20 @@ function SceneHierarchy({
             type="button"
             role="treeitem"
             aria-selected={state.selection.objectId === object.id}
+            aria-disabled={!object.selectable}
+            aria-level={object.depth + 1}
+            disabled={!object.selectable}
+            data-depth={object.depth}
             data-selected={state.selection.objectId === object.id}
-            onClick={() => actions.selectSphere(object.sphereIndex)}
+            onClick={() => {
+              if (object.sphereIndex !== null) {
+                actions.selectSphere(object.sphereIndex);
+              }
+            }}
           >
             <span>{object.label}</span>
             <span className="editor-hierarchy__capability">
-              {object.traceable ? "traceable" : "preview only"}
+              {object.capability}
             </span>
           </button>
         ))}
@@ -398,7 +403,7 @@ function SceneHierarchy({
   );
 }
 
-function ObjectInspector({
+function ObjectInspectorContent({
   state,
   actions,
 }: {
@@ -408,12 +413,7 @@ function ObjectInspector({
   const selection = state.selection;
   const material = selection.material;
   if (selection.sphereIndex === null || selection.radius === null || !material) {
-    return (
-      <details className="editor-panel" open>
-        <summary>Inspector</summary>
-        <div className="editor-panel__empty">Select an object to inspect it.</div>
-      </details>
-    );
+    return null;
   }
 
   const transformNumber = (
@@ -430,16 +430,17 @@ function ObjectInspector({
         min={minimum}
         step={0.01}
         onFocus={() => actions.beginSelectedTransform()}
-        onChange={(event) => setValue(event.currentTarget.valueAsNumber)}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.valueAsNumber;
+          if (Number.isFinite(nextValue)) setValue(nextValue);
+        }}
         onBlur={() => actions.commitSelectedTransform()}
       />
     </label>
   );
 
   return (
-    <details className="editor-panel" open>
-      <summary>Inspector</summary>
-      <div className="editor-panel__content">
+      <div className="object-inspector__content">
         <div className="editor-inspector__identity">
           <strong>Sphere {selection.sphereIndex}</strong>
           <span>Sphere · Path traced</span>
@@ -486,9 +487,12 @@ function ObjectInspector({
                 step={0.01}
                 value={material.roughness}
                 onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) =>
-                  actions.setMaterialFuzz(material.id, event.currentTarget.valueAsNumber)
-                }
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.valueAsNumber;
+                  if (Number.isFinite(nextValue)) {
+                    actions.setMaterialFuzz(material.id, nextValue);
+                  }
+                }}
                 onBlur={() => actions.commitMaterialEdit()}
               />
             </label>
@@ -503,9 +507,12 @@ function ObjectInspector({
                 step={0.01}
                 value={material.ior}
                 onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) =>
-                  actions.setMaterialIor(material.id, event.currentTarget.valueAsNumber)
-                }
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.valueAsNumber;
+                  if (Number.isFinite(nextValue)) {
+                    actions.setMaterialIor(material.id, nextValue);
+                  }
+                }}
                 onBlur={() => actions.commitMaterialEdit()}
               />
             </label>
@@ -520,7 +527,112 @@ function ObjectInspector({
           </button>
         </div>
       </div>
-    </details>
+  );
+}
+
+function SelectedObjectInspector({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [size, setSize] = useState<PanelSize>(() =>
+    clampPanelSize({ width: 260, height: 620 })
+  );
+  const resizeGesture = useRef<{
+    axis: ResizeAxis;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startSize: PanelSize;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => setSize((current) => clampPanelSize(current));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  if (state.selection.sphereIndex === null) return null;
+
+  const beginResize = (
+    axis: ResizeAxis,
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (collapsed || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeGesture.current = {
+      axis,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startSize: size,
+    };
+  };
+
+  const continueResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = resizeGesture.current;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    setSize(
+      clampPanelSize({
+        width:
+          gesture.axis === "width" || gesture.axis === "both"
+            ? gesture.startSize.width - (event.clientX - gesture.startX)
+            : gesture.startSize.width,
+        height:
+          gesture.axis === "height" || gesture.axis === "both"
+            ? gesture.startSize.height + event.clientY - gesture.startY
+            : gesture.startSize.height,
+      })
+    );
+  };
+
+  const finishResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    resizeGesture.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  return (
+    <aside
+      className="object-inspector"
+      aria-label="Selected object inspector"
+      data-collapsed={collapsed}
+      style={
+        collapsed
+          ? undefined
+          : { width: size.width, maxHeight: size.height }
+      }
+    >
+      <button
+        className="object-inspector__toggle"
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((current) => !current)}
+      >
+        <span>Sphere {state.selection.sphereIndex}</span>
+        <span className="object-inspector__meta">
+          {state.selection.material?.kind ?? "Object"}
+        </span>
+        <span className="object-inspector__chevron" aria-hidden="true">⌃</span>
+      </button>
+      {!collapsed && <ObjectInspectorContent state={state} actions={actions} />}
+      {(["width", "height", "both"] as const).map((axis) => (
+        <div
+          key={axis}
+          className={`object-inspector__resize-handle object-inspector__resize-handle--${axis}`}
+          aria-hidden="true"
+          onPointerDown={(event) => beginResize(axis, event)}
+          onPointerMove={continueResize}
+          onPointerUp={finishResize}
+          onPointerCancel={finishResize}
+        />
+      ))}
+    </aside>
   );
 }
 
@@ -539,6 +651,91 @@ function clampPanelSize(size: PanelSize): PanelSize {
       Math.max(220, window.innerHeight - 32)
     ),
   };
+}
+
+function HistoryPanel({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  return (
+    <aside className="history-panel" aria-label="History controls">
+      <button
+        type="button"
+        disabled={!state.history.canUndo}
+        title={state.history.undoLabel ?? undefined}
+        onClick={() => actions.undo()}
+      >
+        Undo
+      </button>
+      <button
+        type="button"
+        disabled={!state.history.canRedo}
+        title={state.history.redoLabel ?? undefined}
+        onClick={() => actions.redo()}
+      >
+        Redo
+      </button>
+    </aside>
+  );
+}
+
+function useFrameRate() {
+  const [fps, setFps] = useState<number | null>(null);
+
+  useEffect(() => {
+    let frameRequest = 0;
+    let frameCount = 0;
+    let intervalStart = performance.now();
+    const measure = (now: number) => {
+      frameCount += 1;
+      const elapsed = now - intervalStart;
+      if (elapsed >= 500) {
+        setFps(Math.round((frameCount * 1000) / elapsed));
+        frameCount = 0;
+        intervalStart = now;
+      }
+      frameRequest = requestAnimationFrame(measure);
+    };
+    frameRequest = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(frameRequest);
+  }, []);
+
+  return fps;
+}
+
+function RenderPanel({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const fps = useFrameRate();
+  return (
+    <aside
+      className="render-panel"
+      aria-label="Render settings"
+      data-collapsed={collapsed}
+    >
+      <button
+        className="render-panel__toggle"
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((current) => !current)}
+      >
+        <span>Render</span>
+        <span className="render-panel__meta">
+          {fps === null ? "—" : fps} FPS · {state.settings.pathtracingEnabled ? "Path tracing" : "Preview"}
+        </span>
+        <span className="render-panel__chevron" aria-hidden="true">⌃</span>
+      </button>
+      {!collapsed && <RenderSettings state={state} actions={actions} />}
+    </aside>
+  );
 }
 
 function EditorShell({ actions }: { actions: PtActions }) {
@@ -605,11 +802,18 @@ function EditorShell({ actions }: { actions: PtActions }) {
   };
 
   return (
+    <>
+    <div className="editor-left-stack">
+    <HistoryPanel state={state} actions={actions} />
     <aside
       className="editor-shell"
       aria-label="Path tracer editor"
       data-collapsed={collapsed}
-      style={collapsed ? undefined : size}
+      style={
+        collapsed
+          ? undefined
+          : { width: size.width, maxHeight: size.height }
+      }
     >
       <div className="editor-shell__header">
         <button
@@ -624,35 +828,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
         </button>
       </div>
       <div className="editor-shell__body">
-        <div className="editor-shell__status">
-          <span>
-            {state.selection.sphereIndex === null
-              ? "No selection"
-              : `Sphere ${state.selection.sphereIndex}`}
-          </span>
-        </div>
-        <div className="editor-shell__history">
-          <button
-            type="button"
-            disabled={!state.history.canUndo}
-            title={state.history.undoLabel ?? undefined}
-            onClick={() => actions.undo()}
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            disabled={!state.history.canRedo}
-            title={state.history.redoLabel ?? undefined}
-            onClick={() => actions.redo()}
-          >
-            Redo
-          </button>
-        </div>
         <SceneSettings state={state} actions={actions} />
         <SceneHierarchy state={state} actions={actions} />
-        <ObjectInspector state={state} actions={actions} />
-        <RenderSettings state={state} actions={actions} />
         <CameraSettings state={state} actions={actions} />
       </div>
       {(["width", "height", "both"] as const).map((axis) => (
@@ -667,6 +844,12 @@ function EditorShell({ actions }: { actions: PtActions }) {
         />
       ))}
     </aside>
+    </div>
+    <div className="editor-right-stack">
+    <RenderPanel state={state} actions={actions} />
+    <SelectedObjectInspector state={state} actions={actions} />
+    </div>
+    </>
   );
 }
 
@@ -684,10 +867,6 @@ export default class ReactEditorUi implements PtUiAdapter {
   public contains(target: Node) {
     return this.element.contains(target);
   }
-
-  public showSelection() {}
-
-  public hideSelection() {}
 
   public dispose() {
     this.root.unmount();

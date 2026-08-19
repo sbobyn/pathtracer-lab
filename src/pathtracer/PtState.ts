@@ -5,9 +5,13 @@ export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Unknown";
 export interface PtSceneObjectState {
   id: string;
   label: string;
-  kind: "sphere";
-  sphereIndex: number;
+  kind: "scene" | "camera" | "light" | "group" | "sphere";
+  parentId: string | null;
+  depth: number;
+  sphereIndex: number | null;
+  selectable: boolean;
   traceable: boolean;
+  capability: string;
 }
 
 export interface PtSelectionMaterialState {
