@@ -14,3 +14,62 @@ body {
   left: 0;
   outline: none;
 }
+
+#editor-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.editor-shell {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  min-width: 210px;
+  padding: 12px;
+  color: #f4f4f5;
+  background: rgb(24 24 27 / 88%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.editor-shell__title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.editor-shell__status {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.editor-shell__history {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.editor-shell__history button {
+  flex: 1;
+  padding: 5px 8px;
+  color: inherit;
+  background: #3f3f46;
+  border: 1px solid #52525b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.editor-shell__history button:disabled {
+  color: #71717a;
+  background: #27272a;
+  cursor: default;
+}

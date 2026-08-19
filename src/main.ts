@@ -1,10 +1,24 @@
 import PtApp from "./pathtracer/PtApp";
+import CompositePtUi from "./pathtracer/CompositePtUi";
+import PtGui from "./pathtracer/PtGui";
+import ReactEditorUi from "./pathtracer/ReactEditorUi";
 
 const canvas = document.createElement("canvas");
 canvas.classList.add("webgl");
 document.querySelector("#app")?.appendChild(canvas);
 
-const app = new PtApp(canvas);
+const editorRoot = document.createElement("div");
+editorRoot.id = "editor-root";
+document.querySelector("#app")?.appendChild(editorRoot);
+
+const app = new PtApp(
+  canvas,
+  (actions) =>
+    new CompositePtUi([
+      new PtGui(actions),
+      new ReactEditorUi(editorRoot, actions),
+    ])
+);
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
