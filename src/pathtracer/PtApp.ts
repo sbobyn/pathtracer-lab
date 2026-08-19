@@ -3,7 +3,11 @@ import PtActions from "./PtActions";
 import PtGui from "./PtGui";
 import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
-import type { PtSphereMesh } from "./PtScene";
+import {
+  getMaterialMetadata,
+  isPtSphereMesh,
+  type PtSphereMesh,
+} from "./PtScene";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
 import type { PtUiAdapter, PtUiFactory } from "./PtUiAdapter";
@@ -88,10 +92,7 @@ export default class PtApp {
     );
     const object = intersection?.object;
 
-    if (
-      !(object instanceof THREE.Mesh) ||
-      typeof object.userData.sphereIndex !== "number"
-    ) {
+    if (!object || !isPtSphereMesh(object)) {
       this.selectedObject = null;
       this.actions.selectObject(null);
       this.ui.hideSelection();
@@ -99,9 +100,9 @@ export default class PtApp {
     }
 
     this.selectedObject = object as PtSphereMesh;
-    const sphereIndex = this.selectedObject.userData.sphereIndex;
-    const materialId = this.ptRenderer.ptScene.spheres[sphereIndex].materialId;
-    const materialType = this.ptRenderer.ptScene.materials[materialId].type;
+    const { materialId, materialType } = getMaterialMetadata(
+      this.selectedObject.material
+    );
 
     this.actions.selectObject(this.selectedObject);
     this.ui.showSelection(

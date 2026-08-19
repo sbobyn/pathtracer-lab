@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
-import type { PtSphereMesh } from "./PtScene";
+import { sphereRadius, type PtSphereMesh } from "./PtScene";
 import PtStore from "./PtStore";
 import type { PtStateListener } from "./PtStore";
 import type {
@@ -166,16 +166,14 @@ export default class PtActions {
     this.selectedObject.position[axis] = value;
     this.renderer.invalidate(
       PtInvalidationLevel.Geometry,
-      `sphere ${this.selectedObject.userData.sphereIndex} position changed`
+      `sphere ${this.selectedObject.userData.pathTracer.primitiveIndex} position changed`
     );
     this.publishSelection();
   }
 
   public setSelectedRadius(radius: number) {
     if (!this.selectedObject) return;
-    const sphereIndex = this.selectedObject.userData.sphereIndex;
-    const sphere = this.renderer.ptScene.spheres[sphereIndex];
-    sphere.radius = radius;
+    const sphereIndex = this.selectedObject.userData.pathTracer.primitiveIndex;
     const scale = radius / this.selectedObject.geometry.parameters.radius;
     this.selectedObject.scale.setScalar(scale);
     this.renderer.invalidate(
@@ -190,15 +188,12 @@ export default class PtActions {
     if (this.renderer.transformControls.mode === "scale") {
       const scale = this.selectedObject.scale.x;
       this.selectedObject.scale.setScalar(scale);
-      const sphereIndex = this.selectedObject.userData.sphereIndex;
-      this.renderer.ptScene.spheres[sphereIndex].radius =
-        scale * this.selectedObject.geometry.parameters.radius;
     }
     this.publishSelection();
   }
 
   public setMaterialColor(materialId: number, color: THREE.Color) {
-    this.renderer.ptScene.materials[materialId].albedo = color;
+    this.renderer.ptScene.getMaterial(materialId).color.copy(color);
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} color changed`
@@ -206,7 +201,10 @@ export default class PtActions {
   }
 
   public setMaterialFuzz(materialId: number, fuzz: number) {
-    this.renderer.ptScene.materials[materialId].fuzz = fuzz;
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    if (material instanceof THREE.MeshStandardMaterial) {
+      material.roughness = fuzz;
+    }
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} fuzz changed`
@@ -214,7 +212,8 @@ export default class PtActions {
   }
 
   public setMaterialIor(materialId: number, ior: number) {
-    this.renderer.ptScene.materials[materialId].ior = ior;
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    if (material instanceof THREE.MeshPhysicalMaterial) material.ior = ior;
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} index of refraction changed`
@@ -233,9 +232,9 @@ export default class PtActions {
 
   private publishSelection() {
     if (!this.selectedObject) return;
-    const sphereIndex = this.selectedObject.userData.sphereIndex;
+    const sphereIndex = this.selectedObject.userData.pathTracer.primitiveIndex;
     const { x, y, z } = this.selectedObject.position;
-    const radius = this.renderer.ptScene.spheres[sphereIndex].radius;
+    const radius = sphereRadius(this.selectedObject);
     this.store.update((state) => ({
       ...state,
       selection: { sphereIndex, position: { x, y, z }, radius },

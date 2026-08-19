@@ -212,6 +212,7 @@ export default class PtRenderer {
   }
 
   public invalidate(level: PtInvalidationLevel, reason: string) {
+    if (level >= PtInvalidationLevel.Material) this.updateSceneUniforms();
     this.invalidationHistory.push({
       sequence: ++this.invalidationSequence,
       level,
@@ -241,10 +242,11 @@ export default class PtRenderer {
   }
 
   private setupShaderCanvas() {
+    const sphereCount = this.ptScene.getSphereMeshes().length;
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
-      fragmentShader: `#define MAX_SPHERES ${this.ptScene.spheres.length}
+      fragmentShader: `#define MAX_SPHERES ${sphereCount}
        ${fragShader}`,
       uniforms: this.uniforms,
       renderer: this.renderer,
@@ -255,8 +257,9 @@ export default class PtRenderer {
   }
 
   private updateShaderCanvas() {
+    const sphereCount = this.ptScene.getSphereMeshes().length;
     this.shaderCanvas
-      .setShader(`#define MAX_SPHERES ${this.ptScene.spheres.length}
+      .setShader(`#define MAX_SPHERES ${sphereCount}
        ${fragShader}`);
   }
 
@@ -302,12 +305,10 @@ export default class PtRenderer {
     this.uniforms.uCamera.value.focusDistance = this.settings.focusDistance;
     this.uniforms.uCamera.value.aperture = this.settings.aperture;
 
-    this.uniforms.uWorld.value.spheres = this.ptScene.spheres;
+    this.updateSceneUniforms();
 
     this.uniforms.uNumSamples.value = this.settings.numSamples;
     this.uniforms.uMaxRayDepth.value = this.settings.maxRayDepth;
-    this.uniforms.uMaterials.value = this.ptScene.materials;
-
     this.uniforms.uBackgroundColorTop.value = this.ptScene.backgroundColorTop;
     this.uniforms.uBackgroundColorBottom.value =
       this.ptScene.backgroundColorBottom;
@@ -335,17 +336,22 @@ export default class PtRenderer {
       },
       uWorld: {
         value: {
-          spheres: this.ptScene.spheres,
+          spheres: this.ptScene.createSphereUniforms(),
         },
       },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
-      uMaterials: { value: this.ptScene.materials },
+      uMaterials: { value: this.ptScene.createMaterialUniforms() },
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
       uEnableDoF: { value: this.settings.enableDepthOfField },
     };
     return uniforms;
+  }
+
+  private updateSceneUniforms() {
+    this.uniforms.uWorld.value.spheres = this.ptScene.createSphereUniforms();
+    this.uniforms.uMaterials.value = this.ptScene.createMaterialUniforms();
   }
 
   private initializeComposerPasses() {
