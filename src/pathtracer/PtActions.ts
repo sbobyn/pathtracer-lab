@@ -43,11 +43,13 @@ export default class PtActions {
     label: string;
     before: PtSettings;
   } | null = null;
+  private nextSphereName = 0;
 
   constructor(
     private readonly store: PtStore,
     private readonly renderer: PtRenderer
   ) {
+    this.nextSphereName = renderer.ptScene.getSphereMeshes().length;
     this.publishSceneObjects();
   }
 
@@ -125,6 +127,7 @@ export default class PtActions {
     Object.assign(this.renderer.settings, this.store.getState().settings);
     this.publishHistory();
     this.renderer.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
+    this.nextSphereName = scene.getSphereMeshes().length;
   }
 
   public setPathtracingEnabled(enabled: boolean) {
@@ -268,6 +271,46 @@ export default class PtActions {
     this.selectObject(object ?? null);
   }
 
+  public addSphere() {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position
+      .clone()
+      .addScaledVector(direction, 3);
+    const object = scene.createSphereMesh(
+      position,
+      0.5,
+      0,
+      `Sphere ${this.nextSphereName++}`
+    );
+    const index = scene.intersectGroup.children.length;
+
+    const insert = () => {
+      scene.insertSphereMesh(object, index);
+      this.publishSceneObjects();
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere added");
+    };
+    const remove = () => {
+      scene.removeSphereMesh(object);
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "added sphere removed");
+    };
+
+    insert();
+    this.history.record({
+      label: `Add ${object.userData.pathTracer.objectName}`,
+      execute: insert,
+      undo: remove,
+    });
+    this.publishHistory();
+    return true;
+  }
+
   public removeSelectedObject() {
     const object = this.selectedObject;
     if (!object) return false;
@@ -309,6 +352,8 @@ export default class PtActions {
     const object = source.clone() as PtSphereMesh;
     object.position.x += sphereRadius(source) * 2.25;
     object.userData.pathTracer = {
+      objectId: THREE.MathUtils.generateUUID(),
+      objectName: `${source.userData.pathTracer.objectName} Copy`,
       primitiveIndex: scene.getSphereMeshes().length,
       primitiveType: "sphere",
     };
@@ -512,18 +557,19 @@ export default class PtActions {
 
   private publishSelection() {
     if (!this.selectedObject) return;
-    const sphereIndex = this.selectedObject.userData.pathTracer.primitiveIndex;
-    const { x, y, z } = this.selectedObject.position;
-    const radius = sphereRadius(this.selectedObject);
+    const selectedObject = this.selectedObject;
+    const sphereIndex = selectedObject.userData.pathTracer.primitiveIndex;
+    const { x, y, z } = selectedObject.position;
+    const radius = sphereRadius(selectedObject);
     const { materialId, materialType } = getMaterialMetadata(
-      this.selectedObject.material
+      selectedObject.material
     );
     const material = this.renderer.ptScene.getMaterial(materialId);
     const materialKinds = ["Lambert", "Metal", "Dielectric"] as const;
     this.store.update((state) => ({
       ...state,
       selection: {
-        objectId: `sphere:${sphereIndex}`,
+        objectId: selectedObject.userData.pathTracer.objectId,
         sphereIndex,
         position: { x, y, z },
         radius,
@@ -609,8 +655,8 @@ export default class PtActions {
       .map((sphere) => {
       const sphereIndex = sphere.userData.pathTracer.primitiveIndex;
       return {
-        id: `sphere:${sphereIndex}`,
-        label: `Sphere ${sphereIndex}`,
+        id: sphere.userData.pathTracer.objectId,
+        label: sphere.userData.pathTracer.objectName,
         kind: "sphere" as const,
         parentId: "group:traceables",
         depth: 2,

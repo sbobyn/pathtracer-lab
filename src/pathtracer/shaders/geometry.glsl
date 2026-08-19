@@ -31,6 +31,7 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
     bool hitAnything = false;
     float closestSoFar = rayInterval.max;
     for (int i = 0; i < MAX_SPHERES; i++) {
+        if (i >= uSphereCount) break;
         Sphere sphere = world.spheres[i];
         if (hitSphere(sphere, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
             hitAnything = true;

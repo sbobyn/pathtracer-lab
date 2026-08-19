@@ -18,6 +18,7 @@ export default class PtApp {
   private readonly unsubscribe: () => boolean;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
+    if (event.button !== 0) return;
     if (this.ui.contains(event.target as Node)) return;
     if (this.ptRenderer.transformControls.dragging) return;
 
@@ -36,6 +37,17 @@ export default class PtApp {
   };
 
   private readonly keyDownHandler = (event: KeyboardEvent) => {
+    const target = event.target;
+    const editingText =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable);
+    if (!editingText && event.shiftKey && event.key.toLowerCase() === "a") {
+      this.actions.addSphere();
+      event.preventDefault();
+      return;
+    }
     if (event.key === "Escape") {
       const canceledTransform = this.actions.cancelSelectedTransform();
       const canceledMaterial = this.actions.cancelMaterialEdit();

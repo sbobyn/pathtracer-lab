@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
 import { createRoot, type Root } from "react-dom/client";
 import * as THREE from "three";
 import type PtActions from "./PtActions";
@@ -738,12 +744,55 @@ function RenderPanel({
   );
 }
 
+function CreationMenu({
+  actions,
+  selectionActive,
+  onClose,
+  style,
+}: {
+  actions: PtActions;
+  selectionActive: boolean;
+  onClose: () => void;
+  style?: CSSProperties;
+}) {
+  const run = (action: () => unknown) => {
+    action();
+    onClose();
+  };
+  return (
+    <div className="creation-menu" role="menu" style={style}>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addSphere())}>
+        <span>Add sphere</span><kbd>⇧A</kbd>
+      </button>
+      <button type="button" role="menuitem" disabled title="Available after quad support">
+        <span>Add quad</span><small>Not traceable yet</small>
+      </button>
+      <button type="button" role="menuitem" disabled title="Available after triangle support">
+        <span>Import mesh</span><small>Not traceable yet</small>
+      </button>
+      {selectionActive && <div className="creation-menu__separator" />}
+      {selectionActive && (
+        <button type="button" role="menuitem" onClick={() => run(() => actions.duplicateSelectedObject())}>
+          <span>Duplicate</span>
+        </button>
+      )}
+      {selectionActive && (
+        <button className="creation-menu__danger" type="button" role="menuitem" onClick={() => run(() => actions.removeSelectedObject())}>
+          <span>Delete</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function EditorShell({ actions }: { actions: PtActions }) {
   const state = useSyncExternalStore(
     (listener) => actions.subscribe(listener),
     () => actions.getState()
   );
   const [collapsed, setCollapsed] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState<PanelSize>(() =>
     clampPanelSize({ width: 260, height: 620 })
   );
@@ -759,6 +808,65 @@ function EditorShell({ actions }: { actions: PtActions }) {
     const handleResize = () => setSize((current) => clampPanelSize(current));
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    let contextGesture: { x: number; y: number; moved: boolean } | null = null;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        !target.closest(".creation-menu, .scene-toolbar__add")
+      ) {
+        setAddMenuOpen(false);
+        setContextMenu(null);
+      }
+      if (event.button === 2) {
+        contextGesture = { x: event.clientX, y: event.clientY, moved: false };
+      }
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!contextGesture) return;
+      if (
+        Math.hypot(
+          event.clientX - contextGesture.x,
+          event.clientY - contextGesture.y
+        ) > 5
+      ) {
+        contextGesture.moved = true;
+      }
+    };
+    const handleContextMenu = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("#editor-root aside")) return;
+      event.preventDefault();
+      if (contextGesture?.moved) {
+        contextGesture = null;
+        return;
+      }
+      setAddMenuOpen(false);
+      setContextMenu({
+        x: Math.min(event.clientX, window.innerWidth - 190),
+        y: Math.min(event.clientY, window.innerHeight - 220),
+      });
+      contextGesture = null;
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAddMenuOpen(false);
+        setContextMenu(null);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const beginResize = (
@@ -828,6 +936,27 @@ function EditorShell({ actions }: { actions: PtActions }) {
         </button>
       </div>
       <div className="editor-shell__body">
+        <div className="scene-toolbar">
+          <button
+            className="scene-toolbar__add"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={addMenuOpen}
+            onClick={() => {
+              setContextMenu(null);
+              setAddMenuOpen((open) => !open);
+            }}
+          >
+            Add <span aria-hidden="true">⌄</span>
+          </button>
+          {addMenuOpen && (
+            <CreationMenu
+              actions={actions}
+              selectionActive={state.selection.objectId !== null}
+              onClose={() => setAddMenuOpen(false)}
+            />
+          )}
+        </div>
         <SceneSettings state={state} actions={actions} />
         <SceneHierarchy state={state} actions={actions} />
         <CameraSettings state={state} actions={actions} />
@@ -849,6 +978,14 @@ function EditorShell({ actions }: { actions: PtActions }) {
     <RenderPanel state={state} actions={actions} />
     <SelectedObjectInspector state={state} actions={actions} />
     </div>
+    {contextMenu && (
+      <CreationMenu
+        actions={actions}
+        selectionActive={state.selection.objectId !== null}
+        onClose={() => setContextMenu(null)}
+        style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y }}
+      />
+    )}
     </>
   );
 }

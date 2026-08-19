@@ -20,6 +20,7 @@ export default interface PtUniforms {
       spheres: GpuSphere[];
     };
   };
+  uSphereCount: { value: number };
   uNumSamples: { value: number };
   uMaxRayDepth: { value: number };
   uMaterials: { value: PtMaterial[] };

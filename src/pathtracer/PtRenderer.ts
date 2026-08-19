@@ -217,6 +217,7 @@ export default class PtRenderer {
     if (level >= PtInvalidationLevel.Material) {
       this.sceneCompiler.update(this.gpuScene, this.ptScene, level);
       this.updateSceneUniforms();
+      if (level === PtInvalidationLevel.Scene) this.updateShaderCanvas();
     }
     this.invalidationHistory.push({
       sequence: ++this.invalidationSequence,
@@ -247,11 +248,11 @@ export default class PtRenderer {
   }
 
   private setupShaderCanvas() {
-    const sphereCount = this.gpuScene.spheres.length;
+    const capacity = this.sceneUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
-      fragmentShader: `#define MAX_SPHERES ${sphereCount}
+      fragmentShader: `#define MAX_SPHERES ${capacity}
        ${fragShader}`,
       uniforms: this.uniforms,
       renderer: this.renderer,
@@ -262,10 +263,18 @@ export default class PtRenderer {
   }
 
   private updateShaderCanvas() {
-    const sphereCount = this.gpuScene.spheres.length;
+    const capacity = this.sceneUniformCapacity();
     this.shaderCanvas
-      .setShader(`#define MAX_SPHERES ${sphereCount}
+      .setShader(`#define MAX_SPHERES ${capacity}
        ${fragShader}`);
+  }
+
+  private sceneUniformCapacity() {
+    return Math.max(
+      1,
+      this.gpuScene.spheres.length,
+      this.gpuScene.materials.length
+    );
   }
 
   private setupControls() {
@@ -341,12 +350,13 @@ export default class PtRenderer {
       },
       uWorld: {
         value: {
-          spheres: this.gpuScene.spheres,
+          spheres: this.uniformSphereValues(),
         },
       },
+      uSphereCount: { value: this.gpuScene.spheres.length },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
-      uMaterials: { value: this.gpuScene.materials },
+      uMaterials: { value: this.uniformMaterialValues() },
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
       uEnableDoF: { value: this.settings.enableDepthOfField },
@@ -355,8 +365,32 @@ export default class PtRenderer {
   }
 
   private updateSceneUniforms() {
-    this.uniforms.uWorld.value.spheres = this.gpuScene.spheres;
-    this.uniforms.uMaterials.value = this.gpuScene.materials;
+    this.uniforms.uWorld.value.spheres = this.uniformSphereValues();
+    this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
+    this.uniforms.uMaterials.value = this.uniformMaterialValues();
+  }
+
+  private uniformSphereValues() {
+    const capacity = this.sceneUniformCapacity();
+    const padding = {
+      position: new THREE.Vector3(),
+      radius: 0,
+      materialId: 0,
+    };
+    return Array.from(
+      { length: capacity },
+      (_, index) => this.gpuScene.spheres[index] ?? padding
+    );
+  }
+
+  private uniformMaterialValues() {
+    const capacity = this.sceneUniformCapacity();
+    const fallback = this.gpuScene.materials[0];
+    if (!fallback) throw new Error("GpuScene requires at least one material");
+    return Array.from(
+      { length: capacity },
+      (_, index) => this.gpuScene.materials[index] ?? fallback
+    );
   }
 
   private initializeComposerPasses() {

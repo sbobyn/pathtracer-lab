@@ -19,6 +19,7 @@ uniform int uFrameCount;
 uniform vec2 uRandomSequence;
 uniform Camera uCamera;
 uniform World uWorld;
+uniform int uSphereCount;
 uniform Material uMaterials[MAX_SPHERES];
 
 #include geometry.glsl

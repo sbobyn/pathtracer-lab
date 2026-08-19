@@ -14,6 +14,8 @@ export type PtSphereMesh = THREE.Mesh<
 > & {
   userData: {
     pathTracer: {
+      objectId: string;
+      objectName: string;
       primitiveIndex: number;
       primitiveType: "sphere";
     };
@@ -24,6 +26,7 @@ export default class PtScene {
   scene: THREE.Scene;
   intersectGroup: THREE.Group;
   private readonly previewMaterials = new Map<number, PtPreviewMaterial>();
+  private readonly sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
   dirLight: THREE.DirectionalLight;
   backgroundColorTop: THREE.Color;
   backgroundColorBottom: THREE.Color;
@@ -52,8 +55,6 @@ export default class PtScene {
 
     this.intersectGroup = new THREE.Group();
 
-    const sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
-
     materials.forEach((material, materialId) => {
       this.previewMaterials.set(
         materialId,
@@ -72,13 +73,15 @@ export default class PtScene {
       }
 
       const sphereMesh = new THREE.Mesh(
-        sphereGeometry,
+        this.sphereGeometry,
         material
       ) as PtSphereMesh;
       sphereMesh.position.copy(sphere.position);
       sphereMesh.scale.setScalar(sphere.radius);
 
       sphereMesh.userData.pathTracer = {
+        objectId: THREE.MathUtils.generateUUID(),
+        objectName: `Sphere ${i}`,
         primitiveIndex: i,
         primitiveType: "sphere",
       };
@@ -114,6 +117,25 @@ export default class PtScene {
     this.intersectGroup.children.splice(clampedIndex, 0, mesh);
     this.reindexSpheres();
     this.intersectGroup.updateMatrixWorld();
+  }
+
+  public createSphereMesh(
+    position: THREE.Vector3,
+    radius: number,
+    materialId: number,
+    objectName: string
+  ): PtSphereMesh {
+    const material = this.getMaterial(materialId);
+    const mesh = new THREE.Mesh(this.sphereGeometry, material) as PtSphereMesh;
+    mesh.position.copy(position);
+    mesh.scale.setScalar(radius);
+    mesh.userData.pathTracer = {
+      objectId: THREE.MathUtils.generateUUID(),
+      objectName,
+      primitiveIndex: this.getSphereMeshes().length,
+      primitiveType: "sphere",
+    };
+    return mesh;
   }
 
   public removeSphereMesh(mesh: PtSphereMesh): number {
