@@ -15,6 +15,10 @@ import Stats from "stats.js";
 import { setupStats } from "../utils/setupStats";
 import type { PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
+import {
+  PtInvalidationLevel,
+  type PtInvalidationEvent,
+} from "./PtInvalidation";
 
 export default class PtRenderer {
   public ptScene: PtScene;
@@ -47,6 +51,8 @@ export default class PtRenderer {
   private stats: Stats;
 
   private canvas: HTMLCanvasElement;
+  private invalidationSequence = 0;
+  private readonly invalidationHistory: PtInvalidationEvent[] = [];
 
   private readonly handleResize = () => {
     const width = window.innerWidth;
@@ -62,15 +68,16 @@ export default class PtRenderer {
     this.composer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(pixelRatio);
+    this.invalidate(PtInvalidationLevel.Camera, "viewport resized");
   };
 
   private readonly handleOrbitChange = () => {
-    this.shaderCanvas.resetAccumulation();
+    this.invalidate(PtInvalidationLevel.Camera, "orbit camera changed");
   };
 
   private readonly handleTransformChange = () => {
     if (this.transformControls.dragging) {
-      this.shaderCanvas.resetAccumulation();
+      this.invalidate(PtInvalidationLevel.Geometry, "object transform dragged");
     }
   };
 
@@ -123,55 +130,102 @@ export default class PtRenderer {
     this.renderer.autoClear = false;
   }
 
-  setScene(ptScene: PtScene) {
+  setScene(ptScene: PtScene, invalidate = true) {
     this.ptScene = ptScene;
     this.camera = ptScene.camera;
     this.reset();
+    if (invalidate) {
+      this.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
+    }
   }
 
   public setPathtracingEnabled(enabled: boolean) {
     this.settings.pathtracingEnabled = enabled;
     this.ptPass.enabled = enabled;
     this.renderPass.enabled = !enabled;
-    this.shaderCanvas.resetAccumulation();
+    this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
   }
 
-  public setFov(fov: number) {
+  public setFov(fov: number, invalidate = true) {
     this.settings.fov = fov;
     this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
     this.updateCameraProjectionUniforms();
-    this.shaderCanvas.resetAccumulation();
+    if (invalidate) {
+      this.invalidate(PtInvalidationLevel.Camera, "camera field of view changed");
+    }
   }
 
-  public setNumSamples(samples: number) {
+  public setNumSamples(samples: number, invalidate = true) {
     this.settings.numSamples = samples;
     this.uniforms.uNumSamples.value = samples;
-    this.shaderCanvas.resetAccumulation();
+    if (invalidate) {
+      this.invalidate(PtInvalidationLevel.Settings, "samples per frame changed");
+    }
   }
 
   public setMaxRayDepth(depth: number) {
     this.settings.maxRayDepth = depth;
     this.uniforms.uMaxRayDepth.value = depth;
-    this.shaderCanvas.resetAccumulation();
+    this.invalidate(PtInvalidationLevel.Settings, "maximum ray depth changed");
   }
 
-  public setDepthOfFieldEnabled(enabled: boolean) {
+  public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
     this.settings.enableDepthOfField = enabled;
     this.uniforms.uEnableDoF.value = enabled;
-    this.shaderCanvas.resetAccumulation();
+    if (invalidate) {
+      this.invalidate(PtInvalidationLevel.Camera, "depth of field toggled");
+    }
   }
 
   public setAperture(aperture: number) {
     this.settings.aperture = aperture;
     this.uniforms.uCamera.value.aperture = aperture;
-    this.shaderCanvas.resetAccumulation();
+    this.invalidate(PtInvalidationLevel.Camera, "camera aperture changed");
   }
 
   public setFocusDistance(distance: number) {
     this.settings.focusDistance = distance;
     this.uniforms.uCamera.value.focusDistance = distance;
+    this.invalidate(PtInvalidationLevel.Camera, "camera focus distance changed");
+  }
+
+  public setResolutionScale(scale: number) {
+    this.settings.resolutionScale = scale;
+    this.shaderCanvas.setResolutionScale(scale);
+    this.invalidate(PtInvalidationLevel.Settings, "resolution scale changed");
+  }
+
+  public setAccumulationFormat(format: PtSettings["accumulationFormat"]) {
+    this.settings.accumulationFormat = format;
+    this.shaderCanvas.setAccumulationFormat(format);
+    this.invalidate(PtInvalidationLevel.Settings, "accumulation format changed");
+  }
+
+  public setMaxAccumulationFrames(frames: number) {
+    this.settings.maxAccumulationFrames = frames;
+    this.shaderCanvas.setMaxAccumulationFrames(frames);
+    this.invalidate(
+      PtInvalidationLevel.Settings,
+      "maximum accumulation frames changed"
+    );
+  }
+
+  public invalidate(level: PtInvalidationLevel, reason: string) {
+    this.invalidationHistory.push({
+      sequence: ++this.invalidationSequence,
+      level,
+      reason,
+    });
+    if (this.invalidationHistory.length > 50) this.invalidationHistory.shift();
+
+    // Higher levels intentionally share today's reset consequence while
+    // preserving distinct future upload, BVH refit/rebuild, and compile paths.
     this.shaderCanvas.resetAccumulation();
+  }
+
+  public getInvalidationHistory(): readonly PtInvalidationEvent[] {
+    return [...this.invalidationHistory];
   }
 
   private reset() {

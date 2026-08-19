@@ -152,7 +152,6 @@ export class ShaderCanvas {
     this.pingRenderTarget = this.createRenderTarget();
     this.pongRenderTarget = this.pingRenderTarget.clone();
     this.screenMaterial.map = this.pongRenderTarget.texture;
-    this.resetAccumulation();
   }
 
   public setMaxAccumulationFrames(maxFrames: number) {
@@ -163,12 +162,10 @@ export class ShaderCanvas {
     }
 
     this.maxAccumulationFrames = maxFrames;
-    this.resetAccumulation();
   }
 
   public setShader(fragmentShader: string) {
     this.material.fragmentShader = fragmentShader;
-    this.resetAccumulation();
     this.material.needsUpdate = true;
   }
 
@@ -187,7 +184,6 @@ export class ShaderCanvas {
     this.pingRenderTarget.setSize(scaledW, scaledH);
     this.pongRenderTarget.setSize(scaledW, scaledH);
 
-    this.resetAccumulation();
   }
 
   public resetAccumulation() {

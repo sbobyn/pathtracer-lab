@@ -10,6 +10,7 @@ import type {
   PtState,
   TransformMode,
 } from "./PtState";
+import { PtInvalidationLevel } from "./PtInvalidation";
 
 export default class PtActions {
   private selectedObject: PtSphereMesh | null = null;
@@ -27,6 +28,10 @@ export default class PtActions {
     return this.store.subscribe(listener);
   }
 
+  public getInvalidationHistory() {
+    return this.renderer.getInvalidationHistory();
+  }
+
   public setScene(sceneKey: string) {
     const createScene = PresetPtScenes[sceneKey];
     if (!createScene) throw new RangeError(`Unknown scene preset: ${sceneKey}`);
@@ -35,10 +40,10 @@ export default class PtActions {
     this.selectedObject = null;
     this.renderer.transformControls.detach();
     this.renderer.outlinePass.selectedObjects = [];
-    this.renderer.setScene(scene);
-    this.renderer.setFov(scene.camera.fov);
-    this.renderer.setDepthOfFieldEnabled(false);
-    this.renderer.setNumSamples(1);
+    this.renderer.setScene(scene, false);
+    this.renderer.setFov(scene.camera.fov, false);
+    this.renderer.setDepthOfFieldEnabled(false, false);
+    this.renderer.setNumSamples(1, false);
     this.setTransformMode("translate");
 
     this.store.update((state) => ({
@@ -56,6 +61,7 @@ export default class PtActions {
       selection: this.emptySelection(),
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
+    this.renderer.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
   }
 
   public setPathtracingEnabled(enabled: boolean) {
@@ -68,14 +74,20 @@ export default class PtActions {
     this.renderer.ptScene.scene.background = color;
     this.renderer.ptScene.dirLight.color = color;
     this.renderer.uniforms.uBackgroundColorTop.value = color;
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Settings,
+      "background top color changed"
+    );
     this.updateSetting("backgroundColorTop", `#${color.getHexString()}`);
   }
 
   public setBackgroundColorBottom(value: THREE.ColorRepresentation) {
     const color = new THREE.Color(value);
     this.renderer.uniforms.uBackgroundColorBottom.value = color;
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Settings,
+      "background bottom color changed"
+    );
     this.updateSetting("backgroundColorBottom", `#${color.getHexString()}`);
   }
 
@@ -95,20 +107,17 @@ export default class PtActions {
   }
 
   public setResolutionScale(scale: number) {
-    this.renderer.settings.resolutionScale = scale;
-    this.renderer.shaderCanvas.setResolutionScale(scale);
+    this.renderer.setResolutionScale(scale);
     this.updateSetting("resolutionScale", scale);
   }
 
   public setAccumulationFormat(format: AccumulationFormat) {
-    this.renderer.settings.accumulationFormat = format;
-    this.renderer.shaderCanvas.setAccumulationFormat(format);
+    this.renderer.setAccumulationFormat(format);
     this.updateSetting("accumulationFormat", format);
   }
 
   public setMaxAccumulationFrames(frames: number) {
-    this.renderer.settings.maxAccumulationFrames = frames;
-    this.renderer.shaderCanvas.setMaxAccumulationFrames(frames);
+    this.renderer.setMaxAccumulationFrames(frames);
     this.updateSetting("maxAccumulationFrames", frames);
   }
 
@@ -155,7 +164,10 @@ export default class PtActions {
   public setSelectedPosition(axis: "x" | "y" | "z", value: number) {
     if (!this.selectedObject) return;
     this.selectedObject.position[axis] = value;
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Geometry,
+      `sphere ${this.selectedObject.userData.sphereIndex} position changed`
+    );
     this.publishSelection();
   }
 
@@ -166,7 +178,10 @@ export default class PtActions {
     sphere.radius = radius;
     const scale = radius / this.selectedObject.geometry.parameters.radius;
     this.selectedObject.scale.setScalar(scale);
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Geometry,
+      `sphere ${sphereIndex} radius changed`
+    );
     this.publishSelection();
   }
 
@@ -184,17 +199,26 @@ export default class PtActions {
 
   public setMaterialColor(materialId: number, color: THREE.Color) {
     this.renderer.ptScene.materials[materialId].albedo = color;
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Material,
+      `material ${materialId} color changed`
+    );
   }
 
   public setMaterialFuzz(materialId: number, fuzz: number) {
     this.renderer.ptScene.materials[materialId].fuzz = fuzz;
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Material,
+      `material ${materialId} fuzz changed`
+    );
   }
 
   public setMaterialIor(materialId: number, ior: number) {
     this.renderer.ptScene.materials[materialId].ior = ior;
-    this.renderer.shaderCanvas.resetAccumulation();
+    this.renderer.invalidate(
+      PtInvalidationLevel.Material,
+      `material ${materialId} index of refraction changed`
+    );
   }
 
   private updateSetting<Key extends keyof PtSettings>(
