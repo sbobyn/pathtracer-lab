@@ -25,6 +25,13 @@ export default class PtGui implements PtUiAdapter {
   private readonly raytracingFolder: GUI;
   private readonly selectionFolder: GUI;
   private materialFolder: GUI;
+  private selectedMaterial: PtPreviewMaterial | null = null;
+  private materialModel: {
+    color: string;
+    roughness: number;
+    ior: number;
+  } | null = null;
+  private materialControllers: Controller[] = [];
   private readonly apertureController: Controller;
   private readonly focusDistanceController: Controller;
   private readonly unsubscribe: () => boolean;
@@ -60,6 +67,15 @@ export default class PtGui implements PtUiAdapter {
       this.gui
         .add(this.model, "fov", 10, 120, 1)
         .onChange((fov: number) => actions.setFov(fov))
+    );
+
+    const historyCommands = {
+      undo: () => actions.undo(),
+      redo: () => actions.redo(),
+    };
+    this.controllers.push(
+      this.gui.add(historyCommands, "undo").name("Undo"),
+      this.gui.add(historyCommands, "redo").name("Redo")
     );
 
     this.raytracingFolder = this.gui.addFolder("Raytracing Settings");
@@ -136,6 +152,15 @@ export default class PtGui implements PtUiAdapter {
         .onFinishChange(() => actions.commitSelectedTransform())
     );
 
+    const objectCommands = {
+      duplicate: () => actions.duplicateSelectedObject(),
+      remove: () => actions.removeSelectedObject(),
+    };
+    this.controllers.push(
+      this.selectionFolder.add(objectCommands, "duplicate").name("Duplicate"),
+      this.selectionFolder.add(objectCommands, "remove").name("Remove")
+    );
+
     this.materialFolder = this.selectionFolder.addFolder("Material");
     this.selectionFolder.hide();
     this.sync(state);
@@ -152,26 +177,46 @@ export default class PtGui implements PtUiAdapter {
     materialType: number
   ) {
     if (this.disposed) return;
+    this.selectedMaterial = material;
     this.materialFolder.destroy();
+    this.materialControllers = [];
     const label = materialLabels[materialType] ?? "Unknown";
     this.materialFolder = this.selectionFolder.addFolder(
       `Material - ${materialId} - ${label}`
     );
 
-    this.materialFolder.addColor(material, "color").onChange(() => {
-      this.actions.setMaterialColor(materialId, material.color);
+    const materialModel = (this.materialModel = {
+      color: `#${material.color.getHexString()}`,
+      roughness:
+        material instanceof THREE.MeshStandardMaterial
+          ? material.roughness
+          : 0,
+      ior: material instanceof THREE.MeshPhysicalMaterial ? material.ior : 1,
     });
 
+    this.materialControllers.push(this.materialFolder
+      .addColor(materialModel, "color")
+      .onChange((color: THREE.ColorRepresentation) => {
+        this.actions.setMaterialColor(materialId, new THREE.Color(color));
+      })
+      .onFinishChange(() => this.actions.commitMaterialEdit()));
+
     if (material instanceof THREE.MeshStandardMaterial && materialType === 1) {
-      this.materialFolder.add(material, "roughness", 0, 1).onChange(() => {
-        this.actions.setMaterialFuzz(materialId, material.roughness);
-      });
+      this.materialControllers.push(this.materialFolder
+        .add(materialModel, "roughness", 0, 1)
+        .onChange((roughness: number) => {
+          this.actions.setMaterialFuzz(materialId, roughness);
+        })
+        .onFinishChange(() => this.actions.commitMaterialEdit()));
     }
 
     if (material instanceof THREE.MeshPhysicalMaterial && materialType === 2) {
-      this.materialFolder.add(material, "ior", 0, 2.5).onChange(() => {
-        this.actions.setMaterialIor(materialId, material.ior);
-      });
+      this.materialControllers.push(this.materialFolder
+        .add(materialModel, "ior", 0, 2.5)
+        .onChange((ior: number) => {
+          this.actions.setMaterialIor(materialId, ior);
+        })
+        .onFinishChange(() => this.actions.commitMaterialEdit()));
     }
 
     this.selectionFolder.show();
@@ -179,6 +224,9 @@ export default class PtGui implements PtUiAdapter {
 
   public hideSelection() {
     if (this.disposed) return;
+    this.selectedMaterial = null;
+    this.materialModel = null;
+    this.materialControllers = [];
     this.selectionFolder.hide();
   }
 
@@ -195,6 +243,18 @@ export default class PtGui implements PtUiAdapter {
     Object.assign(this.model.selectedPosition, state.selection.position);
     this.model.selectedRadius = state.selection.radius ?? 0;
     this.controllers.forEach((controller) => controller.updateDisplay());
+    if (this.selectedMaterial && this.materialModel) {
+      this.materialModel.color = `#${this.selectedMaterial.color.getHexString()}`;
+      if (this.selectedMaterial instanceof THREE.MeshStandardMaterial) {
+        this.materialModel.roughness = this.selectedMaterial.roughness;
+      }
+      if (this.selectedMaterial instanceof THREE.MeshPhysicalMaterial) {
+        this.materialModel.ior = this.selectedMaterial.ior;
+      }
+      this.materialControllers.forEach((controller) =>
+        controller.updateDisplay()
+      );
+    }
 
     if (state.settings.pathtracingEnabled) this.raytracingFolder.show();
     else this.raytracingFolder.hide();

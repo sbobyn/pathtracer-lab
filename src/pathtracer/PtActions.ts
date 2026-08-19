@@ -1,7 +1,11 @@
 import * as THREE from "three";
 import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
-import { sphereRadius, type PtSphereMesh } from "./PtScene";
+import {
+  getMaterialMetadata,
+  sphereRadius,
+  type PtSphereMesh,
+} from "./PtScene";
 import PtStore from "./PtStore";
 import type { PtStateListener } from "./PtStore";
 import type {
@@ -18,12 +22,22 @@ interface TransformSnapshot {
   readonly scale: THREE.Vector3;
 }
 
+interface MaterialSnapshot {
+  readonly color: number;
+  readonly roughness?: number;
+  readonly ior?: number;
+}
+
 export default class PtActions {
   private selectedObject: PtSphereMesh | null = null;
   private readonly history = new CommandHistory(100);
   private pendingTransform: {
     object: PtSphereMesh;
     before: TransformSnapshot;
+  } | null = null;
+  private pendingMaterial: {
+    materialId: number;
+    before: MaterialSnapshot;
   } | null = null;
 
   constructor(
@@ -49,11 +63,13 @@ export default class PtActions {
 
   public undo() {
     this.cancelSelectedTransform();
+    this.cancelMaterialEdit();
     return this.history.undo();
   }
 
   public redo() {
     this.cancelSelectedTransform();
+    this.cancelMaterialEdit();
     return this.history.redo();
   }
 
@@ -63,6 +79,7 @@ export default class PtActions {
 
     const scene = createScene();
     this.pendingTransform = null;
+    this.pendingMaterial = null;
     // Presets are whole-scene replacements, so commands referring to the old
     // scene are intentionally discarded rather than replayed into a new one.
     this.history.clear();
@@ -174,6 +191,8 @@ export default class PtActions {
   }
 
   public selectObject(object: PtSphereMesh | null) {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
     this.selectedObject = object;
     if (!object) {
       this.renderer.outlinePass.selectedObjects = [];
@@ -188,6 +207,72 @@ export default class PtActions {
     this.renderer.outlinePass.selectedObjects = [object];
     this.renderer.transformControls.attach(object);
     this.publishSelection();
+  }
+
+  public removeSelectedObject() {
+    const object = this.selectedObject;
+    if (!object) return false;
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const index = scene.intersectGroup.children.indexOf(object);
+    if (index < 0) return false;
+
+    const remove = () => {
+      scene.removeSphereMesh(object);
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere removed");
+    };
+    const restore = () => {
+      scene.insertSphereMesh(object, index);
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere restored");
+    };
+
+    remove();
+    this.history.record({
+      label: `Remove sphere ${index}`,
+      execute: remove,
+      undo: restore,
+    });
+    return true;
+  }
+
+  public duplicateSelectedObject() {
+    const source = this.selectedObject;
+    if (!source) return false;
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const object = source.clone() as PtSphereMesh;
+    object.position.x += sphereRadius(source) * 2.25;
+    object.userData.pathTracer = {
+      primitiveIndex: scene.getSphereMeshes().length,
+      primitiveType: "sphere",
+    };
+    const index = scene.intersectGroup.children.length;
+
+    const insert = () => {
+      scene.insertSphereMesh(object, index);
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere duplicated");
+    };
+    const remove = () => {
+      scene.removeSphereMesh(object);
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(
+        PtInvalidationLevel.Scene,
+        "duplicated sphere removed"
+      );
+    };
+
+    insert();
+    this.history.record({
+      label: `Duplicate sphere ${source.userData.pathTracer.primitiveIndex}`,
+      execute: insert,
+      undo: remove,
+    });
+    return true;
   }
 
   public setSelectedPosition(axis: "x" | "y" | "z", value: number) {
@@ -272,6 +357,7 @@ export default class PtActions {
   }
 
   public setMaterialColor(materialId: number, color: THREE.Color) {
+    this.beginMaterialEdit(materialId);
     this.renderer.ptScene.getMaterial(materialId).color.copy(color);
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
@@ -280,6 +366,7 @@ export default class PtActions {
   }
 
   public setMaterialFuzz(materialId: number, fuzz: number) {
+    this.beginMaterialEdit(materialId);
     const material = this.renderer.ptScene.getMaterial(materialId);
     if (material instanceof THREE.MeshStandardMaterial) {
       material.roughness = fuzz;
@@ -291,12 +378,56 @@ export default class PtActions {
   }
 
   public setMaterialIor(materialId: number, ior: number) {
+    this.beginMaterialEdit(materialId);
     const material = this.renderer.ptScene.getMaterial(materialId);
     if (material instanceof THREE.MeshPhysicalMaterial) material.ior = ior;
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} index of refraction changed`
     );
+  }
+
+  public beginMaterialEdit(materialId: number) {
+    if (this.pendingMaterial) return;
+    this.pendingMaterial = {
+      materialId,
+      before: this.captureMaterial(materialId),
+    };
+  }
+
+  public commitMaterialEdit() {
+    const pending = this.pendingMaterial;
+    this.pendingMaterial = null;
+    if (!pending) return false;
+
+    const after = this.captureMaterial(pending.materialId);
+    if (this.materialsEqual(pending.before, after)) return false;
+    const apply = (snapshot: MaterialSnapshot) => {
+      this.applyMaterial(pending.materialId, snapshot);
+      this.renderer.invalidate(
+        PtInvalidationLevel.Material,
+        `material ${pending.materialId} history applied`
+      );
+    };
+
+    this.history.record({
+      label: `Edit material ${pending.materialId}`,
+      execute: () => apply(after),
+      undo: () => apply(pending.before),
+    });
+    return true;
+  }
+
+  public cancelMaterialEdit() {
+    const pending = this.pendingMaterial;
+    this.pendingMaterial = null;
+    if (!pending) return false;
+    this.applyMaterial(pending.materialId, pending.before);
+    this.renderer.invalidate(
+      PtInvalidationLevel.Material,
+      `material ${pending.materialId} edit canceled`
+    );
+    return true;
   }
 
   private updateSetting<Key extends keyof PtSettings>(
@@ -329,6 +460,50 @@ export default class PtActions {
 
   private transformsEqual(a: TransformSnapshot, b: TransformSnapshot) {
     return a.position.equals(b.position) && a.scale.equals(b.scale);
+  }
+
+  private captureMaterial(materialId: number): MaterialSnapshot {
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    return {
+      color: material.color.getHex(),
+      roughness:
+        material instanceof THREE.MeshStandardMaterial
+          ? material.roughness
+          : undefined,
+      ior:
+        material instanceof THREE.MeshPhysicalMaterial
+          ? material.ior
+          : undefined,
+    };
+  }
+
+  private applyMaterial(materialId: number, snapshot: MaterialSnapshot) {
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    material.color.setHex(snapshot.color);
+    if (
+      snapshot.roughness !== undefined &&
+      material instanceof THREE.MeshStandardMaterial
+    ) {
+      material.roughness = snapshot.roughness;
+    }
+    if (
+      snapshot.ior !== undefined &&
+      material instanceof THREE.MeshPhysicalMaterial
+    ) {
+      material.ior = snapshot.ior;
+    }
+    if (
+      this.selectedObject &&
+      getMaterialMetadata(this.selectedObject.material).materialId === materialId
+    ) {
+      this.publishSelection();
+    }
+  }
+
+  private materialsEqual(a: MaterialSnapshot, b: MaterialSnapshot) {
+    return (
+      a.color === b.color && a.roughness === b.roughness && a.ior === b.ior
+    );
   }
 
   private emptySelection(): PtState["selection"] {

@@ -42,7 +42,9 @@ export default class PtApp {
 
   private readonly keyDownHandler = (event: KeyboardEvent) => {
     if (event.key === "Escape") {
-      if (this.actions.cancelSelectedTransform()) event.preventDefault();
+      const canceledTransform = this.actions.cancelSelectedTransform();
+      const canceledMaterial = this.actions.cancelMaterialEdit();
+      if (canceledTransform || canceledMaterial) event.preventDefault();
       return;
     }
 
@@ -71,12 +73,34 @@ export default class PtApp {
     this.ui = createUi(this.actions);
 
     let currentSceneKey = initialState.sceneKey;
+    let currentSphereIndex: number | null = null;
     this.unsubscribe = this.actions.subscribe((state) => {
-      if (state.sceneKey === currentSceneKey) return;
-      currentSceneKey = state.sceneKey;
-      this.selectedObject = null;
-      this.intersectGroup = this.ptRenderer.ptScene.intersectGroup;
-      this.ui.hideSelection();
+      if (state.sceneKey !== currentSceneKey) {
+        currentSceneKey = state.sceneKey;
+        currentSphereIndex = null;
+        this.selectedObject = null;
+        this.intersectGroup = this.ptRenderer.ptScene.intersectGroup;
+      }
+
+      if (state.selection.sphereIndex === currentSphereIndex) return;
+      currentSphereIndex = state.selection.sphereIndex;
+      this.selectedObject =
+        currentSphereIndex === null
+          ? null
+          : this.ptRenderer.ptScene.getSphereMeshes()[currentSphereIndex] ??
+            null;
+      if (!this.selectedObject) {
+        this.ui.hideSelection();
+        return;
+      }
+      const { materialId, materialType } = getMaterialMetadata(
+        this.selectedObject.material
+      );
+      this.ui.showSelection(
+        this.selectedObject.material,
+        materialId,
+        materialType
+      );
     });
 
     window.addEventListener("pointerdown", this.pointerDownHandler);
@@ -127,15 +151,6 @@ export default class PtApp {
     }
 
     this.selectedObject = object as PtSphereMesh;
-    const { materialId, materialType } = getMaterialMetadata(
-      this.selectedObject.material
-    );
-
     this.actions.selectObject(this.selectedObject);
-    this.ui.showSelection(
-      this.selectedObject.material,
-      materialId,
-      materialType
-    );
   }
 }

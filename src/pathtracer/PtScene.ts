@@ -102,6 +102,29 @@ export default class PtScene {
     );
   }
 
+  public insertSphereMesh(mesh: PtSphereMesh, index = this.intersectGroup.children.length) {
+    const clampedIndex = THREE.MathUtils.clamp(
+      Math.trunc(index),
+      0,
+      this.intersectGroup.children.length
+    );
+    this.intersectGroup.add(mesh);
+    const appendedIndex = this.intersectGroup.children.indexOf(mesh);
+    this.intersectGroup.children.splice(appendedIndex, 1);
+    this.intersectGroup.children.splice(clampedIndex, 0, mesh);
+    this.reindexSpheres();
+    this.intersectGroup.updateMatrixWorld();
+  }
+
+  public removeSphereMesh(mesh: PtSphereMesh): number {
+    const index = this.intersectGroup.children.indexOf(mesh);
+    if (index < 0) return -1;
+    this.intersectGroup.remove(mesh);
+    this.reindexSpheres();
+    this.intersectGroup.updateMatrixWorld();
+    return index;
+  }
+
   public getMaterials(): PtPreviewMaterial[] {
     return [...this.previewMaterials.entries()]
       .sort(([a], [b]) => a - b)
@@ -112,6 +135,14 @@ export default class PtScene {
     const material = this.previewMaterials.get(materialId);
     if (!material) throw new RangeError(`Unknown material: ${materialId}`);
     return material;
+  }
+
+  private reindexSpheres() {
+    this.intersectGroup.children.forEach((object, primitiveIndex) => {
+      if (isPtSphereMesh(object)) {
+        object.userData.pathTracer.primitiveIndex = primitiveIndex;
+      }
+    });
   }
 }
 
