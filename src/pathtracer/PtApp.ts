@@ -44,7 +44,10 @@ export default class PtApp {
     if (event.key === "Escape") {
       const canceledTransform = this.actions.cancelSelectedTransform();
       const canceledMaterial = this.actions.cancelMaterialEdit();
-      if (canceledTransform || canceledMaterial) event.preventDefault();
+      const canceledSettings = this.actions.cancelSettingsEdit();
+      if (canceledTransform || canceledMaterial || canceledSettings) {
+        event.preventDefault();
+      }
       return;
     }
 

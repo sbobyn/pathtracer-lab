@@ -26,7 +26,8 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
-  width: 230px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   color: #f4f4f5;
   background: rgb(24 24 27 / 88%);
   border: 1px solid rgb(255 255 255 / 12%);
@@ -37,16 +38,67 @@ body {
   overflow: hidden;
 }
 
-.editor-shell__header,
-.editor-panel {
-  padding: 12px;
+.editor-shell[data-collapsed="true"] {
+  width: 190px;
+  height: auto;
+}
+
+.editor-shell__header {
+  min-height: 38px;
 }
 
 .editor-shell__title {
-  margin-bottom: 8px;
   font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.02em;
+}
+
+.editor-shell__toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.editor-shell__toggle:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.editor-shell__scene {
+  overflow: hidden;
+  color: #71717a;
+  font-size: 10px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-shell__chevron {
+  color: #a1a1aa;
+  text-align: center;
+  transition: transform 160ms ease;
+}
+
+.editor-shell[data-collapsed="true"] .editor-shell__chevron {
+  transform: rotate(180deg);
+}
+
+.editor-shell__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.editor-shell[data-collapsed="true"] .editor-shell__body {
+  display: none;
 }
 
 .editor-shell__status {
@@ -55,12 +107,13 @@ body {
   gap: 16px;
   color: #a1a1aa;
   font-size: 11px;
+  padding: 8px 12px 0;
 }
 
 .editor-shell__history {
   display: flex;
   gap: 6px;
-  margin-top: 10px;
+  padding: 10px 12px 12px;
 }
 
 .editor-shell__history button {
@@ -83,13 +136,23 @@ body {
   border-top: 1px solid rgb(255 255 255 / 10%);
 }
 
-.editor-panel h2 {
-  margin-bottom: 9px;
+.editor-panel summary {
+  padding: 10px 12px;
   color: #d4d4d8;
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+.editor-panel summary::-webkit-details-marker { display: none; }
+.editor-panel summary::after { content: "⌃"; float: right; color: #71717a; transition: transform 160ms ease; }
+.editor-panel:not([open]) summary::after { transform: rotate(180deg); }
+
+.editor-panel__content {
+  padding: 0 12px 10px;
 }
 
 .editor-control {
@@ -102,6 +165,18 @@ body {
   font-size: 11px;
 }
 
+.editor-controls-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  transition: opacity 120ms ease;
+}
+
+.editor-controls-group:disabled {
+  opacity: 0.42;
+}
+
 .editor-control input,
 .editor-control select {
   min-width: 0;
@@ -112,6 +187,19 @@ body {
   border-radius: 4px;
 }
 
+.editor-control input[type="number"] {
+  cursor: ns-resize;
+  text-align: right;
+}
+
+.editor-control input[type="number"]:focus,
+.editor-control input[type="number"][data-scrubbing="true"] {
+  border-color: #38bdf8;
+  background: #172033;
+  outline: none;
+  box-shadow: 0 0 0 1px rgb(56 189 248 / 35%);
+}
+
 .editor-control--checkbox input {
   justify-self: end;
 }
@@ -120,4 +208,38 @@ body {
   width: 100%;
   height: 24px;
   padding: 2px;
+}
+
+.editor-shell__resize-handle {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+}
+
+.editor-shell__resize-handle--width {
+  top: 8px;
+  right: -4px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.editor-shell__resize-handle--height {
+  right: 8px;
+  bottom: -4px;
+  left: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.editor-shell__resize-handle--both {
+  right: -4px;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+.editor-shell[data-collapsed="true"] .editor-shell__resize-handle {
+  display: none;
 }

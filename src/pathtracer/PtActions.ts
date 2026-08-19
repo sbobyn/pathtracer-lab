@@ -39,6 +39,10 @@ export default class PtActions {
     materialId: number;
     before: MaterialSnapshot;
   } | null = null;
+  private pendingSettings: {
+    label: string;
+    before: PtSettings;
+  } | null = null;
 
   constructor(
     private readonly store: PtStore,
@@ -64,7 +68,8 @@ export default class PtActions {
   public undo() {
     const canceledTransform = this.cancelSelectedTransform();
     const canceledMaterial = this.cancelMaterialEdit();
-    if (canceledTransform || canceledMaterial) return true;
+    const canceledSettings = this.cancelSettingsEdit();
+    if (canceledTransform || canceledMaterial || canceledSettings) return true;
     const changed = this.history.undo();
     if (changed) this.publishHistory();
     return changed;
@@ -73,7 +78,8 @@ export default class PtActions {
   public redo() {
     const canceledTransform = this.cancelSelectedTransform();
     const canceledMaterial = this.cancelMaterialEdit();
-    if (canceledTransform || canceledMaterial) return true;
+    const canceledSettings = this.cancelSettingsEdit();
+    if (canceledTransform || canceledMaterial || canceledSettings) return true;
     const changed = this.history.redo();
     if (changed) this.publishHistory();
     return changed;
@@ -86,6 +92,7 @@ export default class PtActions {
     const scene = createScene();
     this.pendingTransform = null;
     this.pendingMaterial = null;
+    this.pendingSettings = null;
     // Presets are whole-scene replacements, so commands referring to the old
     // scene are intentionally discarded rather than replayed into a new one.
     this.history.clear();
@@ -187,6 +194,38 @@ export default class PtActions {
   public setFocusDistance(distance: number) {
     this.renderer.setFocusDistance(distance);
     this.updateSetting("focusDistance", distance);
+  }
+
+  public beginSettingsEdit(label: string) {
+    if (this.pendingSettings) return;
+    this.pendingSettings = {
+      label,
+      before: structuredClone(this.store.getState().settings),
+    };
+  }
+
+  public commitSettingsEdit() {
+    const pending = this.pendingSettings;
+    this.pendingSettings = null;
+    if (!pending) return false;
+    const after = structuredClone(this.store.getState().settings);
+    if (this.settingsEqual(pending.before, after)) return false;
+
+    this.history.record({
+      label: pending.label,
+      execute: () => this.applySettings(after),
+      undo: () => this.applySettings(pending.before),
+    });
+    this.publishHistory();
+    return true;
+  }
+
+  public cancelSettingsEdit() {
+    const pending = this.pendingSettings;
+    this.pendingSettings = null;
+    if (!pending) return false;
+    this.applySettings(pending.before);
+    return true;
   }
 
   public setTransformMode(mode: TransformMode) {
@@ -514,6 +553,53 @@ export default class PtActions {
   private materialsEqual(a: MaterialSnapshot, b: MaterialSnapshot) {
     return (
       a.color === b.color && a.roughness === b.roughness && a.ior === b.ior
+    );
+  }
+
+  private applySettings(settings: PtSettings) {
+    const current = this.store.getState().settings;
+    if (current.pathtracingEnabled !== settings.pathtracingEnabled) {
+      this.setPathtracingEnabled(settings.pathtracingEnabled);
+    }
+    if (current.backgroundColorTop !== settings.backgroundColorTop) {
+      this.setBackgroundColorTop(settings.backgroundColorTop);
+    }
+    if (current.backgroundColorBottom !== settings.backgroundColorBottom) {
+      this.setBackgroundColorBottom(settings.backgroundColorBottom);
+    }
+    if (current.fov !== settings.fov) this.setFov(settings.fov);
+    if (current.numSamples !== settings.numSamples) {
+      this.setNumSamples(settings.numSamples);
+    }
+    if (current.maxRayDepth !== settings.maxRayDepth) {
+      this.setMaxRayDepth(settings.maxRayDepth);
+    }
+    if (current.resolutionScale !== settings.resolutionScale) {
+      this.setResolutionScale(settings.resolutionScale);
+    }
+    if (current.accumulationFormat !== settings.accumulationFormat) {
+      this.setAccumulationFormat(settings.accumulationFormat);
+    }
+    if (current.maxAccumulationFrames !== settings.maxAccumulationFrames) {
+      this.setMaxAccumulationFrames(settings.maxAccumulationFrames);
+    }
+    if (current.enableDepthOfField !== settings.enableDepthOfField) {
+      this.setDepthOfFieldEnabled(settings.enableDepthOfField);
+    }
+    if (current.aperture !== settings.aperture) {
+      this.setAperture(settings.aperture);
+    }
+    if (current.focusDistance !== settings.focusDistance) {
+      this.setFocusDistance(settings.focusDistance);
+    }
+    if (current.transformMode !== settings.transformMode) {
+      this.setTransformMode(settings.transformMode);
+    }
+  }
+
+  private settingsEqual(a: PtSettings, b: PtSettings) {
+    return (Object.keys(a) as (keyof PtSettings)[]).every(
+      (key) => a[key] === b[key]
     );
   }
 
