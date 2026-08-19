@@ -26,8 +26,7 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
-  min-width: 210px;
-  padding: 12px;
+  width: 230px;
   color: #f4f4f5;
   background: rgb(24 24 27 / 88%);
   border: 1px solid rgb(255 255 255 / 12%);
@@ -35,6 +34,12 @@ body {
   box-shadow: 0 10px 30px rgb(0 0 0 / 24%);
   backdrop-filter: blur(10px);
   pointer-events: auto;
+  overflow: hidden;
+}
+
+.editor-shell__header,
+.editor-panel {
+  padding: 12px;
 }
 
 .editor-shell__title {
@@ -72,4 +77,41 @@ body {
   color: #71717a;
   background: #27272a;
   cursor: default;
+}
+
+.editor-panel {
+  border-top: 1px solid rgb(255 255 255 / 10%);
+}
+
+.editor-panel h2 {
+  margin-bottom: 9px;
+  color: #d4d4d8;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.editor-control {
+  display: grid;
+  grid-template-columns: 1fr 84px;
+  align-items: center;
+  gap: 10px;
+  min-height: 29px;
+  color: #d4d4d8;
+  font-size: 11px;
+}
+
+.editor-control input,
+.editor-control select {
+  min-width: 0;
+  padding: 4px 6px;
+  color: #f4f4f5;
+  background: #27272a;
+  border: 1px solid #52525b;
+  border-radius: 4px;
+}
+
+.editor-control--checkbox input {
+  justify-self: end;
 }
