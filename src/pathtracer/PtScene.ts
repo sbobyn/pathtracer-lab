@@ -20,12 +20,6 @@ export type PtSphereMesh = THREE.Mesh<
   };
 };
 
-export interface PtSphereUniform {
-  position: THREE.Vector3;
-  radius: number;
-  materialId: number;
-}
-
 export default class PtScene {
   scene: THREE.Scene;
   intersectGroup: THREE.Group;
@@ -108,34 +102,10 @@ export default class PtScene {
     );
   }
 
-  public createSphereUniforms(): PtSphereUniform[] {
-    return this.getSphereMeshes().map((mesh) => ({
-      position: mesh.position,
-      radius: sphereRadius(mesh),
-      materialId: getMaterialMetadata(mesh.material).materialId,
-    }));
-  }
-
-  public createMaterialUniforms(): PtMaterial[] {
+  public getMaterials(): PtPreviewMaterial[] {
     return [...this.previewMaterials.entries()]
       .sort(([a], [b]) => a - b)
-      .map(([materialId, material], uniformIndex) => {
-        const metadata = getMaterialMetadata(material);
-        if (materialId !== metadata.materialId) {
-          throw new Error(`Material metadata mismatch: ${materialId}`);
-        }
-        if (materialId !== uniformIndex) {
-          throw new Error(`Material IDs must be contiguous: ${materialId}`);
-        }
-        return new PtMaterial(
-          metadata.materialType,
-          material.color,
-          material instanceof THREE.MeshStandardMaterial
-            ? material.roughness
-            : 0,
-          material instanceof THREE.MeshPhysicalMaterial ? material.ior : 0
-        );
-      });
+      .map(([, material]) => material);
   }
 
   public getMaterial(materialId: number): PtPreviewMaterial {

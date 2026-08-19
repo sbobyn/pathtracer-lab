@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type PtMaterial from "./PtMaterial";
-import type { PtSphereUniform } from "./PtScene";
+import type { GpuSphere } from "./GpuScene";
 
 export default interface PtUniforms {
   uCamera: {
@@ -17,7 +17,7 @@ export default interface PtUniforms {
   };
   uWorld: {
     value: {
-      spheres: PtSphereUniform[];
+      spheres: GpuSphere[];
     };
   };
   uNumSamples: { value: number };

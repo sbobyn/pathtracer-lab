@@ -19,6 +19,8 @@ import {
   PtInvalidationLevel,
   type PtInvalidationEvent,
 } from "./PtInvalidation";
+import GpuScene from "./GpuScene";
+import SceneCompiler from "./SceneCompiler";
 
 export default class PtRenderer {
   public ptScene: PtScene;
@@ -42,6 +44,8 @@ export default class PtRenderer {
 
   public settings: PtSettings;
   public uniforms: PtUniforms;
+  private readonly sceneCompiler = new SceneCompiler();
+  private gpuScene: GpuScene;
 
   private cameraForward!: THREE.Vector3;
   private cameraUp!: THREE.Vector3;
@@ -91,6 +95,7 @@ export default class PtRenderer {
     this.camera = ptScene.camera;
 
     this.settings = settings;
+    this.gpuScene = this.sceneCompiler.compile(ptScene);
 
     this.setupRenderer();
     this.setupControls();
@@ -131,7 +136,9 @@ export default class PtRenderer {
   }
 
   setScene(ptScene: PtScene, invalidate = true) {
+    this.gpuScene.dispose();
     this.ptScene = ptScene;
+    this.gpuScene = this.sceneCompiler.compile(ptScene);
     this.camera = ptScene.camera;
     this.reset();
     if (invalidate) {
@@ -212,7 +219,10 @@ export default class PtRenderer {
   }
 
   public invalidate(level: PtInvalidationLevel, reason: string) {
-    if (level >= PtInvalidationLevel.Material) this.updateSceneUniforms();
+    if (level >= PtInvalidationLevel.Material) {
+      this.sceneCompiler.update(this.gpuScene, this.ptScene, level);
+      this.updateSceneUniforms();
+    }
     this.invalidationHistory.push({
       sequence: ++this.invalidationSequence,
       level,
@@ -242,7 +252,7 @@ export default class PtRenderer {
   }
 
   private setupShaderCanvas() {
-    const sphereCount = this.ptScene.getSphereMeshes().length;
+    const sphereCount = this.gpuScene.spheres.length;
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -257,7 +267,7 @@ export default class PtRenderer {
   }
 
   private updateShaderCanvas() {
-    const sphereCount = this.ptScene.getSphereMeshes().length;
+    const sphereCount = this.gpuScene.spheres.length;
     this.shaderCanvas
       .setShader(`#define MAX_SPHERES ${sphereCount}
        ${fragShader}`);
@@ -336,12 +346,12 @@ export default class PtRenderer {
       },
       uWorld: {
         value: {
-          spheres: this.ptScene.createSphereUniforms(),
+          spheres: this.gpuScene.spheres,
         },
       },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
-      uMaterials: { value: this.ptScene.createMaterialUniforms() },
+      uMaterials: { value: this.gpuScene.materials },
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
       uEnableDoF: { value: this.settings.enableDepthOfField },
@@ -350,8 +360,8 @@ export default class PtRenderer {
   }
 
   private updateSceneUniforms() {
-    this.uniforms.uWorld.value.spheres = this.ptScene.createSphereUniforms();
-    this.uniforms.uMaterials.value = this.ptScene.createMaterialUniforms();
+    this.uniforms.uWorld.value.spheres = this.gpuScene.spheres;
+    this.uniforms.uMaterials.value = this.gpuScene.materials;
   }
 
   private initializeComposerPasses() {
@@ -473,6 +483,7 @@ export default class PtRenderer {
     this.transformControls.dispose();
 
     this.shaderCanvas.dispose();
+    this.gpuScene.dispose();
     this.disposePostProcessing();
     this.renderer.dispose();
     this.stats.dom.remove();
