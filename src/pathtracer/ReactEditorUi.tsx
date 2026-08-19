@@ -409,6 +409,45 @@ function SceneHierarchy({
   );
 }
 
+function ObjectNameField({
+  objectId,
+  name,
+  actions,
+}: {
+  objectId: string;
+  name: string;
+  actions: PtActions;
+}) {
+  const [draft, setDraft] = useState(name);
+  const cancel = useRef(false);
+  useEffect(() => setDraft(name), [objectId, name]);
+  return (
+    <label className="editor-control">
+      <span>Name</span>
+      <input
+        type="text"
+        value={draft}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onBlur={() => {
+          if (cancel.current) {
+            cancel.current = false;
+            return;
+          }
+          if (!actions.renameSelectedObject(draft)) setDraft(name);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            cancel.current = true;
+            setDraft(name);
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
+  );
+}
+
 function ObjectInspectorContent({
   state,
   actions,
@@ -448,9 +487,14 @@ function ObjectInspectorContent({
   return (
       <div className="object-inspector__content">
         <div className="editor-inspector__identity">
-          <strong>Sphere {selection.sphereIndex}</strong>
+          <strong>{selection.name}</strong>
           <span>Sphere · Path traced</span>
         </div>
+        <ObjectNameField
+          objectId={selection.objectId!}
+          name={selection.name!}
+          actions={actions}
+        />
         <details className="editor-subpanel" open>
           <summary>Transform</summary>
           {transformNumber("Position X", selection.position.x, (value) =>
@@ -525,6 +569,9 @@ function ObjectInspectorContent({
           )}
         </details>
         <div className="editor-inspector__commands">
+          <button type="button" onClick={() => actions.frameSelectedObject()}>
+            Frame
+          </button>
           <button type="button" onClick={() => actions.duplicateSelectedObject()}>
             Duplicate
           </button>
@@ -620,7 +667,7 @@ function SelectedObjectInspector({
         aria-expanded={!collapsed}
         onClick={() => setCollapsed((current) => !current)}
       >
-        <span>Sphere {state.selection.sphereIndex}</span>
+        <span>{state.selection.name}</span>
         <span className="object-inspector__meta">
           {state.selection.material?.kind ?? "Object"}
         </span>
@@ -772,8 +819,13 @@ function CreationMenu({
       </button>
       {selectionActive && <div className="creation-menu__separator" />}
       {selectionActive && (
+        <button type="button" role="menuitem" onClick={() => run(() => actions.frameSelectedObject())}>
+          <span>Frame selection</span><kbd>F</kbd>
+        </button>
+      )}
+      {selectionActive && (
         <button type="button" role="menuitem" onClick={() => run(() => actions.duplicateSelectedObject())}>
-          <span>Duplicate</span>
+          <span>Duplicate</span><kbd>⇧D</kbd>
         </button>
       )}
       {selectionActive && (

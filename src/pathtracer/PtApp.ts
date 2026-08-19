@@ -48,6 +48,23 @@ export default class PtApp {
       event.preventDefault();
       return;
     }
+    if (!editingText && event.shiftKey && event.key.toLowerCase() === "d") {
+      if (this.actions.duplicateSelectedObject()) event.preventDefault();
+      return;
+    }
+    if (!editingText && event.key.toLowerCase() === "f") {
+      if (this.actions.frameSelectedObject()) event.preventDefault();
+      return;
+    }
+    if (
+      !editingText &&
+      (event.key === "Delete" ||
+        event.key === "Backspace" ||
+        event.key.toLowerCase() === "x")
+    ) {
+      if (this.actions.removeSelectedObject()) event.preventDefault();
+      return;
+    }
     if (event.key === "Escape") {
       const canceledTransform = this.actions.cancelSelectedTransform();
       const canceledMaterial = this.actions.cancelMaterialEdit();

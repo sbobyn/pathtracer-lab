@@ -42,6 +42,7 @@ export interface PtSettings {
 /** Serializable editor selection; Three.js objects remain outside the store. */
 export interface PtSelectionState {
   objectId: string | null;
+  name: string | null;
   sphereIndex: number | null;
   position: { x: number; y: number; z: number };
   radius: number | null;
@@ -88,6 +89,7 @@ export function createDefaultPtState(): PtState {
     settings: { ...defaultSettings },
     selection: {
       objectId: null,
+      name: null,
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,

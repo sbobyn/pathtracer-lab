@@ -10,7 +10,7 @@ import {
   TransformControls,
   OrbitControls,
 } from "three/examples/jsm/Addons.js";
-import PtScene from "./PtScene";
+import PtScene, { sphereRadius, type PtSphereMesh } from "./PtScene";
 import type { PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
 import {
@@ -211,6 +211,20 @@ export default class PtRenderer {
       PtInvalidationLevel.Settings,
       "maximum accumulation frames changed"
     );
+  }
+
+  public frameSphere(sphere: PtSphereMesh) {
+    const viewDirection = this.camera.position
+      .clone()
+      .sub(this.orbitControls.target)
+      .normalize();
+    const distance = Math.max(1.5, sphereRadius(sphere) * 4);
+    this.orbitControls.target.copy(sphere.position);
+    this.camera.position
+      .copy(sphere.position)
+      .addScaledVector(viewDirection, distance);
+    this.orbitControls.update();
+    this.invalidate(PtInvalidationLevel.Camera, "selected sphere framed");
   }
 
   public invalidate(level: PtInvalidationLevel, reason: string) {

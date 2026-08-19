@@ -311,6 +311,33 @@ export default class PtActions {
     return true;
   }
 
+  public renameSelectedObject(nextName: string) {
+    const object = this.selectedObject;
+    const name = nextName.trim();
+    if (!object || !name) return false;
+    const previousName = object.userData.pathTracer.objectName;
+    if (name === previousName) return false;
+    const apply = (value: string) => {
+      object.userData.pathTracer.objectName = value;
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.publishSelection();
+    };
+    apply(name);
+    this.history.record({
+      label: `Rename ${previousName}`,
+      execute: () => apply(name),
+      undo: () => apply(previousName),
+    });
+    this.publishHistory();
+    return true;
+  }
+
+  public frameSelectedObject() {
+    if (!this.selectedObject) return false;
+    this.renderer.frameSphere(this.selectedObject);
+    return true;
+  }
+
   public removeSelectedObject() {
     const object = this.selectedObject;
     if (!object) return false;
@@ -350,7 +377,6 @@ export default class PtActions {
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
     const object = source.clone() as PtSphereMesh;
-    object.position.x += sphereRadius(source) * 2.25;
     object.userData.pathTracer = {
       objectId: THREE.MathUtils.generateUUID(),
       objectName: `${source.userData.pathTracer.objectName} Copy`,
@@ -570,6 +596,7 @@ export default class PtActions {
       ...state,
       selection: {
         objectId: selectedObject.userData.pathTracer.objectId,
+        name: selectedObject.userData.pathTracer.objectName,
         sphereIndex,
         position: { x, y, z },
         radius,
@@ -779,6 +806,7 @@ export default class PtActions {
   private emptySelection(): PtState["selection"] {
     return {
       objectId: null,
+      name: null,
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,
