@@ -115,3 +115,9 @@ body {
 .editor-control--checkbox input {
   justify-self: end;
 }
+
+.editor-control input[type="color"] {
+  width: 100%;
+  height: 24px;
+  padding: 2px;
+}

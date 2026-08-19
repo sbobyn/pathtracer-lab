@@ -3,6 +3,79 @@ import { createRoot, type Root } from "react-dom/client";
 import type PtActions from "./PtActions";
 import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState } from "./PtState";
+import { PresetPtScenes } from "./PresetPtScenes";
+
+function clampNumber(
+  value: number,
+  minimum: number,
+  maximum: number,
+  setter: (nextValue: number) => void
+) {
+  if (!Number.isFinite(value)) return;
+  setter(Math.min(maximum, Math.max(minimum, value)));
+}
+
+function SceneSettings({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  return (
+    <section className="editor-panel" aria-labelledby="scene-settings-title">
+      <h2 id="scene-settings-title">Scene</h2>
+      <label className="editor-control">
+        <span>Preset</span>
+        <select
+          value={state.sceneKey}
+          onChange={(event) => actions.setScene(event.currentTarget.value)}
+        >
+          {Object.keys(PresetPtScenes).map((sceneKey) => (
+            <option key={sceneKey} value={sceneKey}>
+              {sceneKey}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="editor-control">
+        <span>Field of view</span>
+        <input
+          type="number"
+          min={10}
+          max={120}
+          step={1}
+          value={state.settings.fov}
+          onChange={(event) =>
+            clampNumber(event.currentTarget.valueAsNumber, 10, 120, (value) =>
+              actions.setFov(Math.round(value))
+            )
+          }
+        />
+      </label>
+      <label className="editor-control">
+        <span>Sky color</span>
+        <input
+          type="color"
+          value={state.settings.backgroundColorTop}
+          onChange={(event) =>
+            actions.setBackgroundColorTop(event.currentTarget.value)
+          }
+        />
+      </label>
+      <label className="editor-control">
+        <span>Horizon color</span>
+        <input
+          type="color"
+          value={state.settings.backgroundColorBottom}
+          onChange={(event) =>
+            actions.setBackgroundColorBottom(event.currentTarget.value)
+          }
+        />
+      </label>
+    </section>
+  );
+}
 
 function RenderSettings({
   state,
@@ -12,15 +85,6 @@ function RenderSettings({
   actions: PtActions;
 }) {
   const { settings } = state;
-  const setBoundedInteger = (
-    value: number,
-    minimum: number,
-    maximum: number,
-    setter: (nextValue: number) => void
-  ) => {
-    if (!Number.isFinite(value)) return;
-    setter(Math.min(maximum, Math.max(minimum, Math.round(value))));
-  };
   return (
     <section className="editor-panel" aria-labelledby="render-settings-title">
       <h2 id="render-settings-title">Render</h2>
@@ -43,11 +107,11 @@ function RenderSettings({
           step={1}
           value={settings.numSamples}
           onChange={(event) =>
-            setBoundedInteger(
+            clampNumber(
               event.currentTarget.valueAsNumber,
               1,
               20,
-              (value) => actions.setNumSamples(value)
+              (value) => actions.setNumSamples(Math.round(value))
             )
           }
         />
@@ -61,11 +125,11 @@ function RenderSettings({
           step={1}
           value={settings.maxRayDepth}
           onChange={(event) =>
-            setBoundedInteger(
+            clampNumber(
               event.currentTarget.valueAsNumber,
               1,
               20,
-              (value) => actions.setMaxRayDepth(value)
+              (value) => actions.setMaxRayDepth(Math.round(value))
             )
           }
         />
@@ -84,6 +148,96 @@ function RenderSettings({
             </option>
           ))}
         </select>
+      </label>
+      <label className="editor-control">
+        <span>Accumulation</span>
+        <select
+          value={settings.accumulationFormat}
+          onChange={(event) =>
+            actions.setAccumulationFormat(
+              event.currentTarget.value as typeof settings.accumulationFormat
+            )
+          }
+        >
+          <option value="rgba32f">32-bit float</option>
+          <option value="rgba16f">16-bit float</option>
+          <option value="rgba8">8-bit</option>
+        </select>
+      </label>
+      <label className="editor-control">
+        <span>Frame limit</span>
+        <input
+          type="number"
+          min={0}
+          max={100000}
+          step={1}
+          value={settings.maxAccumulationFrames}
+          onChange={(event) =>
+            clampNumber(
+              event.currentTarget.valueAsNumber,
+              0,
+              100000,
+              (value) => actions.setMaxAccumulationFrames(Math.round(value))
+            )
+          }
+        />
+      </label>
+    </section>
+  );
+}
+
+function CameraSettings({
+  state,
+  actions,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+}) {
+  const { settings } = state;
+  return (
+    <section className="editor-panel" aria-labelledby="camera-settings-title">
+      <h2 id="camera-settings-title">Camera</h2>
+      <label className="editor-control editor-control--checkbox">
+        <span>Depth of field</span>
+        <input
+          type="checkbox"
+          checked={settings.enableDepthOfField}
+          onChange={(event) =>
+            actions.setDepthOfFieldEnabled(event.currentTarget.checked)
+          }
+        />
+      </label>
+      <label className="editor-control">
+        <span>Aperture</span>
+        <input
+          type="number"
+          min={0}
+          max={0.1}
+          step={0.001}
+          disabled={!settings.enableDepthOfField}
+          value={settings.aperture}
+          onChange={(event) =>
+            clampNumber(event.currentTarget.valueAsNumber, 0, 0.1, (value) =>
+              actions.setAperture(value)
+            )
+          }
+        />
+      </label>
+      <label className="editor-control">
+        <span>Focus distance</span>
+        <input
+          type="number"
+          min={0.1}
+          max={20}
+          step={0.1}
+          disabled={!settings.enableDepthOfField}
+          value={settings.focusDistance}
+          onChange={(event) =>
+            clampNumber(event.currentTarget.valueAsNumber, 0.1, 20, (value) =>
+              actions.setFocusDistance(value)
+            )
+          }
+        />
       </label>
     </section>
   );
@@ -126,7 +280,9 @@ function EditorShell({ actions }: { actions: PtActions }) {
           </button>
         </div>
       </div>
+      <SceneSettings state={state} actions={actions} />
       <RenderSettings state={state} actions={actions} />
+      <CameraSettings state={state} actions={actions} />
     </aside>
   );
 }
