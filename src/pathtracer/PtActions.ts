@@ -62,15 +62,21 @@ export default class PtActions {
   }
 
   public undo() {
-    this.cancelSelectedTransform();
-    this.cancelMaterialEdit();
-    return this.history.undo();
+    const canceledTransform = this.cancelSelectedTransform();
+    const canceledMaterial = this.cancelMaterialEdit();
+    if (canceledTransform || canceledMaterial) return true;
+    const changed = this.history.undo();
+    if (changed) this.publishHistory();
+    return changed;
   }
 
   public redo() {
-    this.cancelSelectedTransform();
-    this.cancelMaterialEdit();
-    return this.history.redo();
+    const canceledTransform = this.cancelSelectedTransform();
+    const canceledMaterial = this.cancelMaterialEdit();
+    if (canceledTransform || canceledMaterial) return true;
+    const changed = this.history.redo();
+    if (changed) this.publishHistory();
+    return changed;
   }
 
   public setScene(sceneKey: string) {
@@ -107,6 +113,7 @@ export default class PtActions {
       selection: this.emptySelection(),
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
+    this.publishHistory();
     this.renderer.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
   }
 
@@ -235,6 +242,7 @@ export default class PtActions {
       execute: remove,
       undo: restore,
     });
+    this.publishHistory();
     return true;
   }
 
@@ -272,6 +280,7 @@ export default class PtActions {
       execute: insert,
       undo: remove,
     });
+    this.publishHistory();
     return true;
   }
 
@@ -339,6 +348,7 @@ export default class PtActions {
       execute: () => apply(after),
       undo: () => apply(pending.before),
     });
+    this.publishHistory();
     return true;
   }
 
@@ -415,6 +425,7 @@ export default class PtActions {
       execute: () => apply(after),
       undo: () => apply(pending.before),
     });
+    this.publishHistory();
     return true;
   }
 
@@ -512,5 +523,10 @@ export default class PtActions {
       position: { x: -1, y: -1, z: -1 },
       radius: null,
     };
+  }
+
+  private publishHistory() {
+    const history = this.history.getSnapshot();
+    this.store.update((state) => ({ ...state, history }));
   }
 }

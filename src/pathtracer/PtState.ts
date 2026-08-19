@@ -25,11 +25,20 @@ export interface PtSelectionState {
   radius: number | null;
 }
 
+/** Read-only editor history summary suitable for any UI adapter. */
+export interface PtHistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  undoLabel: string | null;
+  redoLabel: string | null;
+}
+
 /** Serializable application state shared by UI adapters and application actions. */
 export interface PtState {
   sceneKey: string;
   settings: PtSettings;
   selection: PtSelectionState;
+  history: PtHistoryState;
 }
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
@@ -56,6 +65,12 @@ export function createDefaultPtState(): PtState {
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,
+    },
+    history: {
+      canUndo: false,
+      canRedo: false,
+      undoLabel: null,
+      redoLabel: null,
     },
   };
 }

@@ -34,6 +34,8 @@ export default class PtGui implements PtUiAdapter {
   private materialControllers: Controller[] = [];
   private readonly apertureController: Controller;
   private readonly focusDistanceController: Controller;
+  private readonly undoController: Controller;
+  private readonly redoController: Controller;
   private readonly unsubscribe: () => boolean;
   private disposed = false;
 
@@ -73,10 +75,9 @@ export default class PtGui implements PtUiAdapter {
       undo: () => actions.undo(),
       redo: () => actions.redo(),
     };
-    this.controllers.push(
-      this.gui.add(historyCommands, "undo").name("Undo"),
-      this.gui.add(historyCommands, "redo").name("Redo")
-    );
+    this.undoController = this.gui.add(historyCommands, "undo").name("Undo");
+    this.redoController = this.gui.add(historyCommands, "redo").name("Redo");
+    this.controllers.push(this.undoController, this.redoController);
 
     this.raytracingFolder = this.gui.addFolder("Raytracing Settings");
     this.controllers.push(
@@ -243,6 +244,12 @@ export default class PtGui implements PtUiAdapter {
     Object.assign(this.model.selectedPosition, state.selection.position);
     this.model.selectedRadius = state.selection.radius ?? 0;
     this.controllers.forEach((controller) => controller.updateDisplay());
+    this.undoController
+      .name(state.history.undoLabel ? `Undo: ${state.history.undoLabel}` : "Undo")
+      .enable(state.history.canUndo);
+    this.redoController
+      .name(state.history.redoLabel ? `Redo: ${state.history.redoLabel}` : "Redo")
+      .enable(state.history.canRedo);
     if (this.selectedMaterial && this.materialModel) {
       this.materialModel.color = `#${this.selectedMaterial.color.getHexString()}`;
       if (this.selectedMaterial instanceof THREE.MeshStandardMaterial) {

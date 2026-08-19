@@ -67,6 +67,42 @@ test("record coalesces an already-applied continuous edit into one entry", () =>
   assert.equal(history.undo(), false);
 });
 
+test("canceling a preview leaves no history entry", () => {
+  const target = { value: 0 };
+  const history = new CommandHistory();
+  const before = target.value;
+
+  target.value = 8;
+  target.value = before;
+
+  assert.equal(history.undo(), false);
+  assert.equal(target.value, 0);
+});
+
+test("deletion restores object identity and redo repeats invalidation", () => {
+  const first = { id: "first" };
+  const removed = { id: "removed" };
+  const objects = [first, removed];
+  const history = new CommandHistory();
+  let invalidations = 0;
+  const remove = () => {
+    objects.splice(objects.indexOf(removed), 1);
+    invalidations += 1;
+  };
+  const restore = () => {
+    objects.splice(1, 0, removed);
+    invalidations += 1;
+  };
+
+  history.execute({ label: "Remove object", execute: remove, undo: restore });
+  assert.deepEqual(objects, [first]);
+  history.undo();
+  assert.equal(objects[1], removed);
+  history.redo();
+  assert.deepEqual(objects, [first]);
+  assert.equal(invalidations, 3);
+});
+
 test("history is bounded", () => {
   const target = { value: 0 };
   const history = new CommandHistory(2);
