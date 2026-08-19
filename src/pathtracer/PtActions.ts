@@ -3,6 +3,7 @@ import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
 import type { PtSphereMesh } from "./PtScene";
 import PtStore from "./PtStore";
+import type { PtStateListener } from "./PtStore";
 import type {
   AccumulationFormat,
   PtSettings,
@@ -20,6 +21,10 @@ export default class PtActions {
 
   public getState() {
     return this.store.getState();
+  }
+
+  public subscribe(listener: PtStateListener) {
+    return this.store.subscribe(listener);
   }
 
   public setScene(sceneKey: string) {
