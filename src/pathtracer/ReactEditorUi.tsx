@@ -413,18 +413,27 @@ function ObjectNameField({
   objectId,
   name,
   actions,
+  focusRequest,
 }: {
   objectId: string;
   name: string;
   actions: PtActions;
+  focusRequest: number;
 }) {
   const [draft, setDraft] = useState(name);
   const cancel = useRef(false);
+  const input = useRef<HTMLInputElement>(null);
   useEffect(() => setDraft(name), [objectId, name]);
+  useEffect(() => {
+    if (focusRequest === 0) return;
+    input.current?.focus();
+    input.current?.select();
+  }, [focusRequest]);
   return (
     <label className="editor-control">
       <span>Name</span>
       <input
+        ref={input}
         type="text"
         value={draft}
         onChange={(event) => setDraft(event.currentTarget.value)}
@@ -451,9 +460,11 @@ function ObjectNameField({
 function ObjectInspectorContent({
   state,
   actions,
+  renameFocusRequest,
 }: {
   state: Readonly<PtState>;
   actions: PtActions;
+  renameFocusRequest: number;
 }) {
   const selection = state.selection;
   const material = selection.material;
@@ -494,6 +505,7 @@ function ObjectInspectorContent({
           objectId={selection.objectId!}
           name={selection.name!}
           actions={actions}
+          focusRequest={renameFocusRequest}
         />
         <details className="editor-subpanel" open>
           <summary>Transform</summary>
@@ -586,9 +598,11 @@ function ObjectInspectorContent({
 function SelectedObjectInspector({
   state,
   actions,
+  renameFocusRequest,
 }: {
   state: Readonly<PtState>;
   actions: PtActions;
+  renameFocusRequest: number;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [size, setSize] = useState<PanelSize>(() =>
@@ -607,6 +621,9 @@ function SelectedObjectInspector({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+  useEffect(() => {
+    if (renameFocusRequest > 0) setCollapsed(false);
+  }, [renameFocusRequest]);
 
   if (state.selection.sphereIndex === null) return null;
 
@@ -673,7 +690,13 @@ function SelectedObjectInspector({
         </span>
         <span className="object-inspector__chevron" aria-hidden="true">⌃</span>
       </button>
-      {!collapsed && <ObjectInspectorContent state={state} actions={actions} />}
+      {!collapsed && (
+        <ObjectInspectorContent
+          state={state}
+          actions={actions}
+          renameFocusRequest={renameFocusRequest}
+        />
+      )}
       {(["width", "height", "both"] as const).map((axis) => (
         <div
           key={axis}
@@ -795,11 +818,13 @@ function CreationMenu({
   actions,
   selectionActive,
   onClose,
+  onRename,
   style,
 }: {
   actions: PtActions;
   selectionActive: boolean;
   onClose: () => void;
+  onRename: () => void;
   style?: CSSProperties;
 }) {
   const run = (action: () => unknown) => {
@@ -818,6 +843,11 @@ function CreationMenu({
         <span>Import mesh</span><small>Not traceable yet</small>
       </button>
       {selectionActive && <div className="creation-menu__separator" />}
+      {selectionActive && (
+        <button type="button" role="menuitem" onClick={() => run(onRename)}>
+          <span>Rename</span>
+        </button>
+      )}
       {selectionActive && (
         <button type="button" role="menuitem" onClick={() => run(() => actions.frameSelectedObject())}>
           <span>Frame selection</span><kbd>F</kbd>
@@ -845,6 +875,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
   const [collapsed, setCollapsed] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [renameFocusRequest, setRenameFocusRequest] = useState(0);
   const [size, setSize] = useState<PanelSize>(() =>
     clampPanelSize({ width: 260, height: 620 })
   );
@@ -1006,6 +1037,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
               actions={actions}
               selectionActive={state.selection.objectId !== null}
               onClose={() => setAddMenuOpen(false)}
+              onRename={() => setRenameFocusRequest((request) => request + 1)}
             />
           )}
         </div>
@@ -1028,13 +1060,18 @@ function EditorShell({ actions }: { actions: PtActions }) {
     </div>
     <div className="editor-right-stack">
     <RenderPanel state={state} actions={actions} />
-    <SelectedObjectInspector state={state} actions={actions} />
+    <SelectedObjectInspector
+      state={state}
+      actions={actions}
+      renameFocusRequest={renameFocusRequest}
+    />
     </div>
     {contextMenu && (
       <CreationMenu
         actions={actions}
         selectionActive={state.selection.objectId !== null}
         onClose={() => setContextMenu(null)}
+        onRename={() => setRenameFocusRequest((request) => request + 1)}
         style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y }}
       />
     )}
