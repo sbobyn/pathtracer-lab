@@ -681,7 +681,7 @@ export default class PtActions {
       selectedObject.material
     );
     const material = this.renderer.ptScene.getMaterial(materialId);
-    const materialKinds = ["Lambert", "Metal", "Dielectric"] as const;
+    const materialKinds = ["Lambert", "Metal", "Dielectric", "Emissive"] as const;
     this.store.update((state) => ({
       ...state,
       selection: {

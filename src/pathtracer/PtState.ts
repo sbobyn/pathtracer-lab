@@ -1,6 +1,6 @@
 export type AccumulationFormat = "rgba8" | "rgba16f" | "rgba32f";
 export type TransformMode = "translate" | "scale";
-export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Unknown";
+export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Unknown";
 
 export interface PtSceneObjectState {
   id: string;

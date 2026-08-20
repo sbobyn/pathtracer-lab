@@ -263,6 +263,11 @@ function createPreviewMaterial(
       opacity: 1,
       transparent: true,
     });
+  } else if (material.type === PtMaterialType.Emissive) {
+    previewMaterial = new THREE.MeshBasicMaterial({
+      color: material.albedo,
+      map: previewMap,
+    });
   } else {
     console.warn(
       `Unknown material type ${material.type} for material ${materialId}`
@@ -273,6 +278,7 @@ function createPreviewMaterial(
     materialId,
     materialType: material.type,
     texture: material.texture,
+    emissionStrength: material.emissionStrength,
   };
   return previewMaterial;
 }
@@ -297,12 +303,14 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
   materialId: number;
   materialType: PtMaterialType;
   texture: PtTexture;
+  emissionStrength: number;
 } {
   const metadata = material.userData.pathTracer;
   if (
     typeof metadata?.materialId !== "number" ||
     typeof metadata?.materialType !== "number" ||
-    !metadata.texture
+    !metadata.texture ||
+    typeof metadata.emissionStrength !== "number"
   ) {
     throw new TypeError("Material is missing path-tracing metadata");
   }

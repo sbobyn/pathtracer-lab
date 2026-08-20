@@ -41,3 +41,12 @@ vec3 scatter(Ray incomingRay, Hit hit, vec2 seed) {
     if (material.type == 2) return scatterDielectric(incomingRay, hit, seed);
     return vec3(0.0);
 }
+
+bool materialScatters(Material material) {
+    return material.type != 3;
+}
+
+vec3 emitted(Material material, Hit hit) {
+    if (material.type != 3 || !hit.frontFace) return vec3(0.0);
+    return material.emissionStrength * sampleTexture(material.textureId, hit);
+}

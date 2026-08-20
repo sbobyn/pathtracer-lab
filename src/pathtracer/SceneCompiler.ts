@@ -79,7 +79,12 @@ export default class SceneCompiler {
       }
       const textureId = textures.length;
       textures.push(this.compileTexture(metadata.texture, material, imageTextures));
-      return this.compileMaterial(material, metadata.materialType, textureId);
+      return this.compileMaterial(
+        material,
+        metadata.materialType,
+        textureId,
+        metadata.emissionStrength
+      );
     });
     return { materials, textures, imageTextures };
   }
@@ -135,13 +140,15 @@ export default class SceneCompiler {
   private compileMaterial(
     material: PtPreviewMaterial,
     materialType: PtMaterial["type"],
-    textureId: number
+    textureId: number,
+    emissionStrength: number
   ): GpuMaterial {
     return {
       type: materialType,
       textureId,
       fuzz: material instanceof THREE.MeshStandardMaterial ? material.roughness : 0,
       ior: material instanceof THREE.MeshPhysicalMaterial ? material.ior : 0,
+      emissionStrength,
     };
   }
 }

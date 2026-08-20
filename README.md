@@ -6,6 +6,14 @@ Live demo: https://sbobyn.github.io/three-pathtracer/
 
 ![Path tracer demo](three-pathtracer.gif)
 
+## Lineage
+
+This project continues the original public
+[Three.js Pathtracer](https://github.com/sbobyn/three-pathtracer). It preserves
+that repository's Git history while evolving into a broader educational
+rendering lab for path tracing, editor architecture, BVH visualization, mesh
+rendering, WebGL/WebGPU comparisons, and raster approximations.
+
 ## Current capabilities
 
 The path tracer currently supports:

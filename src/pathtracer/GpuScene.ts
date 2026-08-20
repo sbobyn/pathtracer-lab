@@ -37,6 +37,7 @@ export interface GpuMaterial {
   textureId: number;
   fuzz: number;
   ior: number;
+  emissionStrength: number;
 }
 
 export default class GpuScene {
