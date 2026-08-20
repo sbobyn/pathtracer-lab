@@ -8,13 +8,15 @@ Live demo: https://sbobyn.github.io/three-pathtracer/
 
 ## Current capabilities
 
-The path tracer is implemented in `src/shaders/main.fs` and currently supports:
+The path tracer currently supports:
 
-- ray-sphere intersection
+- sphere and bounded-quad intersections with UVs and oriented normals
 - diffuse, metal, and dielectric materials
+- constant, checker, image, and procedural Perlin textures
+- spherical and box-projected sphere UV mapping
 - depth of field / defocus blur
-- progressive accumulation with ping-pong render targets
-- accumulation reset when the camera moves
+- progressive ping-pong accumulation with selectable 8-bit, 16-bit float, and 32-bit float storage
+- bounded accumulation and reset after camera, setting, material, or geometry changes
 
 The Three.js application provides:
 
@@ -24,7 +26,21 @@ The Three.js application provides:
 - raycaster-based object selection
 - transform controls for selected objects
 - selection outlines via `OutlinePass`
-- a React editor UI for renderer settings, scene hierarchy, object editing, and undo/redo
+- a React editor UI for renderer settings, scene hierarchy, contextual object editing, and undo/redo
+- sphere creation, selection, transforms, rename, duplicate, and deletion
+- persistent, versioned lightweight editor preferences
+
+## Architecture
+
+The editable `THREE.Scene` is the authoritative authoring scene. Application
+actions perform edits and classify their renderer invalidation consequences. A
+`SceneCompiler` derives renderer-owned `GpuScene` data rather than making the
+editor mutate uniforms directly. The path-tracing shader is split into focused
+camera, geometry, material, texture, sampling, integration, and accumulation
+modules under `src/pathtracer/shaders/`.
+
+React owns presentation and ephemeral interface state. It does not own mutable
+Three.js objects, compiled scene data, GPU resources, or accumulation buffers.
 
 ## Saved preferences
 
@@ -60,7 +76,8 @@ pnpm build
 pnpm verify
 ```
 
-`pnpm verify` runs both the TypeScript check and production build.
+`pnpm verify` runs unit tests, the random-seed precision check, TypeScript
+checking, and the production build.
 
 ## Verified baseline
 
@@ -68,28 +85,32 @@ The baseline has been manually verified in a Chromium browser on macOS with Thre
 
 - `Part1Simple` renders in raster and path-traced modes.
 - `Part1Final` renders in raster and path-traced modes.
-- orbit controls, object selection, transform mode, sphere radius editing, resolution scale, and depth-of-field controls respond without browser warnings or errors.
-- TypeScript checking and the production Vite build pass.
-
-Reference captures and their constraints are documented in [`docs/reference/README.md`](docs/reference/README.md).
+- `TextureStudy` exercises image, checker, and Perlin textures plus sphere UV mapping.
+- `QuadStudy` exercises bounded quad intersection, quad UVs, and mixed sphere/quad closest-hit behavior.
+- orbit controls, object selection, object lifecycle commands, transforms, material editing, resolution scale, accumulation controls, and depth-of-field controls respond without browser warnings or errors.
+- unit tests, random-seed verification, TypeScript checking, and the production Vite build pass.
 
 Known baseline limitations:
 
 - `Part1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
-- Accumulation precision, post-processing accumulation, and event-listener/resize lifecycle behavior still need further investigation.
+- Quad creation and editing are not yet exposed through the editor.
+- Emissive lighting and a Cornell-box scene are active development work and are not part of the committed baseline yet.
+- Environment-map lighting, triangles, BVH traversal, mesh rendering, and direct-light importance sampling are not implemented yet.
 - A WebGL-capable browser is required. There is no WebGPU backend yet.
 
 ## Roadmap
 
 Broad future directions include:
 
-- textures, quads, and area lights inspired by *Ray Tracing: The Next Week*
+- finish emissive geometry, area lighting, a Cornell box, and environment lighting
+- make quads and emissive lights fully authorable through the editor
+- add explicit light sampling and multiple importance sampling
 - original triangle intersection and mesh data paths
 - BVH construction, traversal, and visualization
 - glTF mesh rendering built on the triangle, BVH, material, and texture systems
-- clearer state ownership and a UI decoupled from path-tracer behavior
+- extend the authoritative scene/compiler and React editor workflows to new primitives and lights
 - a WebGPU backend and reproducible WebGL/WebGPU benchmarks
 - rasterized approximations for side-by-side quality and performance comparisons
 

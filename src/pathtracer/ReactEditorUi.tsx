@@ -978,7 +978,7 @@ function CreationMenu({
         <span>Add sphere</span><kbd>⇧A</kbd>
       </button>
       <button type="button" role="menuitem" disabled title="Available after quad support">
-        <span>Add quad</span><small>Not traceable yet</small>
+        <span>Add quad</span><small>Authoring coming soon</small>
       </button>
       <button type="button" role="menuitem" disabled title="Available after triangle support">
         <span>Import mesh</span><small>Not traceable yet</small>
