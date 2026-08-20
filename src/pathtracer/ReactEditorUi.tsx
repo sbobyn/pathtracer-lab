@@ -904,7 +904,10 @@ function EditorShell({ actions }: { actions: PtActions }) {
         setAddMenuOpen(false);
         setContextMenu(null);
       }
-      if (event.button === 2) {
+      if (
+        event.button === 2 &&
+        !(target instanceof Element && target.closest("#editor-root aside"))
+      ) {
         contextGesture = { x: event.clientX, y: event.clientY, moved: false };
       }
     };
@@ -919,20 +922,27 @@ function EditorShell({ actions }: { actions: PtActions }) {
         contextGesture.moved = true;
       }
     };
-    const handleContextMenu = (event: MouseEvent) => {
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.button !== 2 || !contextGesture) return;
+      const gesture = contextGesture;
+      contextGesture = null;
+      if (gesture.moved) return;
+
       const target = event.target;
       if (target instanceof Element && target.closest("#editor-root aside")) return;
-      event.preventDefault();
-      if (contextGesture?.moved) {
-        contextGesture = null;
-        return;
-      }
       setAddMenuOpen(false);
       setContextMenu({
         x: Math.min(event.clientX, window.innerWidth - 190),
         y: Math.min(event.clientY, window.innerHeight - 220),
       });
+    };
+    const handlePointerCancel = () => {
       contextGesture = null;
+    };
+    const handleContextMenu = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("#editor-root aside")) return;
+      event.preventDefault();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -942,11 +952,15 @@ function EditorShell({ actions }: { actions: PtActions }) {
     };
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, true);
+    window.addEventListener("pointercancel", handlePointerCancel);
     window.addEventListener("contextmenu", handleContextMenu);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp, true);
+      window.removeEventListener("pointercancel", handlePointerCancel);
       window.removeEventListener("contextmenu", handleContextMenu);
       window.removeEventListener("keydown", handleKeyDown);
     };

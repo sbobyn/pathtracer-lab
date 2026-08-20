@@ -16,49 +16,12 @@ export default class PtApp {
   private readonly actions: PtActions;
   private readonly ui: PtUiAdapter;
   private readonly unsubscribe: () => boolean;
-  private rightPointerGesture: {
-    x: number;
-    y: number;
-    moved: boolean;
-  } | null = null;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
+    if (event.button !== 0) return;
     if (this.ui.contains(event.target as Node)) return;
     if (this.ptRenderer.transformControls.dragging) return;
-
-    if (event.button === 2) {
-      this.rightPointerGesture = {
-        x: event.clientX,
-        y: event.clientY,
-        moved: false,
-      };
-      return;
-    }
-    if (event.button !== 0) return;
-
-    this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    this.selectAtPointer();
-  };
-
-  private readonly pointerMoveHandler = (event: PointerEvent) => {
-    if (!this.rightPointerGesture) return;
-    if (
-      Math.hypot(
-        event.clientX - this.rightPointerGesture.x,
-        event.clientY - this.rightPointerGesture.y
-      ) > 5
-    ) {
-      this.rightPointerGesture.moved = true;
-    }
-  };
-
-  private readonly contextMenuHandler = (event: MouseEvent) => {
-    if (this.ui.contains(event.target as Node)) return;
-
-    const gesture = this.rightPointerGesture;
-    this.rightPointerGesture = null;
-    if (gesture?.moved || this.ptRenderer.transformControls.dragging) return;
+    if (this.ptRenderer.transformControls.axis) return;
 
     this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -156,9 +119,7 @@ export default class PtApp {
             null;
     });
 
-    window.addEventListener("pointerdown", this.pointerDownHandler);
-    window.addEventListener("pointermove", this.pointerMoveHandler);
-    window.addEventListener("contextmenu", this.contextMenuHandler);
+    window.addEventListener("pointerdown", this.pointerDownHandler, true);
     window.addEventListener("keydown", this.keyDownHandler);
     this.ptRenderer.transformControls.addEventListener(
       "change",
@@ -171,9 +132,7 @@ export default class PtApp {
   }
 
   public dispose() {
-    window.removeEventListener("pointerdown", this.pointerDownHandler);
-    window.removeEventListener("pointermove", this.pointerMoveHandler);
-    window.removeEventListener("contextmenu", this.contextMenuHandler);
+    window.removeEventListener("pointerdown", this.pointerDownHandler, true);
     window.removeEventListener("keydown", this.keyDownHandler);
     this.ptRenderer.transformControls.removeEventListener(
       "change",
@@ -206,7 +165,14 @@ export default class PtApp {
       return;
     }
 
-    this.selectedObject = object as PtSphereMesh;
-    this.actions.selectObject(this.selectedObject);
+    const nextObject = object as PtSphereMesh;
+    if (nextObject === this.selectedObject) {
+      this.selectedObject = null;
+      this.actions.selectObject(null);
+      return;
+    }
+
+    this.selectedObject = nextObject;
+    this.actions.selectObject(nextObject);
   }
 }
