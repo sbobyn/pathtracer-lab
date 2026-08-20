@@ -24,7 +24,20 @@ The Three.js application provides:
 - raycaster-based object selection
 - transform controls for selected objects
 - selection outlines via `OutlinePass`
-- a `lil-gui` debug UI for renderer settings and object editing
+- a React editor UI for renderer settings, scene hierarchy, object editing, and undo/redo
+
+## Saved preferences
+
+The editor saves a versioned preference record under the local-storage key
+`three-pathtracer.preferences`. The current schema stores the last preset and
+the lightweight render, camera, background, and transform-mode settings in
+`PtSettings`.
+
+Scene objects, imported assets, selection, undo history, GPU resources,
+compiled scene data, BVHs, and accumulation buffers are deliberately excluded.
+Missing or invalid fields fall back to current defaults, and unknown schema
+versions are ignored. **Reset preferences** clears the record and reloads the
+application with authoritative defaults.
 
 The hash-based random-number generator was adapted from [this ShaderToy](https://www.shadertoy.com/view/4djSRW).
 

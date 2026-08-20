@@ -47,7 +47,8 @@ export default class PtActions {
 
   constructor(
     private readonly store: PtStore,
-    private readonly renderer: PtRenderer
+    private readonly renderer: PtRenderer,
+    private readonly resetPreferencesAction: () => void = () => {}
   ) {
     this.nextSphereName = renderer.ptScene.getSphereMeshes().length;
     this.publishSceneObjects();
@@ -67,6 +68,10 @@ export default class PtActions {
 
   public getHistory() {
     return this.history.getSnapshot();
+  }
+
+  public resetPreferences() {
+    this.resetPreferencesAction();
   }
 
   public undo() {

@@ -2,6 +2,12 @@ import * as THREE from "three";
 import PtActions from "./PtActions";
 import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
+import {
+  clearPtPreferences,
+  loadPtPreferences,
+  preferenceSnapshot,
+  savePtPreferences,
+} from "./PtPreferences";
 import { isPtSphereMesh, type PtSphereMesh } from "./PtScene";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
@@ -86,9 +92,19 @@ export default class PtApp {
     canvas: HTMLCanvasElement,
     createUi: PtUiFactory
   ) {
-    const ptScene = PresetPtScenes.Part1Simple();
-    const initialState = createDefaultPtState();
-    initialState.settings.fov = ptScene.camera.fov;
+    const defaults = createDefaultPtState();
+    const initialState = loadPtPreferences(
+      window.localStorage,
+      defaults,
+      Object.keys(PresetPtScenes)
+    );
+    const ptScene = PresetPtScenes[initialState.sceneKey]();
+    ptScene.backgroundColorTop.set(initialState.settings.backgroundColorTop);
+    ptScene.backgroundColorBottom.set(initialState.settings.backgroundColorBottom);
+    ptScene.scene.background = ptScene.backgroundColorTop;
+    ptScene.dirLight.color = ptScene.backgroundColorTop;
+    ptScene.camera.fov = initialState.settings.fov;
+    ptScene.camera.updateProjectionMatrix();
     const store = new PtStore(initialState);
 
     this.ptRenderer = new PtRenderer(
@@ -96,13 +112,26 @@ export default class PtApp {
       ptScene,
       { ...initialState.settings }
     );
-    this.actions = new PtActions(store, this.ptRenderer);
+    this.actions = new PtActions(store, this.ptRenderer, () => {
+      clearPtPreferences(window.localStorage);
+      window.location.reload();
+    });
     this.intersectGroup = ptScene.intersectGroup;
     this.ui = createUi(this.actions);
 
     let currentSceneKey = initialState.sceneKey;
     let currentSphereIndex: number | null = null;
+    let currentPreferences = JSON.stringify(preferenceSnapshot(initialState));
     this.unsubscribe = this.actions.subscribe((state) => {
+      const nextPreferences = JSON.stringify(preferenceSnapshot(state));
+      if (nextPreferences !== currentPreferences) {
+        currentPreferences = nextPreferences;
+        try {
+          savePtPreferences(window.localStorage, state);
+        } catch {
+          // Storage can be unavailable or full; rendering should continue.
+        }
+      }
       if (state.sceneKey !== currentSceneKey) {
         currentSceneKey = state.sceneKey;
         currentSphereIndex = null;

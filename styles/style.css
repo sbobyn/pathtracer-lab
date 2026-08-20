@@ -309,6 +309,23 @@ body {
   padding: 2px;
 }
 
+.editor-action-button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  color: #d4d4d8;
+  background: #27272a;
+  border: 1px solid #52525b;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.editor-action-button:hover {
+  color: #f4f4f5;
+  background: #3f3f46;
+}
+
 .editor-hierarchy {
   display: grid;
   gap: 3px;

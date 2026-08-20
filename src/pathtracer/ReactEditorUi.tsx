@@ -198,6 +198,13 @@ function SceneSettings({
           onBlur={() => actions.commitSettingsEdit()}
         />
       </label>
+      <button
+        type="button"
+        className="editor-action-button"
+        onClick={() => actions.resetPreferences()}
+      >
+        Reset preferences
+      </button>
       </div>
     </details>
   );
