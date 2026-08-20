@@ -22,6 +22,7 @@ The path tracer currently supports:
 - diffuse, metal, and dielectric materials
 - constant, checker, image, and procedural Perlin textures
 - spherical and box-projected sphere UV mapping
+- one-sided emissive quad materials and a Cornell-box scene preset
 - depth of field / defocus blur
 - progressive ping-pong accumulation with selectable 8-bit, 16-bit float, and 32-bit float storage
 - bounded accumulation and reset after camera, setting, material, or geometry changes
@@ -104,7 +105,6 @@ Known baseline limitations:
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
 - Quad creation and editing are not yet exposed through the editor.
-- Emissive lighting and a Cornell-box scene are active development work and are not part of the committed baseline yet.
 - Environment-map lighting, triangles, BVH traversal, mesh rendering, and direct-light importance sampling are not implemented yet.
 - A WebGL-capable browser is required. There is no WebGPU backend yet.
 
@@ -112,7 +112,7 @@ Known baseline limitations:
 
 Broad future directions include:
 
-- finish emissive geometry, area lighting, a Cornell box, and environment lighting
+- add environment lighting and a broader authorable light system
 - make quads and emissive lights fully authorable through the editor
 - add explicit light sampling and multiple importance sampling
 - original triangle intersection and mesh data paths
