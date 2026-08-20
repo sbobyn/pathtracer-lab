@@ -19,6 +19,7 @@ export type PtSphereMesh = THREE.Mesh<
       objectName: string;
       primitiveIndex: number;
       primitiveType: "sphere";
+      uvMapping: 0 | 1;
     };
   };
 };
@@ -85,6 +86,7 @@ export default class PtScene {
         objectName: `Sphere ${i}`,
         primitiveIndex: i,
         primitiveType: "sphere",
+        uvMapping: sphere.uvMapping,
       };
 
       this.intersectGroup.add(sphereMesh);
@@ -135,6 +137,7 @@ export default class PtScene {
       objectName,
       primitiveIndex: this.getSphereMeshes().length,
       primitiveType: "sphere",
+      uvMapping: 0,
     };
     return mesh;
   }
@@ -158,6 +161,16 @@ export default class PtScene {
     const material = this.previewMaterials.get(materialId);
     if (!material) throw new RangeError(`Unknown material: ${materialId}`);
     return material;
+  }
+
+  public setMaterialTexture(materialId: number, texture: PtTexture) {
+    const material = this.getMaterial(materialId);
+    const metadata = getMaterialMetadata(material);
+    material.map?.dispose();
+    material.map = createPreviewTexture(texture);
+    material.color.copy(texture.type === PtTextureType.Constant ? texture.color : new THREE.Color(0xffffff));
+    metadata.texture = texture;
+    material.needsUpdate = true;
   }
 
   private reindexSpheres() {
@@ -239,6 +252,21 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
 }
 
 function createPreviewTexture(texture: PtTexture): THREE.Texture | null {
+  if (texture.type === PtTextureType.Image) {
+    let markLoaded!: () => void;
+    const loaded = new Promise<void>((resolve) => { markLoaded = resolve; });
+    const map = new THREE.TextureLoader().load(texture.source, markLoaded);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.wrapS = THREE.RepeatWrapping;
+    map.wrapT = THREE.ClampToEdgeWrapping;
+    // Ray-generated sphere UVs jump from 1 to 0 at the longitude seam. Implicit
+    // derivatives see that jump as a huge footprint and select a blurry mip,
+    // so image textures use their full-resolution level until explicit LOD is available.
+    map.generateMipmaps = false;
+    map.minFilter = THREE.LinearFilter;
+    map.userData.pathTracerLoaded = loaded;
+    return map;
+  }
   if (texture.type !== PtTextureType.Checker) return null;
   const colors = [texture.colorA, texture.colorB, texture.colorB, texture.colorA];
   const data = new Uint8Array(colors.flatMap((color) => {

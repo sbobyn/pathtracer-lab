@@ -405,6 +405,28 @@ body {
   cursor: pointer;
 }
 
+.texture-slot { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; padding: 2px 0 8px; }
+.texture-slot__preview { width: 64px; height: 54px; padding: 0; overflow: hidden; color: #71717a; background: #18181b; border: 1px solid #52525b; border-radius: 5px; cursor: pointer; }
+.texture-slot__preview img, .texture-preview img, .texture-picker img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.texture-slot__preview[data-empty="true"] { background-image: linear-gradient(45deg, #27272a 25%, transparent 25%), linear-gradient(-45deg, #27272a 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #27272a 75%), linear-gradient(-45deg, transparent 75%, #27272a 75%); background-position: 0 0, 0 8px, 8px -8px, -8px 0; background-size: 16px 16px; }
+.texture-slot__preview--checker, .texture-picker__procedural--checker { color: transparent; background: conic-gradient(#183a1d 25%, #b7d66b 0 50%, #183a1d 0 75%, #b7d66b 0) 0 0 / 20px 20px; }
+.texture-slot__preview--perlin, .texture-picker__procedural--perlin { color: #d4d4d8; background: radial-gradient(ellipse at 30% 20%, #e8dcc4, transparent 38%), repeating-radial-gradient(ellipse at 70% 80%, #66747b 0 8%, #101820 18% 28%); }
+.texture-slot__details { display: grid; align-content: start; gap: 2px; min-width: 0; }
+.texture-slot__details strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.texture-slot__details > span { color: #71717a; font-size: 9px; text-transform: capitalize; }
+.texture-slot__actions { display: flex; gap: 4px; margin-top: 3px; }
+.texture-slot__actions button, .texture-picker__import { padding: 3px 6px; color: #d4d4d8; background: #27272a; border: 1px solid #52525b; border-radius: 4px; cursor: pointer; font-size: 9px; }
+.texture-slot__file { display: none; }
+.texture-preview { display: grid; gap: 4px; width: 100%; margin-bottom: 8px; padding: 5px; color: #71717a; background: #18181b; border: 1px solid #3f3f46; border-radius: 5px; cursor: pointer; font-size: 9px; }
+.texture-preview img { aspect-ratio: 2 / 1; object-fit: contain; }
+.texture-picker { display: grid; gap: 6px; margin-bottom: 8px; padding: 7px; background: #18181b; border: 1px solid #3f3f46; border-radius: 5px; }
+.texture-picker__label { color: #71717a; font-size: 9px; text-transform: uppercase; }
+.texture-picker__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.texture-picker__grid button { display: grid; gap: 3px; min-width: 0; padding: 3px; color: #d4d4d8; background: #27272a; border: 1px solid #3f3f46; border-radius: 4px; cursor: pointer; font-size: 8px; }
+.texture-picker__grid img { aspect-ratio: 2 / 1; }
+.texture-picker__procedural { display: block; width: 100%; aspect-ratio: 2 / 1; border-radius: 2px; }
+.texture-picker__grid span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .editor-inspector__commands {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

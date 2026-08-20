@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sphereUvFromNormal } from "../src/pathtracer/sphereUv.ts";
+import { boxUvFromNormal, sphereUvFromNormal } from "../src/pathtracer/sphereUv.ts";
 
 function assertUv(
   direction: { x: number; y: number; z: number },
@@ -21,4 +21,11 @@ test("sphere UVs use +X as the horizontal center and -X as the seam", () => {
 test("sphere UVs map the poles to the vertical range", () => {
   assertUv({ x: 0, y: 1, z: 0 }, { u: 0.5, v: 1 });
   assertUv({ x: 0, y: -1, z: 0 }, { u: 0.5, v: 0 });
+});
+
+test("box UVs project each dominant sphere region onto a cube face", () => {
+  assert.deepEqual(boxUvFromNormal({ x: 1, y: 0, z: 0 }), { u: 0.5, v: 0.5 });
+  assert.deepEqual(boxUvFromNormal({ x: 0, y: 1, z: 0 }), { u: 0.5, v: 0.5 });
+  assert.deepEqual(boxUvFromNormal({ x: 0, y: 0, z: 1 }), { u: 0.5, v: 0.5 });
+  assert.deepEqual(boxUvFromNormal({ x: 0.5, y: 1, z: -0.5 }), { u: 0.75, v: 0.75 });
 });

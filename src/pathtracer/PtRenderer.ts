@@ -44,6 +44,13 @@ export default class PtRenderer {
   public uniforms: PtUniforms;
   private readonly sceneCompiler = new SceneCompiler();
   private gpuScene: GpuScene;
+  private readonly fallbackImageTexture = new THREE.DataTexture(
+    new Uint8Array([255, 0, 255, 255]),
+    1,
+    1,
+    THREE.RGBAFormat
+  );
+  private readonly watchedImageTextures = new WeakSet<THREE.Texture>();
 
   private cameraForward!: THREE.Vector3;
   private cameraUp!: THREE.Vector3;
@@ -91,6 +98,7 @@ export default class PtRenderer {
     this.camera = ptScene.camera;
 
     this.settings = settings;
+    this.fallbackImageTexture.needsUpdate = true;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
 
     this.setupRenderer();
@@ -98,6 +106,7 @@ export default class PtRenderer {
     this.setupCamera();
     this.uniforms = this.createUniforms();
     this.setupShaderCanvas();
+    this.watchImageTextures(this.gpuScene);
 
     // Setup Post Processing / Composer Passes
     const renderTarget = new THREE.WebGLRenderTarget(
@@ -134,6 +143,7 @@ export default class PtRenderer {
     this.gpuScene.dispose();
     this.ptScene = ptScene;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
+    this.watchImageTextures(this.gpuScene);
     this.camera = ptScene.camera;
     this.reset();
     if (invalidate) {
@@ -231,6 +241,7 @@ export default class PtRenderer {
     if (level >= PtInvalidationLevel.Material) {
       this.sceneCompiler.update(this.gpuScene, this.ptScene, level);
       this.updateSceneUniforms();
+      this.watchImageTextures(this.gpuScene);
       if (level === PtInvalidationLevel.Scene) this.updateShaderCanvas();
     }
     this.invalidationHistory.push({
@@ -372,6 +383,12 @@ export default class PtRenderer {
       uMaxRayDepth: { value: this.settings.maxRayDepth },
       uMaterials: { value: this.uniformMaterialValues() },
       uTextures: { value: this.uniformTextureValues() },
+      uImageTexture0: {
+        value: this.gpuScene.imageTextures[0] ?? this.fallbackImageTexture,
+      },
+      uImageTexture1: { value: this.gpuScene.imageTextures[1] ?? this.fallbackImageTexture },
+      uImageTexture2: { value: this.gpuScene.imageTextures[2] ?? this.fallbackImageTexture },
+      uImageTexture3: { value: this.gpuScene.imageTextures[3] ?? this.fallbackImageTexture },
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
       uEnableDoF: { value: this.settings.enableDepthOfField },
@@ -384,6 +401,10 @@ export default class PtRenderer {
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
     this.uniforms.uMaterials.value = this.uniformMaterialValues();
     this.uniforms.uTextures.value = this.uniformTextureValues();
+    this.uniforms.uImageTexture0.value = this.gpuScene.imageTextures[0] ?? this.fallbackImageTexture;
+    this.uniforms.uImageTexture1.value = this.gpuScene.imageTextures[1] ?? this.fallbackImageTexture;
+    this.uniforms.uImageTexture2.value = this.gpuScene.imageTextures[2] ?? this.fallbackImageTexture;
+    this.uniforms.uImageTexture3.value = this.gpuScene.imageTextures[3] ?? this.fallbackImageTexture;
   }
 
   private uniformSphereValues() {
@@ -392,6 +413,7 @@ export default class PtRenderer {
       position: new THREE.Vector3(),
       radius: 0,
       materialId: 0,
+      uvMapping: 0,
     };
     return Array.from(
       { length: capacity },
@@ -417,6 +439,19 @@ export default class PtRenderer {
       { length: capacity },
       (_, index) => this.gpuScene.textures[index] ?? fallback
     );
+  }
+
+  private watchImageTextures(gpuScene: GpuScene) {
+    for (const texture of gpuScene.imageTextures) {
+      if (this.watchedImageTextures.has(texture)) continue;
+      const loaded = texture.userData.pathTracerLoaded;
+      if (!(loaded instanceof Promise)) continue;
+      this.watchedImageTextures.add(texture);
+      loaded.then(() => {
+        if (this.gpuScene !== gpuScene) return;
+        this.invalidate(PtInvalidationLevel.Material, "image texture loaded");
+      });
+    }
   }
 
   private initializeComposerPasses() {
@@ -537,6 +572,7 @@ export default class PtRenderer {
 
     this.shaderCanvas.dispose();
     this.gpuScene.dispose();
+    this.fallbackImageTexture.dispose();
     this.disposePostProcessing();
     this.renderer.dispose();
   }

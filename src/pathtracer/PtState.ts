@@ -20,6 +20,15 @@ export interface PtSelectionMaterialState {
   color: string;
   roughness: number | null;
   ior: number | null;
+  texture: {
+    type: "constant" | "checker" | "image" | "perlin";
+    label: string;
+    source: string | null;
+    colorA: string | null;
+    colorB: string | null;
+    scale: number | null;
+    turbulence: number | null;
+  };
 }
 
 /** Serializable render and camera preferences. */
@@ -46,6 +55,7 @@ export interface PtSelectionState {
   sphereIndex: number | null;
   position: { x: number; y: number; z: number };
   radius: number | null;
+  uvMapping: "spherical" | "box" | null;
   material: PtSelectionMaterialState | null;
 }
 
@@ -93,6 +103,7 @@ export function createDefaultPtState(): PtState {
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,
+      uvMapping: null,
       material: null,
     },
     history: {

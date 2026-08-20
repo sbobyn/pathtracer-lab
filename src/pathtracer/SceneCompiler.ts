@@ -16,25 +16,26 @@ import PtScene, {
 
 export default class SceneCompiler {
   public compile(scene: PtScene): GpuScene {
-    const { materials, textures } = this.compileMaterialResources(scene);
+    const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
     return new GpuScene(
       this.compileSpheres(scene),
       materials,
-      textures
+      textures,
+      imageTextures
     );
   }
 
   public update(gpuScene: GpuScene, scene: PtScene, level: PtInvalidationLevel) {
     if (level === PtInvalidationLevel.Material) {
-      const { materials, textures } = this.compileMaterialResources(scene);
-      gpuScene.updateMaterials(materials, textures);
+      const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
+      gpuScene.updateMaterials(materials, textures, imageTextures);
       return;
     }
     if (level >= PtInvalidationLevel.Geometry) {
       gpuScene.updateSpheres(this.compileSpheres(scene));
       if (level === PtInvalidationLevel.Scene) {
-        const { materials, textures } = this.compileMaterialResources(scene);
-        gpuScene.updateMaterials(materials, textures);
+        const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
+        gpuScene.updateMaterials(materials, textures, imageTextures);
       }
     }
   }
@@ -44,29 +45,33 @@ export default class SceneCompiler {
       position: mesh.position.clone(),
       radius: sphereRadius(mesh),
       materialId: getMaterialMetadata(mesh.material).materialId,
+      uvMapping: mesh.userData.pathTracer.uvMapping,
     }));
   }
 
   private compileMaterialResources(scene: PtScene): {
     materials: GpuMaterial[];
     textures: GpuTexture[];
+    imageTextures: THREE.Texture[];
   } {
     const textures: GpuTexture[] = [];
+    const imageTextures: THREE.Texture[] = [];
     const materials = scene.getMaterials().map((material, uniformIndex) => {
       const metadata = getMaterialMetadata(material);
       if (metadata.materialId !== uniformIndex) {
         throw new Error(`Material IDs must be contiguous: ${metadata.materialId}`);
       }
       const textureId = textures.length;
-      textures.push(this.compileTexture(metadata.texture, material));
+      textures.push(this.compileTexture(metadata.texture, material, imageTextures));
       return this.compileMaterial(material, metadata.materialType, textureId);
     });
-    return { materials, textures };
+    return { materials, textures, imageTextures };
   }
 
   private compileTexture(
     texture: PtTexture,
-    previewMaterial: PtPreviewMaterial
+    previewMaterial: PtPreviewMaterial,
+    imageTextures: THREE.Texture[]
   ): GpuTexture {
     if (texture.type === PtTextureType.Checker) {
       return {
@@ -74,16 +79,31 @@ export default class SceneCompiler {
         colorA: texture.colorA.clone(),
         colorB: texture.colorB.clone(),
         scale: texture.scale,
+        turbulence: 0,
         imageId: -1,
       };
     }
     if (texture.type === PtTextureType.Image) {
+      if (!previewMaterial.map) throw new Error("Image texture is not loaded by its preview material");
+      const imageId = imageTextures.length;
+      imageTextures.push(previewMaterial.map);
       return {
         type: GpuTextureType.Image,
         colorA: new THREE.Color(1, 0, 1),
         colorB: new THREE.Color(),
         scale: 1,
-        imageId: 0,
+        turbulence: 0,
+        imageId,
+      };
+    }
+    if (texture.type === PtTextureType.Perlin) {
+      return {
+        type: GpuTextureType.Perlin,
+        colorA: texture.colorA.clone(),
+        colorB: texture.colorB.clone(),
+        scale: texture.scale,
+        turbulence: texture.turbulence,
+        imageId: -1,
       };
     }
     return {
@@ -91,6 +111,7 @@ export default class SceneCompiler {
       colorA: previewMaterial.color.clone(),
       colorB: new THREE.Color(),
       scale: 1,
+      turbulence: 0,
       imageId: -1,
     };
   }

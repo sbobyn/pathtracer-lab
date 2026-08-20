@@ -13,6 +13,19 @@ vec2 sphereUv(vec3 outwardNormal) {
     return vec2(u, v);
 }
 
+vec2 boxUv(vec3 normal) {
+    vec3 axis = abs(normal);
+    vec2 uv;
+    if (axis.x >= axis.y && axis.x >= axis.z) {
+        uv = normal.x >= 0.0 ? vec2(-normal.z, normal.y) : vec2(normal.z, normal.y);
+    } else if (axis.y >= axis.z) {
+        uv = normal.y >= 0.0 ? vec2(normal.x, -normal.z) : vec2(normal.x, normal.z);
+    } else {
+        uv = normal.z >= 0.0 ? vec2(normal.x, normal.y) : vec2(-normal.x, normal.y);
+    }
+    return uv * 0.5 + 0.5;
+}
+
 bool hitSphere(Sphere sphere, Ray ray, Interval rayInterval, out Hit hit) {
     vec3 toSphere = sphere.position - ray.origin;
     float a = lengthSquared(ray.direction);
@@ -29,7 +42,7 @@ bool hitSphere(Sphere sphere, Ray ray, Interval rayInterval, out Hit hit) {
     hit.t = root;
     hit.position = rayAt(ray, hit.t);
     vec3 outwardNormal = (hit.position - sphere.position) / sphere.radius;
-    hit.uv = sphereUv(outwardNormal);
+    hit.uv = sphere.uvMapping == 1 ? boxUv(outwardNormal) : sphereUv(outwardNormal);
     setFaceNormal(ray, outwardNormal, hit);
     return true;
 }

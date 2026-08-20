@@ -13,3 +13,23 @@ export function sphereUvFromNormal(normal: Direction3) {
   const v = Math.asin(Math.min(1, Math.max(-1, normal.y))) / Math.PI + 0.5;
   return { u, v };
 }
+
+/** Dominant-axis projection onto the six faces of an imaginary cube. */
+export function boxUvFromNormal(normal: Direction3) {
+  const x = Math.abs(normal.x);
+  const y = Math.abs(normal.y);
+  const z = Math.abs(normal.z);
+  let u: number;
+  let v: number;
+  if (x >= y && x >= z) {
+    u = normal.x >= 0 ? -normal.z : normal.z;
+    v = normal.y;
+  } else if (y >= z) {
+    u = normal.x;
+    v = normal.y >= 0 ? -normal.z : normal.z;
+  } else {
+    u = normal.z >= 0 ? normal.x : -normal.x;
+    v = normal.y;
+  }
+  return { u: u * 0.5 + 0.5, v: v * 0.5 + 0.5 };
+}

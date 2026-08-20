@@ -4,6 +4,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import * as THREE from "three";
@@ -12,6 +13,56 @@ import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState } from "./PtState";
 import { PresetPtScenes } from "./PresetPtScenes";
 import { computeNumberScrubValue } from "./numberScrub";
+import { builtinTextures } from "./BuiltinTextures";
+
+const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
+
+function readPersistedBoolean(key: string, fallback: boolean) {
+  try {
+    const stored = localStorage.getItem(editorUiStoragePrefix + key);
+    return stored === null ? fallback : stored === "true";
+  } catch {
+    return fallback;
+  }
+}
+
+function usePersistentBoolean(key: string, fallback: boolean) {
+  const [value, setValue] = useState(() => readPersistedBoolean(key, fallback));
+  const update = (next: boolean | ((current: boolean) => boolean)) => {
+    setValue((current) => {
+      const resolved = typeof next === "function" ? next(current) : next;
+      try {
+        localStorage.setItem(editorUiStoragePrefix + key, String(resolved));
+      } catch {
+        // Persistence is a convenience; the editor remains usable if storage is unavailable.
+      }
+      return resolved;
+    });
+  };
+  return [value, update] as const;
+}
+
+function PersistentDetails({
+  storageKey,
+  className,
+  defaultOpen = true,
+  children,
+}: {
+  storageKey: string;
+  className: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = usePersistentBoolean(`folder:${storageKey}`, defaultOpen);
+  return (
+    <details className={className} open={open} onToggle={(event) => {
+      const next = event.currentTarget.open;
+      if (next !== open) setOpen(next);
+    }}>
+      {children}
+    </details>
+  );
+}
 
 function commitSetting(actions: PtActions, label: string, update: () => void) {
   actions.beginSettingsEdit(label);
@@ -144,7 +195,7 @@ function SceneSettings({
   actions: PtActions;
 }) {
   return (
-    <details className="editor-panel" open>
+    <PersistentDetails className="editor-panel" storageKey="scene">
       <summary id="scene-settings-title">Scene</summary>
       <div className="editor-panel__content">
       <label className="editor-control">
@@ -206,7 +257,7 @@ function SceneSettings({
         Reset preferences
       </button>
       </div>
-    </details>
+    </PersistentDetails>
   );
 }
 
@@ -326,7 +377,7 @@ function CameraSettings({
 }) {
   const { settings } = state;
   return (
-    <details className="editor-panel" open>
+    <PersistentDetails className="editor-panel" storageKey="camera">
       <summary id="camera-settings-title">Camera</summary>
       <div className="editor-panel__content">
       <label className="editor-control editor-control--checkbox">
@@ -373,7 +424,7 @@ function CameraSettings({
       </label>
       </fieldset>
       </div>
-    </details>
+    </PersistentDetails>
   );
 }
 
@@ -385,7 +436,7 @@ function SceneHierarchy({
   actions: PtActions;
 }) {
   return (
-    <details className="editor-panel" open>
+    <PersistentDetails className="editor-panel" storageKey="hierarchy">
       <summary>Hierarchy</summary>
       <div className="editor-panel__content editor-hierarchy" role="tree">
         {state.sceneObjects.map((object) => (
@@ -412,7 +463,7 @@ function SceneHierarchy({
           </button>
         ))}
       </div>
-    </details>
+    </PersistentDetails>
   );
 }
 
@@ -473,6 +524,9 @@ function ObjectInspectorContent({
   actions: PtActions;
   renameFocusRequest: number;
 }) {
+  const [texturePickerOpen, setTexturePickerOpen] = useState(false);
+  const [texturePreviewOpen, setTexturePreviewOpen] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const selection = state.selection;
   const material = selection.material;
   if (selection.sphereIndex === null || selection.radius === null || !material) {
@@ -514,7 +568,7 @@ function ObjectInspectorContent({
           actions={actions}
           focusRequest={renameFocusRequest}
         />
-        <details className="editor-subpanel" open>
+        <PersistentDetails className="editor-subpanel" storageKey="object-transform">
           <summary>Transform</summary>
           {transformNumber("Position X", selection.position.x, (value) =>
             actions.setSelectedPosition("x", value)
@@ -528,24 +582,104 @@ function ObjectInspectorContent({
           {transformNumber("Radius", selection.radius, (value) =>
             actions.setSelectedRadius(value), 0
           )}
-        </details>
-        <details className="editor-subpanel" open>
-          <summary>Material · {material.kind}</summary>
           <label className="editor-control">
-            <span>Color</span>
-            <input
-              type="color"
-              value={material.color}
-              onFocus={() => actions.beginMaterialEdit(material.id)}
-              onChange={(event) =>
-                actions.setMaterialColor(
-                  material.id,
-                  new THREE.Color(event.currentTarget.value)
-                )
-              }
-              onBlur={() => actions.commitMaterialEdit()}
-            />
+            <span>UV mapping</span>
+            <select value={selection.uvMapping ?? "spherical"} onChange={(event) =>
+              actions.setSelectedUvMapping(event.currentTarget.value as "spherical" | "box")
+            }>
+              <option value="spherical">Spherical</option>
+              <option value="box">Box projection</option>
+            </select>
           </label>
+        </PersistentDetails>
+        <PersistentDetails className="editor-subpanel" storageKey="object-material">
+          <summary>Material · {material.kind}</summary>
+          <div className="texture-slot">
+            <button type="button" className={`texture-slot__preview texture-slot__preview--${material.texture.type}`} data-empty={material.texture.type === "constant"}
+              title={material.texture.source ? "Preview texture" : "Choose a texture"}
+              onClick={() => material.texture.source ? setTexturePreviewOpen((open) => !open) : setTexturePickerOpen((open) => !open)}>
+              {material.texture.source
+                ? <img src={material.texture.source} alt={`${material.texture.label} texture`} />
+                : material.texture.type === "constant" ? <span>None</span> : <span>{material.texture.label}</span>}
+            </button>
+            <div className="texture-slot__details">
+              <strong>{material.texture.label}</strong>
+              <span>{material.texture.type}</span>
+              <div className="texture-slot__actions">
+                <button type="button" onClick={() => setTexturePickerOpen((open) => !open)}>{material.texture.source ? "Replace" : "Choose"}</button>
+                {material.texture.source && <button type="button" onClick={() => actions.removeMaterialTexture(material.id)}>Remove</button>}
+              </div>
+            </div>
+            <input ref={fileInput} className="texture-slot__file" type="file" accept="image/*" onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (!file) return;
+              actions.setMaterialImage(material.id, URL.createObjectURL(file), file.name);
+              setTexturePickerOpen(false);
+              event.currentTarget.value = "";
+            }} />
+          </div>
+          {texturePreviewOpen && material.texture.source && (
+            <button type="button" className="texture-preview" onClick={() => setTexturePreviewOpen(false)}>
+              <img src={material.texture.source} alt={`${material.texture.label} full preview`} /><span>Click to close</span>
+            </button>
+          )}
+          {texturePickerOpen && (
+            <div className="texture-picker">
+              <span className="texture-picker__label">Built in</span>
+              <div className="texture-picker__grid">
+                <button type="button" onClick={() => { actions.setMaterialChecker(material.id); setTexturePickerOpen(false); }}>
+                  <span className="texture-picker__procedural texture-picker__procedural--checker" /><span>Checker</span>
+                </button>
+                <button type="button" onClick={() => { actions.setMaterialPerlin(material.id); setTexturePickerOpen(false); }}>
+                  <span className="texture-picker__procedural texture-picker__procedural--perlin" /><span>Perlin</span>
+                </button>
+                {builtinTextures.map((texture) => (
+                  <button type="button" key={texture.id} title={texture.label} onClick={() => {
+                    actions.setMaterialImage(material.id, texture.source, texture.label);
+                    setTexturePickerOpen(false);
+                  }}><img src={texture.source} alt="" /><span>{texture.label}</span></button>
+                ))}
+              </div>
+              <button type="button" className="texture-picker__import" onClick={() => fileInput.current?.click()}>Import image…</button>
+            </div>
+          )}
+          {(material.texture.type === "checker" || material.texture.type === "perlin") && (
+            <div className="procedural-texture-controls">
+              <label className="editor-control"><span>Color A</span><input type="color" value={material.texture.colorA!}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) => actions.setTextureColor(material.id, "colorA", new THREE.Color(event.currentTarget.value))}
+                onBlur={() => actions.commitMaterialEdit()} /></label>
+              <label className="editor-control"><span>Color B</span><input type="color" value={material.texture.colorB!}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) => actions.setTextureColor(material.id, "colorB", new THREE.Color(event.currentTarget.value))}
+                onBlur={() => actions.commitMaterialEdit()} /></label>
+              <label className="editor-control"><span>{material.texture.type === "checker" ? "Repeats" : "Scale"}</span><input type="number" min="0.1" step="0.1" value={material.texture.scale!}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) => Number.isFinite(event.currentTarget.valueAsNumber) && actions.setTextureScale(material.id, event.currentTarget.valueAsNumber)}
+                onBlur={() => actions.commitMaterialEdit()} /></label>
+              {material.texture.type === "perlin" && <label className="editor-control"><span>Turbulence</span><input type="number" min="0" step="0.5" value={material.texture.turbulence!}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) => Number.isFinite(event.currentTarget.valueAsNumber) && actions.setTextureTurbulence(material.id, event.currentTarget.valueAsNumber)}
+                onBlur={() => actions.commitMaterialEdit()} /></label>}
+            </div>
+          )}
+          {material.texture.type === "constant" && (
+            <label className="editor-control">
+              <span>Color</span>
+              <input
+                type="color"
+                value={material.color}
+                onFocus={() => actions.beginMaterialEdit(material.id)}
+                onChange={(event) =>
+                  actions.setMaterialColor(
+                    material.id,
+                    new THREE.Color(event.currentTarget.value)
+                  )
+                }
+                onBlur={() => actions.commitMaterialEdit()}
+              />
+            </label>
+          )}
           {material.roughness !== null && (
             <label className="editor-control">
               <span>Roughness</span>
@@ -586,7 +720,7 @@ function ObjectInspectorContent({
               />
             </label>
           )}
-        </details>
+        </PersistentDetails>
         <div className="editor-inspector__commands">
           <button type="button" onClick={() => actions.frameSelectedObject()}>
             Frame
@@ -611,7 +745,7 @@ function SelectedObjectInspector({
   actions: PtActions;
   renameFocusRequest: number;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = usePersistentBoolean("panel:object", false);
   const [size, setSize] = useState<PanelSize>(() =>
     clampPanelSize({ width: 260, height: 620 })
   );
@@ -796,7 +930,7 @@ function RenderPanel({
   state: Readonly<PtState>;
   actions: PtActions;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = usePersistentBoolean("panel:render", false);
   const fps = useFrameRate();
   return (
     <aside
@@ -879,7 +1013,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
     (listener) => actions.subscribe(listener),
     () => actions.getState()
   );
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = usePersistentBoolean("panel:scene", false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);

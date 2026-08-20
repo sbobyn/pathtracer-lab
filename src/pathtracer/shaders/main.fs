@@ -22,6 +22,10 @@ uniform World uWorld;
 uniform int uSphereCount;
 uniform Material uMaterials[MAX_SPHERES];
 uniform Texture uTextures[MAX_SPHERES];
+uniform sampler2D uImageTexture0;
+uniform sampler2D uImageTexture1;
+uniform sampler2D uImageTexture2;
+uniform sampler2D uImageTexture3;
 
 #include geometry.glsl
 #include random.glsl

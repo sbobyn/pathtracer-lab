@@ -16,6 +16,16 @@ import type {
 } from "./PtState";
 import { PtInvalidationLevel } from "./PtInvalidation";
 import CommandHistory from "./CommandHistory";
+import { findBuiltinTexture } from "./BuiltinTextures";
+import {
+  cloneTexture,
+  checkerTexture,
+  constantTexture,
+  imageTexture,
+  perlinTexture,
+  PtTextureType,
+  type PtTexture,
+} from "./PtTexture";
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
@@ -26,6 +36,7 @@ interface MaterialSnapshot {
   readonly color: number;
   readonly roughness?: number;
   readonly ior?: number;
+  readonly texture: PtTexture;
 }
 
 export default class PtActions {
@@ -387,6 +398,7 @@ export default class PtActions {
       objectName: `${source.userData.pathTracer.objectName} Copy`,
       primitiveIndex: scene.getSphereMeshes().length,
       primitiveType: "sphere",
+      uvMapping: source.userData.pathTracer.uvMapping,
     };
     const index = scene.intersectGroup.children.length;
 
@@ -438,6 +450,27 @@ export default class PtActions {
       `sphere ${sphereIndex} radius changed`
     );
     this.publishSelection();
+  }
+
+  public setSelectedUvMapping(mapping: "spherical" | "box") {
+    const object = this.selectedObject;
+    if (!object) return false;
+    const before = object.userData.pathTracer.uvMapping;
+    const after = mapping === "box" ? 1 : 0;
+    if (before === after) return false;
+    const apply = (value: 0 | 1) => {
+      object.userData.pathTracer.uvMapping = value;
+      this.renderer.invalidate(PtInvalidationLevel.Geometry, `sphere ${object.userData.pathTracer.primitiveIndex} UV mapping changed`);
+      if (this.selectedObject === object) this.publishSelection();
+    };
+    apply(after);
+    this.history.record({
+      label: `Set ${mapping} UV mapping`,
+      execute: () => apply(after),
+      undo: () => apply(before),
+    });
+    this.publishHistory();
+    return true;
   }
 
   public syncSelectedTransform() {
@@ -532,6 +565,58 @@ export default class PtActions {
     this.publishSelection();
   }
 
+  public setMaterialImage(materialId: number, source: string, label = "Image") {
+    this.commitMaterialEdit();
+    const before = this.captureMaterial(materialId);
+    const after = { ...before, texture: imageTexture(source) };
+    this.applyMaterial(materialId, after);
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} texture changed`);
+    this.history.record({
+      label: `Set ${label} texture`,
+      execute: () => this.applyMaterialHistory(materialId, after),
+      undo: () => this.applyMaterialHistory(materialId, before),
+    });
+    this.publishHistory();
+  }
+
+  public removeMaterialTexture(materialId: number) {
+    this.commitMaterialEdit();
+    const before = this.captureMaterial(materialId);
+    if (before.texture.type === PtTextureType.Constant) return false;
+    const after = { ...before, texture: constantTexture(before.color) };
+    this.applyMaterial(materialId, after);
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} texture removed`);
+    this.history.record({
+      label: "Remove texture",
+      execute: () => this.applyMaterialHistory(materialId, after),
+      undo: () => this.applyMaterialHistory(materialId, before),
+    });
+    this.publishHistory();
+    return true;
+  }
+
+  public setMaterialChecker(materialId: number) {
+    this.replaceMaterialTexture(materialId, checkerTexture(0x183a1d, 0xb7d66b, 10), "Checker");
+  }
+
+  public setMaterialPerlin(materialId: number) {
+    this.replaceMaterialTexture(materialId, perlinTexture(), "Perlin marble");
+  }
+
+  public setTextureColor(materialId: number, channel: "colorA" | "colorB", color: THREE.Color) {
+    this.updateProceduralTexture(materialId, (texture) => { texture[channel].copy(color); });
+  }
+
+  public setTextureScale(materialId: number, scale: number) {
+    this.updateProceduralTexture(materialId, (texture) => { texture.scale = scale; });
+  }
+
+  public setTextureTurbulence(materialId: number, turbulence: number) {
+    this.updateProceduralTexture(materialId, (texture) => {
+      if (texture.type === PtTextureType.Perlin) texture.turbulence = turbulence;
+    });
+  }
+
   public beginMaterialEdit(materialId: number) {
     if (this.pendingMaterial) return;
     this.pendingMaterial = {
@@ -592,7 +677,7 @@ export default class PtActions {
     const sphereIndex = selectedObject.userData.pathTracer.primitiveIndex;
     const { x, y, z } = selectedObject.position;
     const radius = sphereRadius(selectedObject);
-    const { materialId, materialType } = getMaterialMetadata(
+    const { materialId, materialType, texture } = getMaterialMetadata(
       selectedObject.material
     );
     const material = this.renderer.ptScene.getMaterial(materialId);
@@ -605,6 +690,7 @@ export default class PtActions {
         sphereIndex,
         position: { x, y, z },
         radius,
+        uvMapping: selectedObject.userData.pathTracer.uvMapping === 1 ? "box" : "spherical",
         material: {
           id: materialId,
           kind: materialKinds[materialType] ?? "Unknown",
@@ -617,6 +703,17 @@ export default class PtActions {
             material instanceof THREE.MeshPhysicalMaterial
               ? material.ior
               : null,
+          texture: {
+            type: texture.type === PtTextureType.Image ? "image" : texture.type === PtTextureType.Checker ? "checker" : texture.type === PtTextureType.Perlin ? "perlin" : "constant",
+            label: texture.type === PtTextureType.Image
+              ? (findBuiltinTexture(texture.source)?.label ?? "Imported image")
+              : texture.type === PtTextureType.Checker ? "Checker" : texture.type === PtTextureType.Perlin ? "Perlin marble" : "Solid color",
+            source: texture.type === PtTextureType.Image ? texture.source : null,
+            colorA: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin ? `#${texture.colorA.getHexString()}` : null,
+            colorB: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin ? `#${texture.colorB.getHexString()}` : null,
+            scale: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin ? texture.scale : null,
+            turbulence: texture.type === PtTextureType.Perlin ? texture.turbulence : null,
+          },
         },
       },
     }));
@@ -729,11 +826,13 @@ export default class PtActions {
         material instanceof THREE.MeshPhysicalMaterial
           ? material.ior
           : undefined,
+      texture: cloneTexture(getMaterialMetadata(material).texture),
     };
   }
 
   private applyMaterial(materialId: number, snapshot: MaterialSnapshot) {
     const material = this.renderer.ptScene.getMaterial(materialId);
+    this.renderer.ptScene.setMaterialTexture(materialId, cloneTexture(snapshot.texture));
     material.color.setHex(snapshot.color);
     if (
       snapshot.roughness !== undefined &&
@@ -755,10 +854,49 @@ export default class PtActions {
     }
   }
 
+  private applyMaterialHistory(materialId: number, snapshot: MaterialSnapshot) {
+    this.applyMaterial(materialId, snapshot);
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} texture history applied`);
+  }
+
+  private replaceMaterialTexture(materialId: number, texture: PtTexture, label: string) {
+    this.commitMaterialEdit();
+    const before = this.captureMaterial(materialId);
+    const after = { ...before, texture };
+    this.applyMaterial(materialId, after);
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} texture changed`);
+    this.history.record({
+      label: `Set ${label} texture`,
+      execute: () => this.applyMaterialHistory(materialId, after),
+      undo: () => this.applyMaterialHistory(materialId, before),
+    });
+    this.publishHistory();
+  }
+
+  private updateProceduralTexture(materialId: number, update: (texture: Extract<PtTexture, { type: PtTextureType.Checker | PtTextureType.Perlin }>) => void) {
+    this.beginMaterialEdit(materialId);
+    const metadata = getMaterialMetadata(this.renderer.ptScene.getMaterial(materialId));
+    if (metadata.texture.type !== PtTextureType.Checker && metadata.texture.type !== PtTextureType.Perlin) return;
+    const texture = cloneTexture(metadata.texture);
+    if (texture.type !== PtTextureType.Checker && texture.type !== PtTextureType.Perlin) return;
+    update(texture);
+    this.renderer.ptScene.setMaterialTexture(materialId, texture);
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} procedural texture changed`);
+    this.publishSelection();
+  }
+
   private materialsEqual(a: MaterialSnapshot, b: MaterialSnapshot) {
     return (
-      a.color === b.color && a.roughness === b.roughness && a.ior === b.ior
+      a.color === b.color && a.roughness === b.roughness && a.ior === b.ior &&
+      JSON.stringify(this.serializeTexture(a.texture)) === JSON.stringify(this.serializeTexture(b.texture))
     );
+  }
+
+  private serializeTexture(texture: PtTexture) {
+    if (texture.type === PtTextureType.Constant) return [texture.type, texture.color.getHex()];
+    if (texture.type === PtTextureType.Checker) return [texture.type, texture.colorA.getHex(), texture.colorB.getHex(), texture.scale];
+    if (texture.type === PtTextureType.Perlin) return [texture.type, texture.colorA.getHex(), texture.colorB.getHex(), texture.scale, texture.turbulence];
+    return [texture.type, texture.source];
   }
 
   private applySettings(settings: PtSettings) {
@@ -815,6 +953,7 @@ export default class PtActions {
       sphereIndex: null,
       position: { x: -1, y: -1, z: -1 },
       radius: null,
+      uvMapping: null,
       material: null,
     };
   }

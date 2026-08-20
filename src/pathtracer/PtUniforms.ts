@@ -24,6 +24,10 @@ export default interface PtUniforms {
   uMaxRayDepth: { value: number };
   uMaterials: { value: GpuMaterial[] };
   uTextures: { value: GpuTexture[] };
+  uImageTexture0: { value: THREE.Texture };
+  uImageTexture1: { value: THREE.Texture };
+  uImageTexture2: { value: THREE.Texture };
+  uImageTexture3: { value: THREE.Texture };
   uBackgroundColorTop: { value: THREE.Color };
   uBackgroundColorBottom: { value: THREE.Color };
   uEnableDoF: { value: boolean };
