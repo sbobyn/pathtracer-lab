@@ -2,6 +2,7 @@ import * as THREE from "three";
 import GpuScene, {
   GpuTextureType,
   type GpuMaterial,
+  type GpuQuad,
   type GpuSphere,
   type GpuTexture,
 } from "./GpuScene";
@@ -19,6 +20,7 @@ export default class SceneCompiler {
     const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
     return new GpuScene(
       this.compileSpheres(scene),
+      this.compileQuads(scene),
       materials,
       textures,
       imageTextures
@@ -33,6 +35,7 @@ export default class SceneCompiler {
     }
     if (level >= PtInvalidationLevel.Geometry) {
       gpuScene.updateSpheres(this.compileSpheres(scene));
+      gpuScene.updateQuads(this.compileQuads(scene));
       if (level === PtInvalidationLevel.Scene) {
         const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
         gpuScene.updateMaterials(materials, textures, imageTextures);
@@ -47,6 +50,19 @@ export default class SceneCompiler {
       materialId: getMaterialMetadata(mesh.material).materialId,
       uvMapping: mesh.userData.pathTracer.uvMapping,
     }));
+  }
+
+  private compileQuads(scene: PtScene): GpuQuad[] {
+    return scene.getQuadMeshes().map((mesh) => {
+      const quad = mesh.userData.pathTracer.quad;
+      return {
+        q: quad.q.clone(),
+        u: quad.u.clone(),
+        v: quad.v.clone(),
+        normal: new THREE.Vector3().crossVectors(quad.u, quad.v).normalize(),
+        materialId: quad.materialId,
+      };
+    });
   }
 
   private compileMaterialResources(scene: PtScene): {

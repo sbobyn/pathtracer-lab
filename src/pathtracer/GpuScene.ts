@@ -8,6 +8,14 @@ export interface GpuSphere {
   uvMapping: number;
 }
 
+export interface GpuQuad {
+  q: THREE.Vector3;
+  u: THREE.Vector3;
+  v: THREE.Vector3;
+  normal: THREE.Vector3;
+  materialId: number;
+}
+
 export enum GpuTextureType {
   Constant = 0,
   Checker = 1,
@@ -33,6 +41,7 @@ export interface GpuMaterial {
 
 export default class GpuScene {
   public spheres: GpuSphere[];
+  public quads: GpuQuad[];
   public materials: GpuMaterial[];
   public textures: GpuTexture[];
   public imageTextures: THREE.Texture[];
@@ -40,11 +49,13 @@ export default class GpuScene {
 
   constructor(
     spheres: GpuSphere[],
+    quads: GpuQuad[],
     materials: GpuMaterial[],
     textures: GpuTexture[],
     imageTextures: THREE.Texture[]
   ) {
     this.spheres = spheres;
+    this.quads = quads;
     this.materials = materials;
     this.textures = textures;
     this.imageTextures = imageTextures;
@@ -53,6 +64,11 @@ export default class GpuScene {
   public updateSpheres(spheres: GpuSphere[]) {
     this.assertUsable();
     this.spheres = spheres;
+  }
+
+  public updateQuads(quads: GpuQuad[]) {
+    this.assertUsable();
+    this.quads = quads;
   }
 
   public updateMaterials(
@@ -70,6 +86,7 @@ export default class GpuScene {
     if (this.disposed) return;
     this.disposed = true;
     this.spheres = [];
+    this.quads = [];
     this.materials = [];
     this.textures = [];
     this.imageTextures = [];

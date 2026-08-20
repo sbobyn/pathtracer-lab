@@ -47,6 +47,28 @@ bool hitSphere(Sphere sphere, Ray ray, Interval rayInterval, out Hit hit) {
     return true;
 }
 
+bool hitQuad(Quad quad, Ray ray, Interval rayInterval, out Hit hit) {
+    float denominator = dot(quad.normal, ray.direction);
+    if (abs(denominator) < 1e-8) return false;
+    float t = dot(quad.normal, quad.q - ray.origin) / denominator;
+    if (!intervalSurrounds(rayInterval, t)) return false;
+
+    vec3 planar = rayAt(ray, t) - quad.q;
+    vec3 crossUv = cross(quad.u, quad.v);
+    float crossLengthSquared = dot(crossUv, crossUv);
+    if (crossLengthSquared < 1e-12) return false;
+    vec3 w = crossUv / crossLengthSquared;
+    float alpha = dot(w, cross(planar, quad.v));
+    float beta = dot(w, cross(quad.u, planar));
+    if (alpha < 0.0 || alpha > 1.0 || beta < 0.0 || beta > 1.0) return false;
+
+    hit.t = t;
+    hit.position = rayAt(ray, t);
+    hit.uv = vec2(alpha, beta);
+    setFaceNormal(ray, quad.normal, hit);
+    return true;
+}
+
 bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
     Hit candidate;
     bool hitAnything = false;
@@ -59,6 +81,18 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             closestSoFar = candidate.t;
             hit = candidate;
             hit.materialId = sphere.materialId;
+            hit.primitiveId = i;
+        }
+    }
+    for (int i = 0; i < MAX_QUADS; i++) {
+        if (i >= uQuadCount) break;
+        Quad quad = world.quads[i];
+        if (hitQuad(quad, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+            hitAnything = true;
+            closestSoFar = candidate.t;
+            hit = candidate;
+            hit.materialId = quad.materialId;
+            hit.primitiveId = uSphereCount + i;
         }
     }
     return hitAnything;

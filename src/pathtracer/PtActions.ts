@@ -795,7 +795,20 @@ export default class PtActions {
         capability: "path traced",
       };
     });
-    return [...fixedObjects, ...spheres];
+    const quads: PtState["sceneObjects"] = this.renderer.ptScene
+      .getQuadMeshes()
+      .map((quad) => ({
+        id: quad.userData.pathTracer.objectId,
+        label: quad.userData.pathTracer.objectName,
+        kind: "quad" as const,
+        parentId: "group:traceables",
+        depth: 2,
+        sphereIndex: null,
+        selectable: false,
+        traceable: true,
+        capability: "path-traced quad",
+      }));
+    return [...fixedObjects, ...spheres, ...quads];
   }
 
   private publishSceneObjects() {

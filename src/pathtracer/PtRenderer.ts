@@ -274,10 +274,12 @@ export default class PtRenderer {
 
   private setupShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
+    const quadCapacity = this.quadUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
       fragmentShader: `#define MAX_SPHERES ${capacity}
+       #define MAX_QUADS ${quadCapacity}
        ${fragShader}`,
       uniforms: this.uniforms,
       renderer: this.renderer,
@@ -289,8 +291,10 @@ export default class PtRenderer {
 
   private updateShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
+    const quadCapacity = this.quadUniformCapacity();
     this.shaderCanvas
       .setShader(`#define MAX_SPHERES ${capacity}
+       #define MAX_QUADS ${quadCapacity}
        ${fragShader}`);
   }
 
@@ -300,6 +304,10 @@ export default class PtRenderer {
       this.gpuScene.spheres.length,
       this.gpuScene.materials.length
     );
+  }
+
+  private quadUniformCapacity() {
+    return Math.max(1, this.gpuScene.quads.length);
   }
 
   private setupControls() {
@@ -376,9 +384,11 @@ export default class PtRenderer {
       uWorld: {
         value: {
           spheres: this.uniformSphereValues(),
+          quads: this.uniformQuadValues(),
         },
       },
       uSphereCount: { value: this.gpuScene.spheres.length },
+      uQuadCount: { value: this.gpuScene.quads.length },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
       uMaterials: { value: this.uniformMaterialValues() },
@@ -398,7 +408,9 @@ export default class PtRenderer {
 
   private updateSceneUniforms() {
     this.uniforms.uWorld.value.spheres = this.uniformSphereValues();
+    this.uniforms.uWorld.value.quads = this.uniformQuadValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
+    this.uniforms.uQuadCount.value = this.gpuScene.quads.length;
     this.uniforms.uMaterials.value = this.uniformMaterialValues();
     this.uniforms.uTextures.value = this.uniformTextureValues();
     this.uniforms.uImageTexture0.value = this.gpuScene.imageTextures[0] ?? this.fallbackImageTexture;
@@ -419,6 +431,18 @@ export default class PtRenderer {
       { length: capacity },
       (_, index) => this.gpuScene.spheres[index] ?? padding
     );
+  }
+
+  private uniformQuadValues() {
+    const capacity = this.quadUniformCapacity();
+    const padding = {
+      q: new THREE.Vector3(),
+      u: new THREE.Vector3(1, 0, 0),
+      v: new THREE.Vector3(0, 1, 0),
+      normal: new THREE.Vector3(0, 0, 1),
+      materialId: 0,
+    };
+    return Array.from({ length: capacity }, (_, index) => this.gpuScene.quads[index] ?? padding);
   }
 
   private uniformMaterialValues() {

@@ -1,6 +1,9 @@
 #ifndef MAX_SPHERES
 #define MAX_SPHERES 1
 #endif
+#ifndef MAX_QUADS
+#define MAX_QUADS 1
+#endif
 
 precision highp float;
 #define PI 3.141592653
@@ -20,6 +23,7 @@ uniform vec2 uRandomSequence;
 uniform Camera uCamera;
 uniform World uWorld;
 uniform int uSphereCount;
+uniform int uQuadCount;
 uniform Material uMaterials[MAX_SPHERES];
 uniform Texture uTextures[MAX_SPHERES];
 uniform sampler2D uImageTexture0;

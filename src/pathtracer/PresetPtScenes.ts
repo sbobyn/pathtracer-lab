@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import PtScene from "./PtScene";
 import PtSphere from "./PtSphere";
+import PtQuad from "./PtQuad";
 import PtMaterial from "./PtMaterial";
 import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCamera";
 import { checkerTexture, imageTexture, perlinTexture } from "./PtTexture";
@@ -127,5 +128,47 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 48;
     return new PtScene(spheres, materials, camera);
+  },
+
+  QuadStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(0, checkerTexture(0x23324a, 0xd7e3f4, 12)),
+      new PtMaterial(0, imageTexture(textureStudyImage)),
+      new PtMaterial(0, perlinTexture(0x6f263d, 0xf0c987, 5, 8)),
+      new PtMaterial(1, new THREE.Color(0xd8dbe2), 0),
+    ];
+    const spheres = [
+      new PtSphere(new THREE.Vector3(-1.45, 0, 0.1), 0.5, 3),
+    ];
+    const quads = [
+      // Horizontal reference plane: +U runs right and +V runs away from camera.
+      new PtQuad(
+        new THREE.Vector3(-3, -0.5, 2),
+        new THREE.Vector3(6, 0, 0),
+        new THREE.Vector3(0, 0, -5),
+        0
+      ),
+      // Upright UV card facing the camera.
+      new PtQuad(
+        new THREE.Vector3(-1.1, -0.5, -1.35),
+        new THREE.Vector3(2.2, 0, 0),
+        new THREE.Vector3(0, 2, 0),
+        1
+      ),
+      // Slanted parallelogram exposes bounded-plane and conservative-AABB mistakes.
+      new PtQuad(
+        new THREE.Vector3(0.75, -0.5, 0.45),
+        new THREE.Vector3(1.35, 0, -0.9),
+        new THREE.Vector3(0, 1.5, 0),
+        2
+      ),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 1.1, 4.3),
+      lookAt: new THREE.Vector3(0, 0.35, -0.35),
+      far: 10000,
+    });
+    camera.fov = 48;
+    return new PtScene(spheres, materials, camera, quads);
   },
 };

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import PtSphere from "./PtSphere";
+import PtQuad from "./PtQuad";
 import PtMaterial, { PtMaterialType } from "./PtMaterial";
 import { PtTextureType, type PtTexture } from "./PtTexture";
 
@@ -24,6 +25,18 @@ export type PtSphereMesh = THREE.Mesh<
   };
 };
 
+export type PtQuadMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
+  userData: {
+    pathTracer: {
+      objectId: string;
+      objectName: string;
+      primitiveIndex: number;
+      primitiveType: "quad";
+      quad: PtQuad;
+    };
+  };
+};
+
 export default class PtScene {
   scene: THREE.Scene;
   intersectGroup: THREE.Group;
@@ -38,7 +51,8 @@ export default class PtScene {
   constructor(
     spheres: PtSphere[],
     materials: PtMaterial[],
-    camera: THREE.PerspectiveCamera
+    camera: THREE.PerspectiveCamera,
+    quads: PtQuad[] = []
   ) {
     this.camera = camera;
 
@@ -92,6 +106,22 @@ export default class PtScene {
       this.intersectGroup.add(sphereMesh);
     }
 
+    for (let i = 0; i < quads.length; i++) {
+      const quad = quads[i];
+      const material = this.previewMaterials.get(quad.materialId);
+      if (!material) throw new RangeError(`Unknown material ${quad.materialId} for quad ${i}`);
+      material.side = THREE.DoubleSide;
+      const quadMesh = new THREE.Mesh(createQuadGeometry(quad), material) as PtQuadMesh;
+      quadMesh.userData.pathTracer = {
+        objectId: THREE.MathUtils.generateUUID(),
+        objectName: `Quad ${i}`,
+        primitiveIndex: i,
+        primitiveType: "quad",
+        quad,
+      };
+      this.intersectGroup.add(quadMesh);
+    }
+
     this.intersectGroup.updateMatrixWorld();
     this.scene.add(this.intersectGroup);
   }
@@ -106,6 +136,14 @@ export default class PtScene {
         a.userData.pathTracer.primitiveIndex -
         b.userData.pathTracer.primitiveIndex
     );
+  }
+
+  public getQuadMeshes(): PtQuadMesh[] {
+    const quads: PtQuadMesh[] = [];
+    this.intersectGroup.traverse((object) => {
+      if (isPtQuadMesh(object)) quads.push(object);
+    });
+    return quads.sort((a, b) => a.userData.pathTracer.primitiveIndex - b.userData.pathTracer.primitiveIndex);
   }
 
   public insertSphereMesh(mesh: PtSphereMesh, index = this.intersectGroup.children.length) {
@@ -189,6 +227,10 @@ export function isPtSphereMesh(object: THREE.Object3D): object is PtSphereMesh {
   );
 }
 
+export function isPtQuadMesh(object: THREE.Object3D): object is PtQuadMesh {
+  return object instanceof THREE.Mesh && object.userData.pathTracer?.primitiveType === "quad";
+}
+
 export function sphereRadius(mesh: PtSphereMesh): number {
   return mesh.geometry.parameters.radius * mesh.scale.x;
 }
@@ -233,6 +275,22 @@ function createPreviewMaterial(
     texture: material.texture,
   };
   return previewMaterial;
+}
+
+function createQuadGeometry(quad: PtQuad) {
+  const p0 = quad.q;
+  const p1 = quad.q.clone().add(quad.u);
+  const p2 = quad.q.clone().add(quad.v);
+  const p3 = quad.q.clone().add(quad.u).add(quad.v);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    ...p0.toArray(), ...p1.toArray(), ...p2.toArray(), ...p3.toArray(),
+  ], 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+  geometry.setIndex([0, 1, 2, 2, 1, 3]);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  return geometry;
 }
 
 export function getMaterialMetadata(material: PtPreviewMaterial): {
