@@ -7,6 +7,12 @@ void setFaceNormal(Ray ray, vec3 outwardNormal, inout Hit hit) {
     hit.normal = hit.frontFace ? outwardNormal : -outwardNormal;
 }
 
+vec2 sphereUv(vec3 outwardNormal) {
+    float u = atan(outwardNormal.z, outwardNormal.x) / (2.0 * PI) + 0.5;
+    float v = asin(clamp(outwardNormal.y, -1.0, 1.0)) / PI + 0.5;
+    return vec2(u, v);
+}
+
 bool hitSphere(Sphere sphere, Ray ray, Interval rayInterval, out Hit hit) {
     vec3 toSphere = sphere.position - ray.origin;
     float a = lengthSquared(ray.direction);
@@ -22,7 +28,9 @@ bool hitSphere(Sphere sphere, Ray ray, Interval rayInterval, out Hit hit) {
     }
     hit.t = root;
     hit.position = rayAt(ray, hit.t);
-    setFaceNormal(ray, (hit.position - sphere.position) / sphere.radius, hit);
+    vec3 outwardNormal = (hit.position - sphere.position) / sphere.radius;
+    hit.uv = sphereUv(outwardNormal);
+    setFaceNormal(ray, outwardNormal, hit);
     return true;
 }
 

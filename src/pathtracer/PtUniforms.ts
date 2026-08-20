@@ -1,6 +1,5 @@
 import * as THREE from "three";
-import type PtMaterial from "./PtMaterial";
-import type { GpuSphere } from "./GpuScene";
+import type { GpuMaterial, GpuSphere, GpuTexture } from "./GpuScene";
 
 export default interface PtUniforms {
   uCamera: {
@@ -23,7 +22,8 @@ export default interface PtUniforms {
   uSphereCount: { value: number };
   uNumSamples: { value: number };
   uMaxRayDepth: { value: number };
-  uMaterials: { value: PtMaterial[] };
+  uMaterials: { value: GpuMaterial[] };
+  uTextures: { value: GpuTexture[] };
   uBackgroundColorTop: { value: THREE.Color };
   uBackgroundColorBottom: { value: THREE.Color };
   uEnableDoF: { value: boolean };

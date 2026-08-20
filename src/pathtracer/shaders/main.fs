@@ -21,9 +21,11 @@ uniform Camera uCamera;
 uniform World uWorld;
 uniform int uSphereCount;
 uniform Material uMaterials[MAX_SPHERES];
+uniform Texture uTextures[MAX_SPHERES];
 
 #include geometry.glsl
 #include random.glsl
+#include textures.glsl
 #include materials.glsl
 #include camera.glsl
 #include integrator.glsl

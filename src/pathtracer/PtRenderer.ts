@@ -371,6 +371,7 @@ export default class PtRenderer {
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
       uMaterials: { value: this.uniformMaterialValues() },
+      uTextures: { value: this.uniformTextureValues() },
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
       uEnableDoF: { value: this.settings.enableDepthOfField },
@@ -382,6 +383,7 @@ export default class PtRenderer {
     this.uniforms.uWorld.value.spheres = this.uniformSphereValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
     this.uniforms.uMaterials.value = this.uniformMaterialValues();
+    this.uniforms.uTextures.value = this.uniformTextureValues();
   }
 
   private uniformSphereValues() {
@@ -404,6 +406,16 @@ export default class PtRenderer {
     return Array.from(
       { length: capacity },
       (_, index) => this.gpuScene.materials[index] ?? fallback
+    );
+  }
+
+  private uniformTextureValues() {
+    const capacity = this.sceneUniformCapacity();
+    const fallback = this.gpuScene.textures[0];
+    if (!fallback) throw new Error("GpuScene requires at least one texture");
+    return Array.from(
+      { length: capacity },
+      (_, index) => this.gpuScene.textures[index] ?? fallback
     );
   }
 

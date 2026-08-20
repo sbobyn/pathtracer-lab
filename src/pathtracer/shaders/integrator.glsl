@@ -11,7 +11,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                 59.0 * float(depth) + 23.0
             );
             ray.direction = scatter(ray, hit, bounceSeed);
-            color *= uMaterials[hit.materialId].albedo;
+            color *= sampleTexture(uMaterials[hit.materialId].textureId, hit);
         } else {
             vec3 unitDirection = normalize(ray.direction);
             float blend = 0.5 * (unitDirection.y + 1.0);

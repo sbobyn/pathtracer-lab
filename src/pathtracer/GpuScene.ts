@@ -7,14 +7,37 @@ export interface GpuSphere {
   materialId: number;
 }
 
+export enum GpuTextureType {
+  Constant = 0,
+  Checker = 1,
+  Image = 2,
+}
+
+export interface GpuTexture {
+  type: GpuTextureType;
+  colorA: THREE.Color;
+  colorB: THREE.Color;
+  scale: number;
+  imageId: number;
+}
+
+export interface GpuMaterial {
+  type: PtMaterial["type"];
+  textureId: number;
+  fuzz: number;
+  ior: number;
+}
+
 export default class GpuScene {
   public spheres: GpuSphere[];
-  public materials: PtMaterial[];
+  public materials: GpuMaterial[];
+  public textures: GpuTexture[];
   private disposed = false;
 
-  constructor(spheres: GpuSphere[], materials: PtMaterial[]) {
+  constructor(spheres: GpuSphere[], materials: GpuMaterial[], textures: GpuTexture[]) {
     this.spheres = spheres;
     this.materials = materials;
+    this.textures = textures;
   }
 
   public updateSpheres(spheres: GpuSphere[]) {
@@ -22,9 +45,10 @@ export default class GpuScene {
     this.spheres = spheres;
   }
 
-  public updateMaterials(materials: PtMaterial[]) {
+  public updateMaterials(materials: GpuMaterial[], textures: GpuTexture[]) {
     this.assertUsable();
     this.materials = materials;
+    this.textures = textures;
   }
 
   public dispose() {
@@ -32,6 +56,7 @@ export default class GpuScene {
     this.disposed = true;
     this.spheres = [];
     this.materials = [];
+    this.textures = [];
   }
 
   private assertUsable() {

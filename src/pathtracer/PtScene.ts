@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import PtSphere from "./PtSphere";
 import PtMaterial, { PtMaterialType } from "./PtMaterial";
+import { PtTextureType, type PtTexture } from "./PtTexture";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
@@ -184,16 +185,22 @@ function createPreviewMaterial(
   materialId: number
 ): PtPreviewMaterial {
   let previewMaterial: PtPreviewMaterial;
+  const previewMap = createPreviewTexture(material.texture);
   if (material.type === 0) {
-    previewMaterial = new THREE.MeshLambertMaterial({ color: material.albedo });
+    previewMaterial = new THREE.MeshLambertMaterial({
+      color: material.albedo,
+      map: previewMap,
+    });
   } else if (material.type === 1) {
     previewMaterial = new THREE.MeshStandardMaterial({
       color: material.albedo,
+      map: previewMap,
       roughness: material.fuzz,
     });
   } else if (material.type === 2) {
     previewMaterial = new THREE.MeshPhysicalMaterial({
       color: material.albedo,
+      map: previewMap,
       metalness: 0,
       roughness: 0,
       ior: material.ior,
@@ -210,6 +217,7 @@ function createPreviewMaterial(
   previewMaterial.userData.pathTracer = {
     materialId,
     materialType: material.type,
+    texture: material.texture,
   };
   return previewMaterial;
 }
@@ -217,13 +225,31 @@ function createPreviewMaterial(
 export function getMaterialMetadata(material: PtPreviewMaterial): {
   materialId: number;
   materialType: PtMaterialType;
+  texture: PtTexture;
 } {
   const metadata = material.userData.pathTracer;
   if (
     typeof metadata?.materialId !== "number" ||
-    typeof metadata?.materialType !== "number"
+    typeof metadata?.materialType !== "number" ||
+    !metadata.texture
   ) {
     throw new TypeError("Material is missing path-tracing metadata");
   }
   return metadata;
+}
+
+function createPreviewTexture(texture: PtTexture): THREE.Texture | null {
+  if (texture.type !== PtTextureType.Checker) return null;
+  const colors = [texture.colorA, texture.colorB, texture.colorB, texture.colorA];
+  const data = new Uint8Array(colors.flatMap((color) => {
+    const hex = color.getHex(THREE.SRGBColorSpace);
+    return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255, 255];
+  }));
+  const map = new THREE.DataTexture(data, 2, 2, THREE.RGBAFormat);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(texture.scale / 2, texture.scale / 2);
+  map.needsUpdate = true;
+  return map;
 }

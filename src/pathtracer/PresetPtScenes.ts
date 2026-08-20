@@ -3,6 +3,7 @@ import PtScene from "./PtScene";
 import PtSphere from "./PtSphere";
 import PtMaterial from "./PtMaterial";
 import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCamera";
+import { checkerTexture } from "./PtTexture";
 
 export const PresetPtScenes: { [key: string]: () => PtScene } = {
   Part1Simple: () => {
@@ -100,6 +101,28 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 20;
 
+    return new PtScene(spheres, materials, camera);
+  },
+
+  TextureStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(0, checkerTexture(0x183a1d, 0xb7d66b, 16)),
+      new PtMaterial(0, new THREE.Color(0x315f9b)),
+      new PtMaterial(0, checkerTexture(0xf4ead5, 0xb84b3e, 12)),
+      new PtMaterial(1, new THREE.Color(0xc8cbd2), 0.08),
+    ];
+    const spheres: PtSphere[] = [
+      new PtSphere(new THREE.Vector3(0, -100.5, 0), 100, 0),
+      new PtSphere(new THREE.Vector3(-1.2, 0, 0), 0.5, 1),
+      new PtSphere(new THREE.Vector3(0, 0, 0), 0.5, 2),
+      new PtSphere(new THREE.Vector3(1.2, 0, 0), 0.5, 3),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 0.6, 3.2),
+      lookAt: new THREE.Vector3(0, 0.25, 0),
+      far: 10000,
+    });
+    camera.fov = 48;
     return new PtScene(spheres, materials, camera);
   },
 };
