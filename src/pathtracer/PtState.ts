@@ -1,5 +1,6 @@
 export type AccumulationFormat = "rgba8" | "rgba16f" | "rgba32f";
-export type TransformMode = "translate" | "scale";
+export type TransformMode = "translate" | "rotate" | "scale";
+export type TransformSpace = "global" | "local";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Unknown";
 
 export interface PtSceneObjectState {
@@ -9,6 +10,7 @@ export interface PtSceneObjectState {
   parentId: string | null;
   depth: number;
   sphereIndex: number | null;
+  quadIndex: number | null;
   selectable: boolean;
   traceable: boolean;
   capability: string;
@@ -46,6 +48,7 @@ export interface PtSettings {
   aperture: number;
   focusDistance: number;
   transformMode: TransformMode;
+  transformSpace: TransformSpace;
 }
 
 /** Serializable editor selection; Three.js objects remain outside the store. */
@@ -53,8 +56,13 @@ export interface PtSelectionState {
   objectId: string | null;
   name: string | null;
   sphereIndex: number | null;
+  quadIndex: number | null;
+  kind: "sphere" | "quad" | null;
   position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
   radius: number | null;
+  width: number | null;
+  height: number | null;
   uvMapping: "spherical" | "box" | null;
   material: PtSelectionMaterialState | null;
 }
@@ -90,6 +98,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   aperture: 0.0,
   focusDistance: 1.0,
   transformMode: "translate",
+  transformSpace: "global",
 });
 
 export function createDefaultPtState(): PtState {
@@ -101,8 +110,13 @@ export function createDefaultPtState(): PtState {
       objectId: null,
       name: null,
       sphereIndex: null,
+      quadIndex: null,
+      kind: null,
       position: { x: -1, y: -1, z: -1 },
+      rotation: { x: 0, y: 0, z: 0 },
       radius: null,
+      width: null,
+      height: null,
       uvMapping: null,
       material: null,
     },

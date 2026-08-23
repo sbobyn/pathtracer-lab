@@ -8,13 +8,13 @@ import {
   preferenceSnapshot,
   savePtPreferences,
 } from "./PtPreferences";
-import { isPtSphereMesh, type PtSphereMesh } from "./PtScene";
+import { isPtQuadMesh, isPtSphereMesh, type PtTraceableMesh } from "./PtScene";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
 import type { PtUiAdapter, PtUiFactory } from "./PtUiAdapter";
 
 export default class PtApp {
-  private selectedObject: PtSphereMesh | null = null;
+  private selectedObject: PtTraceableMesh | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly mouse = new THREE.Vector2();
   private intersectGroup: THREE.Group;
@@ -50,6 +50,15 @@ export default class PtApp {
       target instanceof HTMLTextAreaElement ||
       target instanceof HTMLSelectElement ||
       (target instanceof HTMLElement && target.isContentEditable);
+    if (!editingText && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const key = event.key.toLowerCase();
+      const mode = key === "g" ? "translate" : key === "r" ? "rotate" : key === "s" ? "scale" : null;
+      if (mode) {
+        this.actions.setTransformMode(mode);
+        event.preventDefault();
+        return;
+      }
+    }
     if (!editingText && event.shiftKey && event.key.toLowerCase() === "a") {
       this.actions.addSphere();
       event.preventDefault();
@@ -120,7 +129,7 @@ export default class PtApp {
     this.ui = createUi(this.actions);
 
     let currentSceneKey = initialState.sceneKey;
-    let currentSphereIndex: number | null = null;
+    let currentObjectId: string | null = null;
     let currentPreferences = JSON.stringify(preferenceSnapshot(initialState));
     this.unsubscribe = this.actions.subscribe((state) => {
       const nextPreferences = JSON.stringify(preferenceSnapshot(state));
@@ -134,18 +143,17 @@ export default class PtApp {
       }
       if (state.sceneKey !== currentSceneKey) {
         currentSceneKey = state.sceneKey;
-        currentSphereIndex = null;
+        currentObjectId = null;
         this.selectedObject = null;
         this.intersectGroup = this.ptRenderer.ptScene.intersectGroup;
       }
 
-      if (state.selection.sphereIndex === currentSphereIndex) return;
-      currentSphereIndex = state.selection.sphereIndex;
-      this.selectedObject =
-        currentSphereIndex === null
-          ? null
-          : this.ptRenderer.ptScene.getSphereMeshes()[currentSphereIndex] ??
-            null;
+      if (state.selection.objectId === currentObjectId) return;
+      currentObjectId = state.selection.objectId;
+      this.selectedObject = currentObjectId === null
+        ? null
+        : [...this.ptRenderer.ptScene.getSphereMeshes(), ...this.ptRenderer.ptScene.getQuadMeshes()]
+            .find((object) => object.userData.pathTracer.objectId === currentObjectId) ?? null;
     });
 
     window.addEventListener("pointerdown", this.pointerDownHandler, true);
@@ -188,13 +196,13 @@ export default class PtApp {
     );
     const object = intersection?.object;
 
-    if (!object || !isPtSphereMesh(object)) {
+    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object))) {
       this.selectedObject = null;
       this.actions.selectObject(null);
       return;
     }
 
-    const nextObject = object as PtSphereMesh;
+    const nextObject = object as PtTraceableMesh;
     if (nextObject === this.selectedObject) {
       this.selectedObject = null;
       this.actions.selectObject(null);

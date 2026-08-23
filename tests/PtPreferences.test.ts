@@ -23,13 +23,21 @@ test("loads valid versioned preferences over authoritative defaults", () => {
   storage.value = JSON.stringify({
     version: PT_PREFERENCES_VERSION,
     sceneKey: "Part1Final",
-    settings: { numSamples: 8, fov: 60, resolutionScale: 0.5 },
+    settings: {
+      numSamples: 8,
+      fov: 60,
+      resolutionScale: 0.5,
+      transformMode: "rotate",
+      transformSpace: "local",
+    },
   });
   const state = loadPtPreferences(storage, createDefaultPtState(), ["Part1Simple", "Part1Final"]);
   assert.equal(state.sceneKey, "Part1Final");
   assert.equal(state.settings.numSamples, 8);
   assert.equal(state.settings.fov, 60);
   assert.equal(state.settings.resolutionScale, 0.5);
+  assert.equal(state.settings.transformMode, "rotate");
+  assert.equal(state.settings.transformSpace, "local");
   assert.equal(state.settings.maxRayDepth, 10);
 });
 

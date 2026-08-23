@@ -478,6 +478,8 @@ function SceneHierarchy({
             onClick={() => {
               if (object.sphereIndex !== null) {
                 actions.selectSphere(object.sphereIndex);
+              } else if (object.quadIndex !== null) {
+                actions.selectQuad(object.quadIndex);
               }
             }}
           >
@@ -554,7 +556,7 @@ function ObjectInspectorContent({
   const fileInput = useRef<HTMLInputElement>(null);
   const selection = state.selection;
   const material = selection.material;
-  if (selection.sphereIndex === null || selection.radius === null || !material) {
+  if (!selection.kind || !material) {
     return null;
   }
 
@@ -562,7 +564,7 @@ function ObjectInspectorContent({
       <div className="object-inspector__content">
         <div className="editor-inspector__identity">
           <strong>{selection.name}</strong>
-          <span>Sphere · Path traced</span>
+          <span>{selection.kind === "sphere" ? "Sphere" : "Quad"} · Path traced</span>
         </div>
         <ObjectNameField
           objectId={selection.objectId!}
@@ -572,6 +574,15 @@ function ObjectInspectorContent({
         />
         <PersistentDetails className="editor-subpanel" storageKey="object-transform">
           <summary>Transform</summary>
+          <div className="editor-inspector__commands" aria-label="Transform mode">
+            <button type="button" aria-pressed={state.settings.transformMode === "translate"} title="Move (G)" onClick={() => actions.setTransformMode("translate")}>Move</button>
+            <button type="button" aria-pressed={state.settings.transformMode === "rotate"} title="Rotate (R)" onClick={() => actions.setTransformMode("rotate")}>Rotate</button>
+            <button type="button" aria-pressed={state.settings.transformMode === "scale"} title="Scale (S)" onClick={() => actions.setTransformMode("scale")}>Scale</button>
+          </div>
+          <div className="editor-inspector__commands" aria-label="Transform orientation">
+            <button type="button" aria-pressed={state.settings.transformSpace === "global"} onClick={() => actions.setTransformSpace("global")}>Global</button>
+            <button type="button" aria-pressed={state.settings.transformSpace === "local"} onClick={() => actions.setTransformSpace("local")}>Local</button>
+          </div>
           <VectorField
             label="Position"
             value={[
@@ -593,7 +604,26 @@ function ObjectInspectorContent({
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
           />
-          <EditorNumberField
+          {selection.kind === "quad" && (
+            <VectorField
+              label="Rotation"
+              value={[selection.rotation.x, selection.rotation.y, selection.rotation.z]}
+              step={1}
+              precisionStep={0.1}
+              snapInterval={15}
+              min={-360}
+              max={360}
+              sensitivity={1 * pathTracerScrubSpeed}
+              density="compact"
+              onComponentChange={(index, value) => {
+                actions.beginSelectedTransform();
+                actions.setSelectedRotation((['x', 'y', 'z'] as const)[index], value);
+              }}
+              onCommit={() => actions.commitSelectedTransform()}
+              onCancel={() => actions.cancelSelectedTransform()}
+            />
+          )}
+          {selection.radius !== null && <EditorNumberField
             label="Radius"
             value={selection.radius}
             min={0.001}
@@ -610,8 +640,38 @@ function ObjectInspectorContent({
             }}
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
-          />
-          <SelectField
+          />}
+          {selection.width !== null && <EditorNumberField
+            label="Width"
+            value={selection.width}
+            min={0.001}
+            max={10000}
+            step={0.01}
+            precisionStep={0.001}
+            snapInterval={1}
+            sensitivity={10 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => actions.setSelectedQuadSize("width", value)}
+            onCommit={() => actions.commitSelectedTransform()}
+            onCancel={() => actions.cancelSelectedTransform()}
+          />}
+          {selection.height !== null && <EditorNumberField
+            label="Height"
+            value={selection.height}
+            min={0.001}
+            max={10000}
+            step={0.01}
+            precisionStep={0.001}
+            snapInterval={1}
+            sensitivity={10 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => actions.setSelectedQuadSize("height", value)}
+            onCommit={() => actions.commitSelectedTransform()}
+            onCancel={() => actions.cancelSelectedTransform()}
+          />}
+          {selection.kind === "sphere" && <SelectField
             label="UV mapping"
             value={selection.uvMapping ?? "spherical"}
             options={[
@@ -623,7 +683,7 @@ function ObjectInspectorContent({
             onChange={(value) =>
               actions.setSelectedUvMapping(value as "spherical" | "box")
             }
-          />
+          />}
         </PersistentDetails>
         <PersistentDetails className="editor-subpanel" storageKey="object-material">
           <summary>Material · {material.kind}</summary>
@@ -823,7 +883,7 @@ function SelectedObjectInspector({
     if (renameFocusRequest > 0) setCollapsed(false);
   }, [renameFocusRequest]);
 
-  if (state.selection.sphereIndex === null) return null;
+  if (state.selection.objectId === null) return null;
 
   const beginResize = (
     axis: ResizeAxis,
@@ -1034,8 +1094,8 @@ function CreationMenu({
       <button type="button" role="menuitem" onClick={() => run(() => actions.addSphere())}>
         <span>Add sphere</span><kbd>⇧A</kbd>
       </button>
-      <button type="button" role="menuitem" disabled title="Available after quad support">
-        <span>Add quad</span><small>Authoring coming soon</small>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addQuad())}>
+        <span>Add quad</span>
       </button>
       <button type="button" role="menuitem" disabled title="Available after triangle support">
         <span>Import mesh</span><small>Not traceable yet</small>

@@ -3,8 +3,10 @@ import { PresetPtScenes } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
 import {
   getMaterialMetadata,
+  isPtQuadMesh,
+  isPtSphereMesh,
   sphereRadius,
-  type PtSphereMesh,
+  type PtTraceableMesh,
 } from "./PtScene";
 import PtStore from "./PtStore";
 import type { PtStateListener } from "./PtStore";
@@ -13,6 +15,7 @@ import type {
   PtSettings,
   PtState,
   TransformMode,
+  TransformSpace,
 } from "./PtState";
 import { PtInvalidationLevel } from "./PtInvalidation";
 import CommandHistory from "./CommandHistory";
@@ -29,6 +32,7 @@ import {
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
+  readonly quaternion: THREE.Quaternion;
   readonly scale: THREE.Vector3;
 }
 
@@ -40,10 +44,10 @@ interface MaterialSnapshot {
 }
 
 export default class PtActions {
-  private selectedObject: PtSphereMesh | null = null;
+  private selectedObject: PtTraceableMesh | null = null;
   private readonly history = new CommandHistory(100);
   private pendingTransform: {
-    object: PtSphereMesh;
+    object: PtTraceableMesh;
     before: TransformSnapshot;
   } | null = null;
   private pendingMaterial: {
@@ -55,6 +59,7 @@ export default class PtActions {
     before: PtSettings;
   } | null = null;
   private nextSphereName = 0;
+  private nextQuadName = 0;
 
   constructor(
     private readonly store: PtStore,
@@ -62,6 +67,11 @@ export default class PtActions {
     private readonly resetPreferencesAction: () => void = () => {}
   ) {
     this.nextSphereName = renderer.ptScene.getSphereMeshes().length;
+    this.nextQuadName = renderer.ptScene.getQuadMeshes().length;
+    this.renderer.transformControls.mode = this.store.getState().settings.transformMode;
+    this.renderer.transformControls.space =
+      this.store.getState().settings.transformSpace === "global" ? "world" : "local";
+    this.configureTransformControls();
     this.publishSceneObjects();
   }
 
@@ -123,7 +133,6 @@ export default class PtActions {
     this.renderer.setFov(scene.camera.fov, false);
     this.renderer.setDepthOfFieldEnabled(false, false);
     this.renderer.setNumSamples(1, false);
-    this.setTransformMode("translate");
 
     this.store.update((state) => ({
       ...state,
@@ -135,7 +144,6 @@ export default class PtActions {
         fov: scene.camera.fov,
         numSamples: 1,
         enableDepthOfField: false,
-        transformMode: "translate",
       },
       selection: this.emptySelection(),
       sceneObjects: this.createSceneObjectState(sceneKey),
@@ -144,6 +152,7 @@ export default class PtActions {
     this.publishHistory();
     this.renderer.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
     this.nextSphereName = scene.getSphereMeshes().length;
+    this.nextQuadName = scene.getQuadMeshes().length;
   }
 
   public setPathtracingEnabled(enabled: boolean) {
@@ -252,13 +261,16 @@ export default class PtActions {
 
   public setTransformMode(mode: TransformMode) {
     this.renderer.transformControls.mode = mode;
-    const scaling = mode === "scale";
-    this.renderer.transformControls.showY = !scaling;
-    this.renderer.transformControls.showZ = !scaling;
+    this.configureTransformControls();
     this.updateSetting("transformMode", mode);
   }
 
-  public selectObject(object: PtSphereMesh | null) {
+  public setTransformSpace(space: TransformSpace) {
+    this.renderer.transformControls.space = space === "global" ? "world" : "local";
+    this.updateSetting("transformSpace", space);
+  }
+
+  public selectObject(object: PtTraceableMesh | null) {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     this.selectedObject = object;
@@ -274,6 +286,7 @@ export default class PtActions {
 
     this.renderer.outlinePass.selectedObjects = [object];
     this.renderer.transformControls.attach(object);
+    this.configureTransformControls();
     this.publishSelection();
   }
 
@@ -284,6 +297,13 @@ export default class PtActions {
         (sphere) =>
           sphere.userData.pathTracer.primitiveIndex === sphereIndex
       );
+    this.selectObject(object ?? null);
+  }
+
+  public selectQuad(quadIndex: number) {
+    const object = this.renderer.ptScene
+      .getQuadMeshes()
+      .find((quad) => quad.userData.pathTracer.primitiveIndex === quadIndex);
     this.selectObject(object ?? null);
   }
 
@@ -327,6 +347,45 @@ export default class PtActions {
     return true;
   }
 
+  public addQuad() {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+    const rotation = this.renderer.camera.quaternion.clone();
+    const object = scene.createQuadMesh(
+      position,
+      rotation,
+      1,
+      1,
+      0,
+      `Quad ${this.nextQuadName++}`
+    );
+    const index = scene.intersectGroup.children.length;
+    const insert = () => {
+      scene.insertQuadMesh(object, index);
+      this.publishSceneObjects();
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "quad added");
+    };
+    const remove = () => {
+      scene.removeQuadMesh(object);
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "added quad removed");
+    };
+    insert();
+    this.history.record({
+      label: `Add ${object.userData.pathTracer.objectName}`,
+      execute: insert,
+      undo: remove,
+    });
+    this.publishHistory();
+    return true;
+  }
+
   public renameSelectedObject(nextName: string) {
     const object = this.selectedObject;
     const name = nextName.trim();
@@ -350,7 +409,7 @@ export default class PtActions {
 
   public frameSelectedObject() {
     if (!this.selectedObject) return false;
-    this.renderer.frameSphere(this.selectedObject);
+    this.renderer.frameObject(this.selectedObject);
     return true;
   }
 
@@ -364,13 +423,15 @@ export default class PtActions {
     if (index < 0) return false;
 
     const remove = () => {
-      scene.removeSphereMesh(object);
+      if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
+      else scene.removeQuadMesh(object);
       this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
-      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere removed");
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "object removed");
     };
     const restore = () => {
-      scene.insertSphereMesh(object, index);
+      if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
+      else scene.insertQuadMesh(object, index);
       this.publishSceneObjects();
       this.selectObject(object);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere restored");
@@ -378,7 +439,7 @@ export default class PtActions {
 
     remove();
     this.history.record({
-      label: `Remove sphere ${index}`,
+      label: `Remove ${object.userData.pathTracer.objectName}`,
       execute: remove,
       undo: restore,
     });
@@ -392,24 +453,33 @@ export default class PtActions {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
-    const object = source.clone() as PtSphereMesh;
-    object.userData.pathTracer = {
-      objectId: THREE.MathUtils.generateUUID(),
-      objectName: `${source.userData.pathTracer.objectName} Copy`,
-      primitiveIndex: scene.getSphereMeshes().length,
-      primitiveType: "sphere",
-      uvMapping: source.userData.pathTracer.uvMapping,
-    };
+    const object = source.clone() as PtTraceableMesh;
+    object.userData.pathTracer = isPtSphereMesh(source)
+      ? {
+          objectId: THREE.MathUtils.generateUUID(),
+          objectName: `${source.userData.pathTracer.objectName} Copy`,
+          primitiveIndex: scene.getSphereMeshes().length,
+          primitiveType: "sphere",
+          uvMapping: source.userData.pathTracer.uvMapping,
+        }
+      : {
+          objectId: THREE.MathUtils.generateUUID(),
+          objectName: `${source.userData.pathTracer.objectName} Copy`,
+          primitiveIndex: scene.getQuadMeshes().length,
+          primitiveType: "quad",
+        };
     const index = scene.intersectGroup.children.length;
 
     const insert = () => {
-      scene.insertSphereMesh(object, index);
+      if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
+      else scene.insertQuadMesh(object, index);
       this.publishSceneObjects();
       this.selectObject(object);
-      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere duplicated");
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "object duplicated");
     };
     const remove = () => {
-      scene.removeSphereMesh(object);
+      if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
+      else scene.removeQuadMesh(object);
       this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
       this.renderer.invalidate(
@@ -420,7 +490,7 @@ export default class PtActions {
 
     insert();
     this.history.record({
-      label: `Duplicate sphere ${source.userData.pathTracer.primitiveIndex}`,
+      label: `Duplicate ${source.userData.pathTracer.objectName}`,
       execute: insert,
       undo: remove,
     });
@@ -440,7 +510,7 @@ export default class PtActions {
   }
 
   public setSelectedRadius(radius: number) {
-    if (!this.selectedObject) return;
+    if (!this.selectedObject || !isPtSphereMesh(this.selectedObject)) return;
     this.beginSelectedTransform();
     const sphereIndex = this.selectedObject.userData.pathTracer.primitiveIndex;
     const scale = radius / this.selectedObject.geometry.parameters.radius;
@@ -452,9 +522,25 @@ export default class PtActions {
     this.publishSelection();
   }
 
+  public setSelectedQuadSize(axis: "width" | "height", value: number) {
+    if (!this.selectedObject || !isPtQuadMesh(this.selectedObject)) return;
+    this.beginSelectedTransform();
+    this.selectedObject.scale[axis === "width" ? "x" : "y"] = value;
+    this.renderer.invalidate(PtInvalidationLevel.Geometry, `quad ${axis} changed`);
+    this.publishSelection();
+  }
+
+  public setSelectedRotation(axis: "x" | "y" | "z", degrees: number) {
+    if (!this.selectedObject) return;
+    this.beginSelectedTransform();
+    this.selectedObject.rotation[axis] = THREE.MathUtils.degToRad(degrees);
+    this.renderer.invalidate(PtInvalidationLevel.Geometry, "object rotation changed");
+    this.publishSelection();
+  }
+
   public setSelectedUvMapping(mapping: "spherical" | "box") {
     const object = this.selectedObject;
-    if (!object) return false;
+    if (!object || !isPtSphereMesh(object)) return false;
     const before = object.userData.pathTracer.uvMapping;
     const after = mapping === "box" ? 1 : 0;
     if (before === after) return false;
@@ -475,7 +561,7 @@ export default class PtActions {
 
   public syncSelectedTransform() {
     if (!this.selectedObject) return;
-    if (this.renderer.transformControls.mode === "scale") {
+    if (isPtSphereMesh(this.selectedObject) && this.renderer.transformControls.mode === "scale") {
       const scale = this.selectedObject.scale.x;
       this.selectedObject.scale.setScalar(scale);
     }
@@ -500,6 +586,7 @@ export default class PtActions {
 
     const apply = (snapshot: TransformSnapshot) => {
       pending.object.position.copy(snapshot.position);
+      pending.object.quaternion.copy(snapshot.quaternion);
       pending.object.scale.copy(snapshot.scale);
       this.renderer.invalidate(
         PtInvalidationLevel.Geometry,
@@ -522,6 +609,7 @@ export default class PtActions {
     this.pendingTransform = null;
     if (!pending) return false;
     pending.object.position.copy(pending.before.position);
+    pending.object.quaternion.copy(pending.before.quaternion);
     pending.object.scale.copy(pending.before.scale);
     this.renderer.invalidate(
       PtInvalidationLevel.Geometry,
@@ -674,9 +762,12 @@ export default class PtActions {
   private publishSelection() {
     if (!this.selectedObject) return;
     const selectedObject = this.selectedObject;
-    const sphereIndex = selectedObject.userData.pathTracer.primitiveIndex;
+    const sphere = isPtSphereMesh(selectedObject);
+    const sphereIndex = sphere ? selectedObject.userData.pathTracer.primitiveIndex : null;
+    const quadIndex = isPtQuadMesh(selectedObject) ? selectedObject.userData.pathTracer.primitiveIndex : null;
     const { x, y, z } = selectedObject.position;
-    const radius = sphereRadius(selectedObject);
+    const radius = sphere ? sphereRadius(selectedObject) : null;
+    const rotation = selectedObject.rotation;
     const { materialId, materialType, texture } = getMaterialMetadata(
       selectedObject.material
     );
@@ -688,9 +779,20 @@ export default class PtActions {
         objectId: selectedObject.userData.pathTracer.objectId,
         name: selectedObject.userData.pathTracer.objectName,
         sphereIndex,
+        quadIndex,
+        kind: sphere ? "sphere" : "quad",
         position: { x, y, z },
+        rotation: {
+          x: THREE.MathUtils.radToDeg(rotation.x),
+          y: THREE.MathUtils.radToDeg(rotation.y),
+          z: THREE.MathUtils.radToDeg(rotation.z),
+        },
         radius,
-        uvMapping: selectedObject.userData.pathTracer.uvMapping === 1 ? "box" : "spherical",
+        width: isPtQuadMesh(selectedObject) ? selectedObject.scale.x : null,
+        height: isPtQuadMesh(selectedObject) ? selectedObject.scale.y : null,
+        uvMapping: sphere
+          ? selectedObject.userData.pathTracer.uvMapping === 1 ? "box" : "spherical"
+          : null,
         material: {
           id: materialId,
           kind: materialKinds[materialType] ?? "Unknown",
@@ -730,6 +832,7 @@ export default class PtActions {
         parentId: null,
         depth: 0,
         sphereIndex: null,
+        quadIndex: null,
         selectable: false,
         traceable: false,
         capability: "scene",
@@ -741,6 +844,7 @@ export default class PtActions {
         parentId: "scene:root",
         depth: 1,
         sphereIndex: null,
+        quadIndex: null,
         selectable: false,
         traceable: true,
         capability: "path-tracing camera",
@@ -752,6 +856,7 @@ export default class PtActions {
         parentId: "scene:root",
         depth: 1,
         sphereIndex: null,
+        quadIndex: null,
         selectable: false,
         traceable: false,
         capability: "preview lighting",
@@ -763,6 +868,7 @@ export default class PtActions {
         parentId: "scene:root",
         depth: 1,
         sphereIndex: null,
+        quadIndex: null,
         selectable: false,
         traceable: false,
         capability: "preview lighting",
@@ -774,6 +880,7 @@ export default class PtActions {
         parentId: "scene:root",
         depth: 1,
         sphereIndex: null,
+        quadIndex: null,
         selectable: false,
         traceable: false,
         capability: "group",
@@ -790,6 +897,7 @@ export default class PtActions {
         parentId: "group:traceables",
         depth: 2,
         sphereIndex,
+        quadIndex: null,
         selectable: true,
         traceable: true,
         capability: "path traced",
@@ -804,7 +912,8 @@ export default class PtActions {
         parentId: "group:traceables",
         depth: 2,
         sphereIndex: null,
-        selectable: false,
+        quadIndex: quad.userData.pathTracer.primitiveIndex,
+        selectable: true,
         traceable: true,
         capability: "path-traced quad",
       }));
@@ -816,15 +925,24 @@ export default class PtActions {
     this.store.update((state) => ({ ...state, sceneObjects }));
   }
 
-  private captureTransform(object: PtSphereMesh): TransformSnapshot {
+  private captureTransform(object: PtTraceableMesh): TransformSnapshot {
     return {
       position: object.position.clone(),
+      quaternion: object.quaternion.clone(),
       scale: object.scale.clone(),
     };
   }
 
   private transformsEqual(a: TransformSnapshot, b: TransformSnapshot) {
-    return a.position.equals(b.position) && a.scale.equals(b.scale);
+    return a.position.equals(b.position) && a.quaternion.equals(b.quaternion) && a.scale.equals(b.scale);
+  }
+
+  private configureTransformControls() {
+    const mode = this.renderer.transformControls.mode;
+    const sphere = this.selectedObject ? isPtSphereMesh(this.selectedObject) : false;
+    this.renderer.transformControls.showX = true;
+    this.renderer.transformControls.showY = mode !== "scale" || !sphere;
+    this.renderer.transformControls.showZ = mode !== "scale";
   }
 
   private captureMaterial(materialId: number): MaterialSnapshot {
@@ -951,6 +1069,9 @@ export default class PtActions {
     if (current.transformMode !== settings.transformMode) {
       this.setTransformMode(settings.transformMode);
     }
+    if (current.transformSpace !== settings.transformSpace) {
+      this.setTransformSpace(settings.transformSpace);
+    }
   }
 
   private settingsEqual(a: PtSettings, b: PtSettings) {
@@ -964,8 +1085,13 @@ export default class PtActions {
       objectId: null,
       name: null,
       sphereIndex: null,
+      quadIndex: null,
+      kind: null,
       position: { x: -1, y: -1, z: -1 },
+      rotation: { x: 0, y: 0, z: 0 },
       radius: null,
+      width: null,
+      height: null,
       uvMapping: null,
       material: null,
     };

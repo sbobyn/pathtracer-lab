@@ -10,7 +10,7 @@ import {
   TransformControls,
   OrbitControls,
 } from "three/examples/jsm/Addons.js";
-import PtScene, { sphereRadius, type PtSphereMesh } from "./PtScene";
+import PtScene, { type PtTraceableMesh } from "./PtScene";
 import type { PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
 import {
@@ -223,18 +223,21 @@ export default class PtRenderer {
     );
   }
 
-  public frameSphere(sphere: PtSphereMesh) {
+  public frameObject(object: PtTraceableMesh) {
+    const bounds = new THREE.Box3().setFromObject(object);
+    const center = bounds.getCenter(new THREE.Vector3());
+    const radius = Math.max(0.001, bounds.getBoundingSphere(new THREE.Sphere()).radius);
     const viewDirection = this.camera.position
       .clone()
       .sub(this.orbitControls.target)
       .normalize();
-    const distance = Math.max(1.5, sphereRadius(sphere) * 4);
-    this.orbitControls.target.copy(sphere.position);
+    const distance = Math.max(1.5, radius * 4);
+    this.orbitControls.target.copy(center);
     this.camera.position
-      .copy(sphere.position)
+      .copy(center)
       .addScaledVector(viewDirection, distance);
     this.orbitControls.update();
-    this.invalidate(PtInvalidationLevel.Camera, "selected sphere framed");
+    this.invalidate(PtInvalidationLevel.Camera, "selected object framed");
   }
 
   public invalidate(level: PtInvalidationLevel, reason: string) {

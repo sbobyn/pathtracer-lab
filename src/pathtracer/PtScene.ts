@@ -32,10 +32,11 @@ export type PtQuadMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
       objectName: string;
       primitiveIndex: number;
       primitiveType: "quad";
-      quad: PtQuad;
     };
   };
 };
+
+export type PtTraceableMesh = PtSphereMesh | PtQuadMesh;
 
 export default class PtScene {
   scene: THREE.Scene;
@@ -111,13 +112,13 @@ export default class PtScene {
       const material = this.previewMaterials.get(quad.materialId);
       if (!material) throw new RangeError(`Unknown material ${quad.materialId} for quad ${i}`);
       material.side = THREE.DoubleSide;
-      const quadMesh = new THREE.Mesh(createQuadGeometry(quad), material) as PtQuadMesh;
+      const quadMesh = new THREE.Mesh(createQuadGeometry(), material) as PtQuadMesh;
+      applyQuadTransform(quadMesh, quad);
       quadMesh.userData.pathTracer = {
         objectId: THREE.MathUtils.generateUUID(),
         objectName: `Quad ${i}`,
         primitiveIndex: i,
         primitiveType: "quad",
-        quad,
       };
       this.intersectGroup.add(quadMesh);
     }
@@ -147,6 +148,14 @@ export default class PtScene {
   }
 
   public insertSphereMesh(mesh: PtSphereMesh, index = this.intersectGroup.children.length) {
+    this.insertTraceableMesh(mesh, index);
+  }
+
+  public insertQuadMesh(mesh: PtQuadMesh, index = this.intersectGroup.children.length) {
+    this.insertTraceableMesh(mesh, index);
+  }
+
+  private insertTraceableMesh(mesh: PtTraceableMesh, index: number) {
     const clampedIndex = THREE.MathUtils.clamp(
       Math.trunc(index),
       0,
@@ -156,7 +165,7 @@ export default class PtScene {
     const appendedIndex = this.intersectGroup.children.indexOf(mesh);
     this.intersectGroup.children.splice(appendedIndex, 1);
     this.intersectGroup.children.splice(clampedIndex, 0, mesh);
-    this.reindexSpheres();
+    this.reindexPrimitives();
     this.intersectGroup.updateMatrixWorld();
   }
 
@@ -180,11 +189,43 @@ export default class PtScene {
     return mesh;
   }
 
+  public createQuadMesh(
+    position: THREE.Vector3,
+    rotation: THREE.Quaternion,
+    width: number,
+    height: number,
+    materialId: number,
+    objectName: string
+  ): PtQuadMesh {
+    const material = this.getMaterial(materialId);
+    material.side = THREE.DoubleSide;
+    const mesh = new THREE.Mesh(createQuadGeometry(), material) as PtQuadMesh;
+    mesh.position.copy(position);
+    mesh.quaternion.copy(rotation);
+    mesh.scale.set(width, height, 1);
+    mesh.userData.pathTracer = {
+      objectId: THREE.MathUtils.generateUUID(),
+      objectName,
+      primitiveIndex: this.getQuadMeshes().length,
+      primitiveType: "quad",
+    };
+    return mesh;
+  }
+
   public removeSphereMesh(mesh: PtSphereMesh): number {
     const index = this.intersectGroup.children.indexOf(mesh);
     if (index < 0) return -1;
     this.intersectGroup.remove(mesh);
-    this.reindexSpheres();
+    this.reindexPrimitives();
+    this.intersectGroup.updateMatrixWorld();
+    return index;
+  }
+
+  public removeQuadMesh(mesh: PtQuadMesh): number {
+    const index = this.intersectGroup.children.indexOf(mesh);
+    if (index < 0) return -1;
+    this.intersectGroup.remove(mesh);
+    this.reindexPrimitives();
     this.intersectGroup.updateMatrixWorld();
     return index;
   }
@@ -211,10 +252,14 @@ export default class PtScene {
     material.needsUpdate = true;
   }
 
-  private reindexSpheres() {
-    this.intersectGroup.children.forEach((object, primitiveIndex) => {
+  private reindexPrimitives() {
+    let sphereIndex = 0;
+    let quadIndex = 0;
+    this.intersectGroup.children.forEach((object) => {
       if (isPtSphereMesh(object)) {
-        object.userData.pathTracer.primitiveIndex = primitiveIndex;
+        object.userData.pathTracer.primitiveIndex = sphereIndex++;
+      } else if (isPtQuadMesh(object)) {
+        object.userData.pathTracer.primitiveIndex = quadIndex++;
       }
     });
   }
@@ -283,20 +328,32 @@ function createPreviewMaterial(
   return previewMaterial;
 }
 
-function createQuadGeometry(quad: PtQuad) {
-  const p0 = quad.q;
-  const p1 = quad.q.clone().add(quad.u);
-  const p2 = quad.q.clone().add(quad.v);
-  const p3 = quad.q.clone().add(quad.u).add(quad.v);
+function createQuadGeometry() {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute([
-    ...p0.toArray(), ...p1.toArray(), ...p2.toArray(), ...p3.toArray(),
+    -0.5, -0.5, 0,
+     0.5, -0.5, 0,
+    -0.5,  0.5, 0,
+     0.5,  0.5, 0,
   ], 3));
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
   geometry.setIndex([0, 1, 2, 2, 1, 3]);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   return geometry;
+}
+
+function applyQuadTransform(mesh: PtQuadMesh, quad: PtQuad) {
+  const width = quad.u.length();
+  const height = quad.v.length();
+  if (width === 0 || height === 0) throw new RangeError("Quad edges must be non-zero");
+  const xAxis = quad.u.clone().normalize();
+  const yAxis = quad.v.clone().normalize();
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
+  const basis = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+  mesh.position.copy(quad.q).addScaledVector(quad.u, 0.5).addScaledVector(quad.v, 0.5);
+  mesh.quaternion.setFromRotationMatrix(basis);
+  mesh.scale.set(width, height, 1);
 }
 
 export function getMaterialMetadata(material: PtPreviewMaterial): {

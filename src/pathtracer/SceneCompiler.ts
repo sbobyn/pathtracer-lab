@@ -54,13 +54,16 @@ export default class SceneCompiler {
 
   private compileQuads(scene: PtScene): GpuQuad[] {
     return scene.getQuadMeshes().map((mesh) => {
-      const quad = mesh.userData.pathTracer.quad;
+      mesh.updateWorldMatrix(true, false);
+      const q = mesh.localToWorld(new THREE.Vector3(-0.5, -0.5, 0));
+      const u = mesh.localToWorld(new THREE.Vector3(0.5, -0.5, 0)).sub(q);
+      const v = mesh.localToWorld(new THREE.Vector3(-0.5, 0.5, 0)).sub(q);
       return {
-        q: quad.q.clone(),
-        u: quad.u.clone(),
-        v: quad.v.clone(),
-        normal: new THREE.Vector3().crossVectors(quad.u, quad.v).normalize(),
-        materialId: quad.materialId,
+        q,
+        u,
+        v,
+        normal: new THREE.Vector3().crossVectors(u, v).normalize(),
+        materialId: getMaterialMetadata(mesh.material).materialId,
       };
     });
   }

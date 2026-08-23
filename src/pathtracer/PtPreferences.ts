@@ -16,7 +16,8 @@ interface PtPreferencesV1 {
 }
 
 const accumulationFormats = new Set(["rgba8", "rgba16f", "rgba32f"]);
-const transformModes = new Set(["translate", "scale"]);
+const transformModes = new Set(["translate", "rotate", "scale"]);
+const transformSpaces = new Set(["global", "local"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
 const colorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -49,6 +50,7 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   settings.aperture = finiteNumber(candidate.aperture, 0, 0.1) ?? settings.aperture;
   settings.focusDistance = finiteNumber(candidate.focusDistance, 0.1, 20) ?? settings.focusDistance;
   if (transformModes.has(candidate.transformMode as string)) settings.transformMode = candidate.transformMode as PtSettings["transformMode"];
+  if (transformSpaces.has(candidate.transformSpace as string)) settings.transformSpace = candidate.transformSpace as PtSettings["transformSpace"];
   return settings;
 }
 
