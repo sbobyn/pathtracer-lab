@@ -6,6 +6,7 @@ import PtMaterial, { PtMaterialType } from "./PtMaterial";
 import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCamera";
 import { checkerTexture, imageTexture, perlinTexture } from "./PtTexture";
 import textureStudyImage from "../assets/texture-study.svg?url";
+import { syncAnalyticLightPreview } from "./PtAnalyticLight";
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   return sceneKey === "CornellBox" ? 0.5 : fallback;
@@ -220,6 +221,76 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return scene;
   },
 
+  AnalyticLightsStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(
+        PtMaterialType.Lambert,
+        checkerTexture(0x10131a, 0x343d4f, 3.5)
+      ),
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xeeeeee)),
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x7187a8)),
+      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xd8dde8), 0.08),
+    ];
+    const spheres = [
+      new PtSphere(new THREE.Vector3(-1.65, 0.1, -0.65), 0.6, 1),
+      new PtSphere(new THREE.Vector3(0, 0.15, -1.15), 0.65, 3),
+      new PtSphere(new THREE.Vector3(1.65, 0.1, -0.65), 0.6, 2),
+    ];
+    const quads = [
+      new PtQuad(
+        new THREE.Vector3(-5, -0.5, 3),
+        new THREE.Vector3(10, 0, 0),
+        new THREE.Vector3(0, 0, -10),
+        0
+      ),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 2.1, 6.2),
+      lookAt: new THREE.Vector3(0, 0.25, -0.7),
+      far: 10000,
+    });
+    camera.fov = 43;
+
+    const scene = new PtScene(spheres, materials, camera, quads);
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+
+    const point = scene.createPointLightNode(
+      new THREE.Vector3(-2.15, 2.2, 0.35),
+      "Warm Point Light"
+    );
+    point.userData.pathTracer.color.set(0xff743d);
+    point.userData.pathTracer.intensity = 18;
+    syncAnalyticLightPreview(point);
+
+    const spot = scene.createSpotLightNode(
+      new THREE.Vector3(2.7, 3.25, 1.35),
+      "Cool Spot Light"
+    );
+    spot.userData.pathTracer.color.set(0x6da8ff);
+    spot.userData.pathTracer.intensity = 38;
+    spot.userData.pathTracer.innerConeAngle = 16;
+    spot.userData.pathTracer.outerConeAngle = 25;
+    orientNegativeZToward(spot, new THREE.Vector3(1.55, 0, -0.7));
+    syncAnalyticLightPreview(spot);
+
+    const sun = scene.createDirectionalLightNode(
+      new THREE.Vector3(0, 3.8, 1.2),
+      "Soft Directional Light"
+    );
+    sun.userData.pathTracer.color.set(0xffedc7);
+    sun.userData.pathTracer.intensity = 0.35;
+    sun.userData.pathTracer.angularDiameter = 2;
+    orientNegativeZToward(sun, new THREE.Vector3(-0.45, 0, -1));
+    syncAnalyticLightPreview(sun);
+
+    scene.insertAnalyticLightNode(point);
+    scene.insertAnalyticLightNode(spot);
+    scene.insertAnalyticLightNode(sun);
+    return scene;
+  },
+
   CornellBox: () => {
     const materials: PtMaterial[] = [
       new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.73, 0.73, 0.73)),
@@ -260,6 +331,14 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return scene;
   },
 };
+
+function orientNegativeZToward(
+  object: THREE.Object3D,
+  target: THREE.Vector3
+) {
+  const direction = target.clone().sub(object.position).normalize();
+  object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
+}
 
 function createAxisAlignedBox(
   min: THREE.Vector3,

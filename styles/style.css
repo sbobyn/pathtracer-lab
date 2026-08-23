@@ -489,36 +489,62 @@ body {
   gap: 3px;
 }
 
-.editor-hierarchy button {
+.editor-hierarchy__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 6px 8px;
   color: #d4d4d8;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
+}
+
+.editor-hierarchy__select {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
   cursor: pointer;
   font-size: 11px;
   text-align: left;
 }
 
-.editor-hierarchy button[data-depth="1"] { padding-left: 16px; }
-.editor-hierarchy button[data-depth="2"] { padding-left: 28px; }
+.editor-hierarchy__row[data-depth="1"] .editor-hierarchy__select { padding-left: 16px; }
+.editor-hierarchy__row[data-depth="2"] .editor-hierarchy__select { padding-left: 28px; }
 
-.editor-hierarchy button:disabled {
+.editor-hierarchy__select:disabled {
   color: #a1a1aa;
   cursor: default;
 }
 
-.editor-hierarchy button:hover {
+.editor-hierarchy__row:hover {
   background: rgb(255 255 255 / 5%);
 }
 
-.editor-hierarchy button[data-selected="true"] {
+.editor-hierarchy__row[data-selected="true"] {
   color: #e0f2fe;
   background: rgb(14 165 233 / 18%);
   border-color: rgb(56 189 248 / 45%);
+}
+
+.editor-hierarchy__light-toggle {
+  align-self: center;
+  margin-right: 5px;
+  padding: 2px 5px;
+  color: #a3e635;
+  background: transparent;
+  border: 1px solid #52525b;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.editor-hierarchy__light-toggle[aria-pressed="false"] {
+  color: #71717a;
 }
 
 .editor-hierarchy__capability {

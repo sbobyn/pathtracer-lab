@@ -42,11 +42,19 @@ export interface GpuMaterial {
 }
 
 export interface GpuLight {
+  kind: 0 | 1 | 2 | 3 | 4;
   primitiveType: 0 | 1;
   primitiveIndex: number;
   materialId: number;
   area: number;
   emissionTwoSided: boolean;
+  position: THREE.Vector3;
+  direction: THREE.Vector3;
+  color: THREE.Color;
+  intensity: number;
+  angularDiameter: number;
+  innerConeCos: number;
+  outerConeCos: number;
 }
 
 export default class GpuScene {

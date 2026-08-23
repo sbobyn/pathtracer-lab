@@ -15,6 +15,8 @@ export interface PtSceneObjectState {
   selectable: boolean;
   traceable: boolean;
   capability: string;
+  /** Present only for authored analytic lights, for hierarchy quick controls. */
+  lightEnabled?: boolean;
 }
 
 export interface PtSelectionMaterialState {
@@ -61,7 +63,7 @@ export interface PtSelectionState {
   name: string | null;
   sphereIndex: number | null;
   quadIndex: number | null;
-  kind: "sphere" | "quad" | null;
+  kind: "sphere" | "quad" | "pointLight" | "directionalLight" | "spotLight" | null;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number };
   radius: number | null;
@@ -69,6 +71,15 @@ export interface PtSelectionState {
   height: number | null;
   uvMapping: "spherical" | "box" | null;
   material: PtSelectionMaterialState | null;
+  light: {
+    type: "point" | "directional" | "spot";
+    enabled: boolean;
+    color: string;
+    intensity: number;
+    angularDiameter: number;
+    innerConeAngle: number;
+    outerConeAngle: number;
+  } | null;
 }
 
 /** Read-only editor history summary suitable for any UI adapter. */
@@ -124,6 +135,7 @@ export function createDefaultPtState(): PtState {
       height: null,
       uvMapping: null,
       material: null,
+      light: null,
     },
     history: {
       canUndo: false,

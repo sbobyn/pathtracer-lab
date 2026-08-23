@@ -23,6 +23,7 @@ The path tracer currently supports:
 - constant, checker, image, and procedural Perlin textures
 - spherical and box-projected sphere UV mapping
 - authorable emissive quad and sphere lights with intensity and sidedness controls
+- authorable point, directional/sun, and spot lights with editor transforms and gizmos
 - selectable BSDF-only, explicit direct-light, and multiple-importance-sampling integrators
 - Cornell-box and black-background emissive-lighting study presets
 - depth of field / defocus blur
@@ -65,6 +66,15 @@ Light surfaces are sampled uniformly by area. Their area probability density is
 converted to solid angle at the shaded point before evaluating the Lambertian
 BRDF. This initial implementation applies explicit sampling to diffuse bounces;
 specular metal and dielectric paths continue through ordinary scattering.
+
+Analytic lights use explicit radiometric contracts in the path tracer. Point
+and spot lights treat intensity as radiant intensity and apply inverse-square
+falloff. Spot lights additionally apply a smooth inner-to-outer cone response.
+A directional light with zero angular diameter is an ideal delta light; a
+finite angular diameter samples a cone of directions as a soft sun while
+holding total irradiance stable. Three.js preview lights are editing aids and
+are not presented as pixel-identical reference implementations of these
+path-tracing contracts.
 
 React owns presentation and ephemeral interface state. It does not own mutable
 Three.js objects, compiled scene data, GPU resources, or accumulation buffers.

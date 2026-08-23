@@ -169,22 +169,57 @@ export default class SceneCompiler {
       if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
       const radius = sphereRadius(mesh);
       lights.push({
+        kind: 0,
         primitiveType: 0,
         primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
         materialId: metadata.materialId,
         area: 4 * Math.PI * radius * radius,
         emissionTwoSided: metadata.emissionTwoSided,
+        position: new THREE.Vector3(),
+        direction: new THREE.Vector3(),
+        color: new THREE.Color(),
+        intensity: 0,
+        angularDiameter: 0,
+        innerConeCos: 1,
+        outerConeCos: 1,
       });
     });
     scene.getQuadMeshes().forEach((mesh) => {
       const metadata = getMaterialMetadata(mesh.material);
       if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
       lights.push({
+        kind: 1,
         primitiveType: 1,
         primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
         materialId: metadata.materialId,
         area: Math.abs(mesh.scale.x * mesh.scale.y),
         emissionTwoSided: metadata.emissionTwoSided,
+        position: new THREE.Vector3(),
+        direction: new THREE.Vector3(),
+        color: new THREE.Color(),
+        intensity: 0,
+        angularDiameter: 0,
+        innerConeCos: 1,
+        outerConeCos: 1,
+      });
+    });
+    scene.getAnalyticLightNodes().forEach((node) => {
+      const metadata = node.userData.pathTracer;
+      if (!metadata.enabled || metadata.intensity <= 0) return;
+      lights.push({
+        kind: metadata.lightType === "point" ? 2 : metadata.lightType === "directional" ? 3 : 4,
+        primitiveType: 0,
+        primitiveIndex: 0,
+        materialId: 0,
+        area: 0,
+        emissionTwoSided: true,
+        position: node.getWorldPosition(new THREE.Vector3()),
+        direction: node.getWorldDirection(new THREE.Vector3()).negate(),
+        color: metadata.color.clone(),
+        intensity: metadata.intensity,
+        angularDiameter: metadata.angularDiameter,
+        innerConeCos: Math.cos(THREE.MathUtils.degToRad(metadata.innerConeAngle)),
+        outerConeCos: Math.cos(THREE.MathUtils.degToRad(metadata.outerConeAngle)),
       });
     });
     return lights;

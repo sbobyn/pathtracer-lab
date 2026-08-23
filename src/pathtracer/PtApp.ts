@@ -8,13 +8,14 @@ import {
   preferenceSnapshot,
   savePtPreferences,
 } from "./PtPreferences";
-import { isPtQuadMesh, isPtSphereMesh, type PtTraceableMesh } from "./PtScene";
+import { isPtQuadMesh, isPtSphereMesh, type PtEditableObject } from "./PtScene";
+import { analyticLightNodeFromObject } from "./PtAnalyticLight";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
 import type { PtUiAdapter, PtUiFactory } from "./PtUiAdapter";
 
 export default class PtApp {
-  private selectedObject: PtTraceableMesh | null = null;
+  private selectedObject: PtEditableObject | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly mouse = new THREE.Vector2();
   private intersectGroup: THREE.Group;
@@ -84,8 +85,9 @@ export default class PtApp {
     if (event.key === "Escape") {
       const canceledTransform = this.actions.cancelSelectedTransform();
       const canceledMaterial = this.actions.cancelMaterialEdit();
+      const canceledLight = this.actions.cancelSelectedLightEdit();
       const canceledSettings = this.actions.cancelSettingsEdit();
-      if (canceledTransform || canceledMaterial || canceledSettings) {
+      if (canceledTransform || canceledMaterial || canceledLight || canceledSettings) {
         event.preventDefault();
       }
       return;
@@ -162,7 +164,11 @@ export default class PtApp {
       currentObjectId = state.selection.objectId;
       this.selectedObject = currentObjectId === null
         ? null
-        : [...this.ptRenderer.ptScene.getSphereMeshes(), ...this.ptRenderer.ptScene.getQuadMeshes()]
+        : [
+            ...this.ptRenderer.ptScene.getSphereMeshes(),
+            ...this.ptRenderer.ptScene.getQuadMeshes(),
+            ...this.ptRenderer.ptScene.getAnalyticLightNodes(),
+          ]
             .find((object) => object.userData.pathTracer.objectId === currentObjectId) ?? null;
     });
 
@@ -200,19 +206,20 @@ export default class PtApp {
 
   private selectAtPointer() {
     this.raycaster.setFromCamera(this.mouse, this.ptRenderer.camera);
-    const [intersection] = this.raycaster.intersectObject(
-      this.intersectGroup,
+    const [intersection] = this.raycaster.intersectObjects(
+      [this.intersectGroup, this.ptRenderer.ptScene.analyticLightGroup],
       true
     );
     const object = intersection?.object;
+    const analyticLight = analyticLightNodeFromObject(object ?? null);
 
-    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object))) {
+    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object) && !analyticLight)) {
       this.selectedObject = null;
       this.actions.selectObject(null);
       return;
     }
 
-    const nextObject = object as PtTraceableMesh;
+    const nextObject: PtEditableObject = analyticLight ?? object as PtEditableObject;
     if (nextObject === this.selectedObject) {
       this.selectedObject = null;
       this.actions.selectObject(null);

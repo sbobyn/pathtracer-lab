@@ -3,6 +3,13 @@ import PtSphere from "./PtSphere";
 import PtQuad from "./PtQuad";
 import PtMaterial, { PtMaterialType } from "./PtMaterial";
 import { PtTextureType, type PtTexture } from "./PtTexture";
+import {
+  createPointLightNode,
+  createDirectionalLightNode,
+  createSpotLightNode,
+  isPtAnalyticLightNode,
+  type PtAnalyticLightNode,
+} from "./PtAnalyticLight";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
@@ -37,10 +44,12 @@ export type PtQuadMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
 };
 
 export type PtTraceableMesh = PtSphereMesh | PtQuadMesh;
+export type PtEditableObject = PtTraceableMesh | PtAnalyticLightNode;
 
 export default class PtScene {
   scene: THREE.Scene;
   intersectGroup: THREE.Group;
+  analyticLightGroup: THREE.Group;
   private readonly previewMaterials = new Map<number, PtPreviewMaterial>();
   private readonly sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
   dirLight: THREE.DirectionalLight;
@@ -71,6 +80,8 @@ export default class PtScene {
     this.scene.add(this.dirLight);
 
     this.intersectGroup = new THREE.Group();
+    this.analyticLightGroup = new THREE.Group();
+    this.analyticLightGroup.name = "Analytic lights";
 
     materials.forEach((material, materialId) => {
       this.previewMaterials.set(
@@ -125,6 +136,7 @@ export default class PtScene {
 
     this.intersectGroup.updateMatrixWorld();
     this.scene.add(this.intersectGroup);
+    this.scene.add(this.analyticLightGroup);
   }
 
   public getSphereMeshes(): PtSphereMesh[] {
@@ -145,6 +157,46 @@ export default class PtScene {
       if (isPtQuadMesh(object)) quads.push(object);
     });
     return quads.sort((a, b) => a.userData.pathTracer.primitiveIndex - b.userData.pathTracer.primitiveIndex);
+  }
+
+  public getAnalyticLightNodes(): PtAnalyticLightNode[] {
+    return this.analyticLightGroup.children.filter(isPtAnalyticLightNode);
+  }
+
+  public createPointLightNode(position: THREE.Vector3, objectName: string) {
+    return createPointLightNode(position, objectName);
+  }
+
+  public createDirectionalLightNode(position: THREE.Vector3, objectName: string) {
+    return createDirectionalLightNode(position, objectName);
+  }
+
+  public createSpotLightNode(position: THREE.Vector3, objectName: string) {
+    return createSpotLightNode(position, objectName);
+  }
+
+  public insertAnalyticLightNode(
+    node: PtAnalyticLightNode,
+    index = this.analyticLightGroup.children.length
+  ) {
+    const clampedIndex = THREE.MathUtils.clamp(
+      Math.trunc(index),
+      0,
+      this.analyticLightGroup.children.length
+    );
+    this.analyticLightGroup.add(node);
+    const appendedIndex = this.analyticLightGroup.children.indexOf(node);
+    this.analyticLightGroup.children.splice(appendedIndex, 1);
+    this.analyticLightGroup.children.splice(clampedIndex, 0, node);
+    this.analyticLightGroup.updateMatrixWorld();
+  }
+
+  public removeAnalyticLightNode(node: PtAnalyticLightNode) {
+    const index = this.analyticLightGroup.children.indexOf(node);
+    if (index < 0) return -1;
+    this.analyticLightGroup.remove(node);
+    this.analyticLightGroup.updateMatrixWorld();
+    return index;
   }
 
   public insertSphereMesh(mesh: PtSphereMesh, index = this.intersectGroup.children.length) {

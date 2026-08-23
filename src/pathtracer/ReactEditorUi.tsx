@@ -481,29 +481,42 @@ function SceneHierarchy({
       <summary>Hierarchy</summary>
       <div className="editor-panel__content editor-hierarchy" role="tree">
         {state.sceneObjects.map((object) => (
-          <button
+          <div
             key={object.id}
-            type="button"
+            className="editor-hierarchy__row"
             role="treeitem"
             aria-selected={state.selection.objectId === object.id}
             aria-disabled={!object.selectable}
             aria-level={object.depth + 1}
-            disabled={!object.selectable}
             data-depth={object.depth}
             data-selected={state.selection.objectId === object.id}
-            onClick={() => {
-              if (object.sphereIndex !== null) {
-                actions.selectSphere(object.sphereIndex);
-              } else if (object.quadIndex !== null) {
-                actions.selectQuad(object.quadIndex);
-              }
-            }}
           >
-            <span>{object.label}</span>
-            <span className="editor-hierarchy__capability">
-              {object.capability}
-            </span>
-          </button>
+            <button
+              className="editor-hierarchy__select"
+              type="button"
+              disabled={!object.selectable}
+              onClick={() => actions.selectObjectById(object.id)}
+            >
+              <span>{object.label}</span>
+              <span className="editor-hierarchy__capability">
+                {object.capability}
+              </span>
+            </button>
+            {object.lightEnabled !== undefined && (
+              <button
+                className="editor-hierarchy__light-toggle"
+                type="button"
+                aria-label={`${object.lightEnabled ? "Disable" : "Enable"} ${object.label}`}
+                aria-pressed={object.lightEnabled}
+                title={`${object.lightEnabled ? "Disable" : "Enable"} light`}
+                onClick={() =>
+                  actions.setAnalyticLightEnabled(object.id, !object.lightEnabled)
+                }
+              >
+                {object.lightEnabled ? "On" : "Off"}
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </PersistentDetails>
@@ -572,9 +585,162 @@ function ObjectInspectorContent({
   const fileInput = useRef<HTMLInputElement>(null);
   const selection = state.selection;
   const material = selection.material;
-  if (!selection.kind || !material) {
+  const light = selection.light;
+  if (!selection.kind) {
     return null;
   }
+
+  if (light) {
+    const lightLabel = light.type === "point" ? "Point" : light.type === "directional" ? "Sun / directional" : "Spot";
+    return (
+      <div className="object-inspector__content">
+        <div className="editor-inspector__identity">
+          <strong>{selection.name}</strong>
+          <span>{lightLabel} light · Path traced</span>
+        </div>
+        <ObjectNameField
+          objectId={selection.objectId!}
+          name={selection.name!}
+          actions={actions}
+          focusRequest={renameFocusRequest}
+        />
+        <PersistentDetails className="editor-subpanel" storageKey="object-transform">
+          <summary>Transform</summary>
+          <VectorField
+            label="Position"
+            value={[selection.position.x, selection.position.y, selection.position.z]}
+            step={0.01}
+            precisionStep={0.001}
+            snapInterval={1}
+            min={-10000}
+            max={10000}
+            sensitivity={10 * pathTracerScrubSpeed}
+            density="compact"
+            onComponentChange={(index, value) => {
+              actions.beginSelectedTransform();
+              actions.setSelectedPosition((["x", "y", "z"] as const)[index], value);
+            }}
+            onCommit={() => actions.commitSelectedTransform()}
+            onCancel={() => actions.cancelSelectedTransform()}
+          />
+          {light.type !== "point" && (
+            <VectorField
+              label="Rotation"
+              value={[selection.rotation.x, selection.rotation.y, selection.rotation.z]}
+              step={1}
+              precisionStep={0.1}
+              snapInterval={15}
+              min={-360}
+              max={360}
+              sensitivity={1 * pathTracerScrubSpeed}
+              density="compact"
+              onComponentChange={(index, value) => {
+                actions.beginSelectedTransform();
+                actions.setSelectedRotation((["x", "y", "z"] as const)[index], value);
+              }}
+              onCommit={() => actions.commitSelectedTransform()}
+              onCancel={() => actions.cancelSelectedTransform()}
+            />
+          )}
+        </PersistentDetails>
+        <PersistentDetails className="editor-subpanel" storageKey="analytic-light">
+          <summary>Light · {lightLabel}</summary>
+          <CheckboxField
+            label="Enabled"
+            checked={light.enabled}
+            density="compact"
+            layout="horizontal"
+            onChange={(enabled) => {
+              actions.setSelectedLightEnabled(enabled);
+              actions.commitSelectedLightEdit();
+            }}
+          />
+          <ColorField
+            label="Color"
+            value={light.color}
+            onBegin={() => actions.beginSelectedLightEdit()}
+            onChange={(value) => actions.setSelectedLightColor(new THREE.Color(value))}
+            onCommit={() => actions.commitSelectedLightEdit()}
+          />
+          <EditorNumberField
+            label="Intensity"
+            value={light.intensity}
+            min={0}
+            max={1000}
+            step={0.1}
+            precisionStep={0.01}
+            snapInterval={1}
+            sensitivity={1 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => actions.setSelectedLightIntensity(value)}
+            onCommit={() => actions.commitSelectedLightEdit()}
+            onCancel={() => actions.cancelSelectedLightEdit()}
+          />
+          {light.type === "directional" && (
+            <EditorNumberField
+              label="Angular diameter"
+              value={light.angularDiameter}
+              min={0}
+              max={10}
+              step={0.1}
+              precisionStep={0.01}
+              snapInterval={0.5}
+              sensitivity={1 * pathTracerScrubSpeed}
+              density="compact"
+              layout="horizontal"
+              onChange={(value) => actions.setSelectedLightAngularDiameter(value)}
+              onCommit={() => actions.commitSelectedLightEdit()}
+              onCancel={() => actions.cancelSelectedLightEdit()}
+            />
+          )}
+          {light.type === "spot" && (
+            <>
+              <EditorNumberField
+                label="Inner cone"
+                value={light.innerConeAngle}
+                min={0}
+                max={89}
+                step={1}
+                precisionStep={0.1}
+                snapInterval={5}
+                sensitivity={1 * pathTracerScrubSpeed}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => actions.setSelectedSpotCone("innerConeAngle", value)}
+                onCommit={() => actions.commitSelectedLightEdit()}
+                onCancel={() => actions.cancelSelectedLightEdit()}
+              />
+              <EditorNumberField
+                label="Outer cone"
+                value={light.outerConeAngle}
+                min={0.1}
+                max={89}
+                step={1}
+                precisionStep={0.1}
+                snapInterval={5}
+                sensitivity={1 * pathTracerScrubSpeed}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => actions.setSelectedSpotCone("outerConeAngle", value)}
+                onCommit={() => actions.commitSelectedLightEdit()}
+                onCancel={() => actions.cancelSelectedLightEdit()}
+              />
+            </>
+          )}
+          <p className="editor-control__hint">
+            {light.type === "directional"
+              ? "Zero angular diameter is an ideal directional light; a finite diameter produces a soft sun."
+              : light.type === "spot"
+                ? "Radiant intensity uses inverse-square falloff and smooth inner/outer cone attenuation."
+                : "Radiant intensity uses inverse-square falloff."} Raster preview appearance is approximate.
+          </p>
+        </PersistentDetails>
+      </div>
+    );
+  }
+
+  if (!material) return null;
 
   return (
       <div className="object-inspector__content">
@@ -1212,6 +1378,15 @@ function CreationMenu({
       <button type="button" role="menuitem" onClick={() => run(() => actions.addEmissiveSphere())}>
         <span>Sphere light</span><small>Emissive sphere</small>
       </button>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addPointLight())}>
+        <span>Point light</span><small>Inverse-square analytic light</small>
+      </button>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addDirectionalLight())}>
+        <span>Sun / directional light</span><small>Ideal or finite angular diameter</small>
+      </button>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addSpotLight())}>
+        <span>Spot light</span><small>Inverse-square cone light</small>
+      </button>
       <button type="button" role="menuitem" disabled title="Available after triangle support">
         <span>Import mesh</span><small>Not traceable yet</small>
       </button>
@@ -1249,6 +1424,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
+  const analyticLightSelected = state.selection.light !== null;
+  const pointLightSelected = state.selection.light?.type === "point";
   const [size, setSize] = useState<PanelSize>(() =>
     clampPanelSize({ width: 260, height: 620 })
   );
@@ -1409,8 +1586,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
         <div className="transform-toolbar" aria-label="Transform tools">
           <div className="transform-toolbar__group" aria-label="Transform mode">
             <button type="button" aria-pressed={state.settings.transformMode === "translate"} title="Move (G)" onClick={() => actions.setTransformMode("translate")}><kbd>G</kbd><span>Move</span></button>
-            <button type="button" aria-pressed={state.settings.transformMode === "rotate"} title="Rotate (R)" onClick={() => actions.setTransformMode("rotate")}><kbd>R</kbd><span>Rotate</span></button>
-            <button type="button" aria-pressed={state.settings.transformMode === "scale"} title="Scale (S)" onClick={() => actions.setTransformMode("scale")}><kbd>S</kbd><span>Scale</span></button>
+            <button type="button" disabled={pointLightSelected} aria-pressed={state.settings.transformMode === "rotate"} title="Rotate (R)" onClick={() => actions.setTransformMode("rotate")}><kbd>R</kbd><span>Rotate</span></button>
+            <button type="button" disabled={analyticLightSelected} aria-pressed={state.settings.transformMode === "scale"} title="Scale (S)" onClick={() => actions.setTransformMode("scale")}><kbd>S</kbd><span>Scale</span></button>
           </div>
           <div className="transform-toolbar__divider" aria-hidden="true" />
           <div className="transform-toolbar__group" aria-label="Transform orientation">

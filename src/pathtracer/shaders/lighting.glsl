@@ -6,6 +6,8 @@ struct LightSample {
     float distance;
     float pdf;
     int materialId;
+    vec3 radiance;
+    bool delta;
     bool valid;
 };
 
@@ -19,16 +21,77 @@ float lambertPdf(vec3 normal, vec3 direction) {
     return max(dot(normal, direction), 0.0) / PI;
 }
 
+vec3 sampleCone(vec3 axis, float cosThetaMax, vec2 seed) {
+    float cosTheta = mix(cosThetaMax, 1.0, seed.x);
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+    float phi = 2.0 * PI * seed.y;
+    vec3 helper = abs(axis.z) < 0.999
+        ? vec3(0.0, 0.0, 1.0)
+        : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(helper, axis));
+    vec3 bitangent = cross(axis, tangent);
+    return normalize(
+        tangent * cos(phi) * sinTheta +
+        bitangent * sin(phi) * sinTheta +
+        axis * cosTheta
+    );
+}
+
 LightSample sampleLight(World world, vec3 origin, vec2 seed) {
     LightSample lightSample;
     lightSample.valid = false;
     lightSample.pdf = 0.0;
+    lightSample.delta = false;
     if (uLightCount <= 0) return lightSample;
 
     int lightIndex = int(floor(hash12(seed) * float(uLightCount)));
     if (lightIndex >= uLightCount) lightIndex = uLightCount - 1;
     Light light = uLights[lightIndex];
     vec2 surfaceSeed = hash22(seed + vec2(19.19, 73.73));
+
+    if (light.kind == 3) {
+        vec3 incomingAxis = normalize(-light.direction);
+        float angularRadius = 0.5 * radians(light.angularDiameter);
+        if (angularRadius > 1e-6) {
+            float cosThetaMax = cos(angularRadius);
+            float solidAngle = 2.0 * PI * (1.0 - cosThetaMax);
+            lightSample.direction = sampleCone(incomingAxis, cosThetaMax, surfaceSeed);
+            lightSample.pdf = 1.0 / (float(uLightCount) * solidAngle);
+            lightSample.radiance = light.color * light.intensity / solidAngle;
+        } else {
+            lightSample.direction = incomingAxis;
+            lightSample.pdf = 1.0 / float(uLightCount);
+            lightSample.radiance = light.color * light.intensity;
+        }
+        lightSample.distance = 1e4;
+        lightSample.position = origin + lightSample.direction * lightSample.distance;
+        lightSample.normal = -lightSample.direction;
+        lightSample.uv = vec2(0.0);
+        lightSample.delta = true;
+        lightSample.valid = true;
+        return lightSample;
+    }
+
+    if (light.kind == 2 || light.kind == 4) {
+        vec3 toLight = light.position - origin;
+        float distanceSquared = dot(toLight, toLight);
+        if (distanceSquared <= 1e-10) return lightSample;
+        lightSample.distance = sqrt(distanceSquared);
+        lightSample.direction = toLight / lightSample.distance;
+        lightSample.position = light.position;
+        lightSample.normal = -lightSample.direction;
+        lightSample.uv = vec2(0.0);
+        lightSample.pdf = 1.0 / float(uLightCount);
+        float falloff = 1.0;
+        if (light.kind == 4) {
+            float coneCosine = dot(normalize(light.direction), -lightSample.direction);
+            falloff = smoothstep(light.outerConeCos, light.innerConeCos, coneCosine);
+        }
+        lightSample.radiance = light.color * light.intensity * falloff / distanceSquared;
+        lightSample.delta = true;
+        lightSample.valid = falloff > 0.0;
+        return lightSample;
+    }
 
     if (light.primitiveType == 0) {
         Sphere sphere = world.spheres[light.primitiveIndex];
@@ -56,6 +119,7 @@ LightSample sampleLight(World world, vec3 origin, vec2 seed) {
     lightSample.pdf = distanceSquared /
         (lightCosine * light.area * float(uLightCount));
     lightSample.materialId = light.materialId;
+    lightSample.radiance = vec3(0.0);
     lightSample.valid = lightSample.pdf > 0.0;
     return lightSample;
 }
@@ -65,6 +129,7 @@ float lightPdfForHit(vec3 origin, Hit hit) {
     for (int i = 0; i < MAX_LIGHTS; i++) {
         if (i >= uLightCount) break;
         Light light = uLights[i];
+        if (light.kind >= 2) continue;
         if (
             light.primitiveType != hit.primitiveType ||
             light.primitiveIndex != hit.primitiveId
@@ -97,17 +162,20 @@ vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 through
         return vec3(0.0);
     }
 
-    Material lightMaterial = uMaterials[light.materialId];
-    Hit lightHit;
-    lightHit.position = light.position;
-    lightHit.normal = light.normal;
-    lightHit.uv = light.uv;
-    lightHit.frontFace = true;
-    lightHit.materialId = light.materialId;
-    vec3 lightRadiance = lightMaterial.emissionStrength *
-        sampleTexture(lightMaterial.textureId, lightHit);
+    vec3 lightRadiance = light.radiance;
+    if (!light.delta) {
+        Material lightMaterial = uMaterials[light.materialId];
+        Hit lightHit;
+        lightHit.position = light.position;
+        lightHit.normal = light.normal;
+        lightHit.uv = light.uv;
+        lightHit.frontFace = true;
+        lightHit.materialId = light.materialId;
+        lightRadiance = lightMaterial.emissionStrength *
+            sampleTexture(lightMaterial.textureId, lightHit);
+    }
     vec3 albedo = sampleTexture(material.textureId, hit);
-    float weight = uIntegratorMode == 2
+    float weight = uIntegratorMode == 2 && !light.delta
         ? powerHeuristic(light.pdf, lambertPdf(hit.normal, light.direction))
         : 1.0;
     return throughput * lightRadiance * (albedo / PI) *

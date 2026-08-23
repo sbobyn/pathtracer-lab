@@ -10,7 +10,7 @@ import {
   TransformControls,
   OrbitControls,
 } from "three/examples/jsm/Addons.js";
-import PtScene, { type PtTraceableMesh } from "./PtScene";
+import PtScene, { type PtEditableObject } from "./PtScene";
 import type { PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
 import {
@@ -235,7 +235,7 @@ export default class PtRenderer {
     );
   }
 
-  public frameObject(object: PtTraceableMesh) {
+  public frameObject(object: PtEditableObject) {
     const bounds = new THREE.Box3().setFromObject(object);
     const center = bounds.getCenter(new THREE.Vector3());
     const radius = Math.max(0.001, bounds.getBoundingSphere(new THREE.Sphere()).radius);
@@ -330,7 +330,19 @@ export default class PtRenderer {
   }
 
   private lightUniformCapacity() {
-    return Math.max(1, this.gpuScene.lights.length);
+    // Analytic lights are omitted from the active GPU list when disabled (or
+    // when their intensity is zero), but WebGL struct-array uniforms must keep
+    // the exact length baked into the current shader. Reserve one slot for
+    // every authored analytic light so ordinary property edits can safely pad
+    // inactive entries without recompiling the shader.
+    const emissiveGeometryLightCount = this.gpuScene.lights.filter(
+      (light) => light.kind < 2
+    ).length;
+    return Math.max(
+      1,
+      emissiveGeometryLightCount +
+        this.ptScene.getAnalyticLightNodes().length
+    );
   }
 
   private setupControls() {
@@ -486,11 +498,19 @@ export default class PtRenderer {
 
   private uniformLightValues() {
     const padding = {
+      kind: 0 as const,
       primitiveType: 0 as const,
       primitiveIndex: 0,
       materialId: 0,
       area: 1,
       emissionTwoSided: false,
+      position: new THREE.Vector3(),
+      direction: new THREE.Vector3(),
+      color: new THREE.Color(),
+      intensity: 0,
+      angularDiameter: 0,
+      innerConeCos: 1,
+      outerConeCos: 1,
     };
     return Array.from(
       { length: this.lightUniformCapacity() },

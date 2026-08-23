@@ -6,8 +6,13 @@ import {
   isPtQuadMesh,
   isPtSphereMesh,
   sphereRadius,
+  type PtEditableObject,
   type PtTraceableMesh,
 } from "./PtScene";
+import {
+  isPtAnalyticLightNode,
+  syncAnalyticLightPreview,
+} from "./PtAnalyticLight";
 import PtStore from "./PtStore";
 import type { PtStateListener } from "./PtStore";
 import type {
@@ -46,16 +51,29 @@ interface MaterialSnapshot {
   readonly emissionTwoSided: boolean;
 }
 
+interface AnalyticLightSnapshot {
+  readonly enabled: boolean;
+  readonly color: number;
+  readonly intensity: number;
+  readonly angularDiameter: number;
+  readonly innerConeAngle: number;
+  readonly outerConeAngle: number;
+}
+
 export default class PtActions {
-  private selectedObject: PtTraceableMesh | null = null;
+  private selectedObject: PtEditableObject | null = null;
   private readonly history = new CommandHistory(100);
   private pendingTransform: {
-    object: PtTraceableMesh;
+    object: PtEditableObject;
     before: TransformSnapshot;
   } | null = null;
   private pendingMaterial: {
     materialId: number;
     before: MaterialSnapshot;
+  } | null = null;
+  private pendingAnalyticLight: {
+    object: import("./PtAnalyticLight").PtAnalyticLightNode;
+    before: AnalyticLightSnapshot;
   } | null = null;
   private pendingSettings: {
     label: string;
@@ -102,8 +120,9 @@ export default class PtActions {
   public undo() {
     const canceledTransform = this.cancelSelectedTransform();
     const canceledMaterial = this.cancelMaterialEdit();
+    const canceledLight = this.cancelSelectedLightEdit();
     const canceledSettings = this.cancelSettingsEdit();
-    if (canceledTransform || canceledMaterial || canceledSettings) return true;
+    if (canceledTransform || canceledMaterial || canceledLight || canceledSettings) return true;
     const changed = this.history.undo();
     if (changed) this.publishHistory();
     return changed;
@@ -112,8 +131,9 @@ export default class PtActions {
   public redo() {
     const canceledTransform = this.cancelSelectedTransform();
     const canceledMaterial = this.cancelMaterialEdit();
+    const canceledLight = this.cancelSelectedLightEdit();
     const canceledSettings = this.cancelSettingsEdit();
-    if (canceledTransform || canceledMaterial || canceledSettings) return true;
+    if (canceledTransform || canceledMaterial || canceledLight || canceledSettings) return true;
     const changed = this.history.redo();
     if (changed) this.publishHistory();
     return changed;
@@ -126,6 +146,7 @@ export default class PtActions {
     const scene = createScene();
     this.pendingTransform = null;
     this.pendingMaterial = null;
+    this.pendingAnalyticLight = null;
     this.pendingSettings = null;
     // Presets are whole-scene replacements, so commands referring to the old
     // scene are intentionally discarded rather than replayed into a new one.
@@ -275,6 +296,12 @@ export default class PtActions {
   }
 
   public setTransformMode(mode: TransformMode) {
+    if (
+      this.selectedObject &&
+      isPtAnalyticLightNode(this.selectedObject) &&
+      (mode === "scale" ||
+        (mode === "rotate" && this.selectedObject.userData.pathTracer.lightType === "point"))
+    ) return;
     this.renderer.transformControls.mode = mode;
     this.configureTransformControls();
     this.updateSetting("transformMode", mode);
@@ -285,9 +312,10 @@ export default class PtActions {
     this.updateSetting("transformSpace", space);
   }
 
-  public selectObject(object: PtTraceableMesh | null) {
+  public selectObject(object: PtEditableObject | null) {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
+    this.commitSelectedLightEdit();
     this.selectedObject = object;
     if (!object) {
       this.renderer.outlinePass.selectedObjects = [];
@@ -301,6 +329,14 @@ export default class PtActions {
 
     this.renderer.outlinePass.selectedObjects = [object];
     this.renderer.transformControls.attach(object);
+    if (
+      isPtAnalyticLightNode(object) &&
+      (this.renderer.transformControls.mode === "scale" ||
+        (object.userData.pathTracer.lightType === "point" &&
+          this.renderer.transformControls.mode === "rotate"))
+    ) {
+      this.setTransformMode("translate");
+    }
     this.configureTransformControls();
     this.publishSelection();
   }
@@ -319,6 +355,16 @@ export default class PtActions {
     const object = this.renderer.ptScene
       .getQuadMeshes()
       .find((quad) => quad.userData.pathTracer.primitiveIndex === quadIndex);
+    this.selectObject(object ?? null);
+  }
+
+  public selectObjectById(objectId: string) {
+    const scene = this.renderer.ptScene;
+    const object = [
+      ...scene.getSphereMeshes(),
+      ...scene.getQuadMeshes(),
+      ...scene.getAnalyticLightNodes(),
+    ].find((candidate) => candidate.userData.pathTracer.objectId === objectId);
     this.selectObject(object ?? null);
   }
 
@@ -423,6 +469,56 @@ export default class PtActions {
     );
   }
 
+  public addPointLight() {
+    return this.addAnalyticLight("point");
+  }
+
+  public addDirectionalLight() {
+    return this.addAnalyticLight("directional");
+  }
+
+  public addSpotLight() {
+    return this.addAnalyticLight("spot");
+  }
+
+  private addAnalyticLight(type: "point" | "directional" | "spot") {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    this.commitSelectedLightEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+    const label = type === "point" ? "Point Light" : type === "directional" ? "Sun" : "Spot Light";
+    const object = type === "point"
+      ? scene.createPointLightNode(position, `${label} ${this.nextLightName++}`)
+      : type === "directional"
+        ? scene.createDirectionalLightNode(position, `${label} ${this.nextLightName++}`)
+        : scene.createSpotLightNode(position, `${label} ${this.nextLightName++}`);
+    if (type !== "point") object.quaternion.copy(this.renderer.camera.quaternion);
+    const index = scene.analyticLightGroup.children.length;
+    const insert = () => {
+      scene.insertAnalyticLightNode(object, index);
+      this.publishSceneObjects();
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, `${type} light added`);
+    };
+    const remove = () => {
+      scene.removeAnalyticLightNode(object);
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, `added ${type} light removed`);
+    };
+    insert();
+    this.history.record({
+      label: `Add ${object.userData.pathTracer.objectName}`,
+      execute: insert,
+      undo: remove,
+    });
+    this.publishHistory();
+    return true;
+  }
+
   private addSphereWithMaterial(materialId: number, objectName: string) {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
@@ -512,19 +608,23 @@ export default class PtActions {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
-    const index = scene.intersectGroup.children.indexOf(object);
+    const index = isPtAnalyticLightNode(object)
+      ? scene.analyticLightGroup.children.indexOf(object)
+      : scene.intersectGroup.children.indexOf(object);
     if (index < 0) return false;
 
     const remove = () => {
       if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
-      else scene.removeQuadMesh(object);
+      else if (isPtQuadMesh(object)) scene.removeQuadMesh(object);
+      else scene.removeAnalyticLightNode(object);
       this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "object removed");
     };
     const restore = () => {
       if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
-      else scene.insertQuadMesh(object, index);
+      else if (isPtQuadMesh(object)) scene.insertQuadMesh(object, index);
+      else scene.insertAnalyticLightNode(object, index);
       this.publishSceneObjects();
       this.selectObject(object);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere restored");
@@ -546,7 +646,7 @@ export default class PtActions {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
-    const object = source.clone() as PtTraceableMesh;
+    const object = source.clone() as PtEditableObject;
     object.userData.pathTracer = isPtSphereMesh(source)
       ? {
           objectId: THREE.MathUtils.generateUUID(),
@@ -555,24 +655,33 @@ export default class PtActions {
           primitiveType: "sphere",
           uvMapping: source.userData.pathTracer.uvMapping,
         }
-      : {
+      : isPtQuadMesh(source) ? {
           objectId: THREE.MathUtils.generateUUID(),
           objectName: `${source.userData.pathTracer.objectName} Copy`,
           primitiveIndex: scene.getQuadMeshes().length,
           primitiveType: "quad",
+        } : {
+          ...source.userData.pathTracer,
+          objectId: THREE.MathUtils.generateUUID(),
+          objectName: `${source.userData.pathTracer.objectName} Copy`,
+          color: source.userData.pathTracer.color.clone(),
         };
-    const index = scene.intersectGroup.children.length;
+    const index = isPtAnalyticLightNode(object)
+      ? scene.analyticLightGroup.children.length
+      : scene.intersectGroup.children.length;
 
     const insert = () => {
       if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
-      else scene.insertQuadMesh(object, index);
+      else if (isPtQuadMesh(object)) scene.insertQuadMesh(object, index);
+      else scene.insertAnalyticLightNode(object, index);
       this.publishSceneObjects();
       this.selectObject(object);
       this.renderer.invalidate(PtInvalidationLevel.Scene, "object duplicated");
     };
     const remove = () => {
       if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
-      else scene.removeQuadMesh(object);
+      else if (isPtQuadMesh(object)) scene.removeQuadMesh(object);
+      else scene.removeAnalyticLightNode(object);
       this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
       this.renderer.invalidate(
@@ -597,7 +706,7 @@ export default class PtActions {
     this.selectedObject.position[axis] = value;
     this.renderer.invalidate(
       PtInvalidationLevel.Geometry,
-      `sphere ${this.selectedObject.userData.pathTracer.primitiveIndex} position changed`
+      `${this.selectedObject.userData.pathTracer.objectName} position changed`
     );
     this.publishSelection();
   }
@@ -629,6 +738,116 @@ export default class PtActions {
     this.selectedObject.rotation[axis] = THREE.MathUtils.degToRad(degrees);
     this.renderer.invalidate(PtInvalidationLevel.Geometry, "object rotation changed");
     this.publishSelection();
+  }
+
+  public beginSelectedLightEdit() {
+    const object = this.selectedObject;
+    if (!object || !isPtAnalyticLightNode(object) || this.pendingAnalyticLight) return;
+    this.pendingAnalyticLight = {
+      object,
+      before: this.captureAnalyticLight(object),
+    };
+  }
+
+  public setSelectedLightEnabled(enabled: boolean) {
+    const object = this.selectedObject;
+    if (!object || !isPtAnalyticLightNode(object)) return;
+    this.beginSelectedLightEdit();
+    object.userData.pathTracer.enabled = enabled;
+    syncAnalyticLightPreview(object);
+    this.renderer.invalidate(PtInvalidationLevel.Material, "analytic light enabled state changed");
+    this.publishSelection();
+  }
+
+  public setAnalyticLightEnabled(objectId: string, enabled: boolean) {
+    const object = this.renderer.ptScene
+      .getAnalyticLightNodes()
+      .find((light) => light.userData.pathTracer.objectId === objectId);
+    if (!object || object.userData.pathTracer.enabled === enabled) return;
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    this.commitSelectedLightEdit();
+    const before = this.captureAnalyticLight(object);
+    const after = { ...before, enabled };
+    this.applyAnalyticLight(object, after);
+    this.history.record({
+      label: `${enabled ? "Enable" : "Disable"} ${object.userData.pathTracer.objectName}`,
+      execute: () => this.applyAnalyticLight(object, after),
+      undo: () => this.applyAnalyticLight(object, before),
+    });
+    this.publishSceneObjects();
+    this.publishHistory();
+  }
+
+  public setSelectedLightColor(color: THREE.Color) {
+    const object = this.selectedObject;
+    if (!object || !isPtAnalyticLightNode(object)) return;
+    this.beginSelectedLightEdit();
+    object.userData.pathTracer.color.copy(color);
+    syncAnalyticLightPreview(object);
+    this.renderer.invalidate(PtInvalidationLevel.Material, "analytic light color changed");
+    this.publishSelection();
+  }
+
+  public setSelectedLightIntensity(intensity: number) {
+    const object = this.selectedObject;
+    if (!object || !isPtAnalyticLightNode(object)) return;
+    this.beginSelectedLightEdit();
+    object.userData.pathTracer.intensity = intensity;
+    syncAnalyticLightPreview(object);
+    this.renderer.invalidate(PtInvalidationLevel.Material, "analytic light intensity changed");
+    this.publishSelection();
+  }
+
+  public setSelectedLightAngularDiameter(angularDiameter: number) {
+    const object = this.selectedObject;
+    if (!object || !isPtAnalyticLightNode(object)) return;
+    this.beginSelectedLightEdit();
+    object.userData.pathTracer.angularDiameter = angularDiameter;
+    this.renderer.invalidate(PtInvalidationLevel.Material, "sun angular diameter changed");
+    this.publishSelection();
+  }
+
+  public setSelectedSpotCone(
+    property: "innerConeAngle" | "outerConeAngle",
+    angle: number
+  ) {
+    const object = this.selectedObject;
+    if (!object || !isPtAnalyticLightNode(object)) return;
+    this.beginSelectedLightEdit();
+    const metadata = object.userData.pathTracer;
+    metadata[property] = angle;
+    if (property === "innerConeAngle") {
+      metadata.innerConeAngle = Math.min(angle, metadata.outerConeAngle);
+    } else {
+      metadata.outerConeAngle = Math.max(angle, metadata.innerConeAngle);
+    }
+    syncAnalyticLightPreview(object);
+    this.renderer.invalidate(PtInvalidationLevel.Material, "spot cone changed");
+    this.publishSelection();
+  }
+
+  public commitSelectedLightEdit() {
+    const pending = this.pendingAnalyticLight;
+    this.pendingAnalyticLight = null;
+    if (!pending) return false;
+    const after = this.captureAnalyticLight(pending.object);
+    if (this.analyticLightsEqual(pending.before, after)) return false;
+    this.history.record({
+      label: `Edit ${pending.object.userData.pathTracer.objectName}`,
+      execute: () => this.applyAnalyticLight(pending.object, after),
+      undo: () => this.applyAnalyticLight(pending.object, pending.before),
+    });
+    this.publishHistory();
+    return true;
+  }
+
+  public cancelSelectedLightEdit() {
+    const pending = this.pendingAnalyticLight;
+    this.pendingAnalyticLight = null;
+    if (!pending) return false;
+    this.applyAnalyticLight(pending.object, pending.before);
+    return true;
   }
 
   public setSelectedUvMapping(mapping: "spherical" | "box") {
@@ -683,13 +902,13 @@ export default class PtActions {
       pending.object.scale.copy(snapshot.scale);
       this.renderer.invalidate(
         PtInvalidationLevel.Geometry,
-        `sphere ${pending.object.userData.pathTracer.primitiveIndex} transform history applied`
+        `${pending.object.userData.pathTracer.objectName} transform history applied`
       );
       if (this.selectedObject === pending.object) this.publishSelection();
     };
 
     this.history.record({
-      label: `Transform sphere ${pending.object.userData.pathTracer.primitiveIndex}`,
+      label: `Transform ${pending.object.userData.pathTracer.objectName}`,
       execute: () => apply(after),
       undo: () => apply(pending.before),
     });
@@ -706,7 +925,7 @@ export default class PtActions {
     pending.object.scale.copy(pending.before.scale);
     this.renderer.invalidate(
       PtInvalidationLevel.Geometry,
-      `sphere ${pending.object.userData.pathTracer.primitiveIndex} transform canceled`
+      `${pending.object.userData.pathTracer.objectName} transform canceled`
     );
     if (this.selectedObject === pending.object) this.publishSelection();
     return true;
@@ -876,6 +1095,46 @@ export default class PtActions {
   private publishSelection() {
     if (!this.selectedObject) return;
     const selectedObject = this.selectedObject;
+    if (isPtAnalyticLightNode(selectedObject)) {
+      const metadata = selectedObject.userData.pathTracer;
+      const { x, y, z } = selectedObject.position;
+      const rotation = selectedObject.rotation;
+      this.store.update((state) => ({
+        ...state,
+        selection: {
+          objectId: metadata.objectId,
+          name: metadata.objectName,
+          sphereIndex: null,
+          quadIndex: null,
+          kind: metadata.lightType === "point"
+            ? "pointLight"
+            : metadata.lightType === "directional"
+              ? "directionalLight"
+              : "spotLight",
+          position: { x, y, z },
+          rotation: {
+            x: THREE.MathUtils.radToDeg(rotation.x),
+            y: THREE.MathUtils.radToDeg(rotation.y),
+            z: THREE.MathUtils.radToDeg(rotation.z),
+          },
+          radius: null,
+          width: null,
+          height: null,
+          uvMapping: null,
+          material: null,
+          light: {
+            type: metadata.lightType,
+            enabled: metadata.enabled,
+            color: `#${metadata.color.getHexString()}`,
+            intensity: metadata.intensity,
+            angularDiameter: metadata.angularDiameter,
+            innerConeAngle: metadata.innerConeAngle,
+            outerConeAngle: metadata.outerConeAngle,
+          },
+        },
+      }));
+      return;
+    }
     const sphere = isPtSphereMesh(selectedObject);
     const sphereIndex = sphere ? selectedObject.userData.pathTracer.primitiveIndex : null;
     const quadIndex = isPtQuadMesh(selectedObject) ? selectedObject.userData.pathTracer.primitiveIndex : null;
@@ -933,6 +1192,7 @@ export default class PtActions {
             turbulence: texture.type === PtTextureType.Perlin ? texture.turbulence : null,
           },
         },
+        light: null,
       },
     }));
   }
@@ -999,7 +1259,7 @@ export default class PtActions {
         quadIndex: null,
         selectable: false,
         traceable: false,
-        capability: "emissive geometry",
+        capability: "authored lighting",
       },
       {
         id: "group:traceables",
@@ -1050,7 +1310,22 @@ export default class PtActions {
           capability: emissive ? "emissive quad light" : "path-traced quad",
         };
       });
-    return [...fixedObjects, ...spheres, ...quads];
+    const analyticLights: PtState["sceneObjects"] = this.renderer.ptScene
+      .getAnalyticLightNodes()
+      .map((light) => ({
+        id: light.userData.pathTracer.objectId,
+        label: light.userData.pathTracer.objectName,
+        kind: "light" as const,
+        parentId: "group:lights",
+        depth: 2,
+        sphereIndex: null,
+        quadIndex: null,
+        selectable: true,
+        traceable: true,
+        capability: `${light.userData.pathTracer.lightType} light`,
+        lightEnabled: light.userData.pathTracer.enabled,
+      }));
+    return [...fixedObjects, ...analyticLights, ...spheres, ...quads];
   }
 
   private publishSceneObjects() {
@@ -1058,7 +1333,7 @@ export default class PtActions {
     this.store.update((state) => ({ ...state, sceneObjects }));
   }
 
-  private captureTransform(object: PtTraceableMesh): TransformSnapshot {
+  private captureTransform(object: PtEditableObject): TransformSnapshot {
     return {
       position: object.position.clone(),
       quaternion: object.quaternion.clone(),
@@ -1076,6 +1351,48 @@ export default class PtActions {
     this.renderer.transformControls.showX = true;
     this.renderer.transformControls.showY = mode !== "scale" || !sphere;
     this.renderer.transformControls.showZ = mode !== "scale";
+  }
+
+  private captureAnalyticLight(
+    object: import("./PtAnalyticLight").PtAnalyticLightNode
+  ): AnalyticLightSnapshot {
+    const metadata = object.userData.pathTracer;
+    return {
+      enabled: metadata.enabled,
+      color: metadata.color.getHex(),
+      intensity: metadata.intensity,
+      angularDiameter: metadata.angularDiameter,
+      innerConeAngle: metadata.innerConeAngle,
+      outerConeAngle: metadata.outerConeAngle,
+    };
+  }
+
+  private applyAnalyticLight(
+    object: import("./PtAnalyticLight").PtAnalyticLightNode,
+    snapshot: AnalyticLightSnapshot
+  ) {
+    const metadata = object.userData.pathTracer;
+    metadata.enabled = snapshot.enabled;
+    metadata.color.setHex(snapshot.color);
+    metadata.intensity = snapshot.intensity;
+    metadata.angularDiameter = snapshot.angularDiameter;
+    metadata.innerConeAngle = snapshot.innerConeAngle;
+    metadata.outerConeAngle = snapshot.outerConeAngle;
+    syncAnalyticLightPreview(object);
+    this.renderer.invalidate(PtInvalidationLevel.Material, "analytic light history applied");
+    if (this.selectedObject === object) this.publishSelection();
+    this.publishSceneObjects();
+  }
+
+  private analyticLightsEqual(
+    a: AnalyticLightSnapshot,
+    b: AnalyticLightSnapshot
+  ) {
+    return a.enabled === b.enabled && a.color === b.color &&
+      a.intensity === b.intensity &&
+      a.angularDiameter === b.angularDiameter &&
+      a.innerConeAngle === b.innerConeAngle &&
+      a.outerConeAngle === b.outerConeAngle;
   }
 
   private captureMaterial(materialId: number): MaterialSnapshot {
@@ -1117,6 +1434,7 @@ export default class PtActions {
     }
     if (
       this.selectedObject &&
+      !isPtAnalyticLightNode(this.selectedObject) &&
       getMaterialMetadata(this.selectedObject.material).materialId === materialId
     ) {
       this.publishSelection();
@@ -1237,6 +1555,7 @@ export default class PtActions {
       height: null,
       uvMapping: null,
       material: null,
+      light: null,
     };
   }
 
