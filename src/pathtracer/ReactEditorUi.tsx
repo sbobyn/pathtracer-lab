@@ -574,15 +574,6 @@ function ObjectInspectorContent({
         />
         <PersistentDetails className="editor-subpanel" storageKey="object-transform">
           <summary>Transform</summary>
-          <div className="editor-inspector__commands" aria-label="Transform mode">
-            <button type="button" aria-pressed={state.settings.transformMode === "translate"} title="Move (G)" onClick={() => actions.setTransformMode("translate")}>Move</button>
-            <button type="button" aria-pressed={state.settings.transformMode === "rotate"} title="Rotate (R)" onClick={() => actions.setTransformMode("rotate")}>Rotate</button>
-            <button type="button" aria-pressed={state.settings.transformMode === "scale"} title="Scale (S)" onClick={() => actions.setTransformMode("scale")}>Scale</button>
-          </div>
-          <div className="editor-inspector__commands" aria-label="Transform orientation">
-            <button type="button" aria-pressed={state.settings.transformSpace === "global"} onClick={() => actions.setTransformSpace("global")}>Global</button>
-            <button type="button" aria-pressed={state.settings.transformSpace === "local"} onClick={() => actions.setTransformSpace("local")}>Local</button>
-          </div>
           <VectorField
             label="Position"
             value={[
@@ -909,7 +900,7 @@ function SelectedObjectInspector({
       clampPanelSize({
         width:
           gesture.axis === "width" || gesture.axis === "both"
-            ? gesture.startSize.width - (event.clientX - gesture.startX)
+            ? gesture.startSize.width + event.clientX - gesture.startX
             : gesture.startSize.width,
         height:
           gesture.axis === "height" || gesture.axis === "both"
@@ -933,7 +924,7 @@ function SelectedObjectInspector({
       style={
         collapsed
           ? undefined
-          : { width: size.width, maxHeight: size.height }
+          : { width: size.width, height: size.height }
       }
     >
       <button
@@ -1048,12 +1039,70 @@ function RenderPanel({
   actions: PtActions;
 }) {
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:render", false);
+  const [size, setSize] = useState<PanelSize>(() =>
+    clampPanelSize({ width: 260, height: 360 })
+  );
+  const resizeGesture = useRef<{
+    axis: ResizeAxis;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startSize: PanelSize;
+  } | null>(null);
   const fps = useFrameRate();
+
+  useEffect(() => {
+    const handleResize = () => setSize((current) => clampPanelSize(current));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const beginResize = (
+    axis: ResizeAxis,
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (collapsed || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeGesture.current = {
+      axis,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startSize: size,
+    };
+  };
+
+  const continueResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = resizeGesture.current;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    setSize(
+      clampPanelSize({
+        width:
+          gesture.axis === "width" || gesture.axis === "both"
+            ? gesture.startSize.width - (event.clientX - gesture.startX)
+            : gesture.startSize.width,
+        height:
+          gesture.axis === "height" || gesture.axis === "both"
+            ? gesture.startSize.height + event.clientY - gesture.startY
+            : gesture.startSize.height,
+      })
+    );
+  };
+
+  const finishResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    resizeGesture.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   return (
     <aside
       className="render-panel"
       aria-label="Render settings"
       data-collapsed={collapsed}
+      style={collapsed ? undefined : { width: size.width, height: size.height }}
     >
       <button
         className="render-panel__toggle"
@@ -1068,6 +1117,17 @@ function RenderPanel({
         <span className="render-panel__chevron" aria-hidden="true">⌃</span>
       </button>
       {!collapsed && <RenderSettings state={state} actions={actions} />}
+      {(["width", "height", "both"] as const).map((axis) => (
+        <div
+          key={axis}
+          className={`render-panel__resize-handle render-panel__resize-handle--${axis}`}
+          aria-hidden="true"
+          onPointerDown={(event) => beginResize(axis, event)}
+          onPointerMove={continueResize}
+          onPointerUp={finishResize}
+          onPointerCancel={finishResize}
+        />
+      ))}
     </aside>
   );
 }
@@ -1267,6 +1327,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
   return (
     <>
     <div className="editor-top-toolbar">
+      <div className="scene-toolbar__add-wrap">
       <button
         className="scene-toolbar__add"
         type="button"
@@ -1277,7 +1338,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
           setAddMenuOpen((open) => !open);
         }}
       >
-        <span aria-hidden="true">＋</span> Add
+        <span className="scene-toolbar__add-icon" aria-hidden="true">＋</span>
+        <span className="scene-toolbar__add-label">Add</span>
       </button>
       {addMenuOpen && (
         <CreationMenu
@@ -1286,6 +1348,21 @@ function EditorShell({ actions }: { actions: PtActions }) {
           onClose={() => setAddMenuOpen(false)}
           onRename={() => setRenameFocusRequest((request) => request + 1)}
         />
+      )}
+      </div>
+      {state.selection.objectId !== null && (
+        <div className="transform-toolbar" aria-label="Transform tools">
+          <div className="transform-toolbar__group" aria-label="Transform mode">
+            <button type="button" aria-pressed={state.settings.transformMode === "translate"} title="Move (G)" onClick={() => actions.setTransformMode("translate")}><kbd>G</kbd><span>Move</span></button>
+            <button type="button" aria-pressed={state.settings.transformMode === "rotate"} title="Rotate (R)" onClick={() => actions.setTransformMode("rotate")}><kbd>R</kbd><span>Rotate</span></button>
+            <button type="button" aria-pressed={state.settings.transformMode === "scale"} title="Scale (S)" onClick={() => actions.setTransformMode("scale")}><kbd>S</kbd><span>Scale</span></button>
+          </div>
+          <div className="transform-toolbar__divider" aria-hidden="true" />
+          <div className="transform-toolbar__group" aria-label="Transform orientation">
+            <button type="button" aria-pressed={state.settings.transformSpace === "global"} onClick={() => actions.setTransformSpace("global")}>Global</button>
+            <button type="button" aria-pressed={state.settings.transformSpace === "local"} onClick={() => actions.setTransformSpace("local")}>Local</button>
+          </div>
+        </div>
       )}
     </div>
     <div className="editor-left-stack">
@@ -1329,14 +1406,14 @@ function EditorShell({ actions }: { actions: PtActions }) {
         />
       ))}
     </aside>
-    </div>
-    <div className="editor-right-stack">
-    <RenderPanel state={state} actions={actions} />
     <SelectedObjectInspector
       state={state}
       actions={actions}
       renameFocusRequest={renameFocusRequest}
     />
+    </div>
+    <div className="editor-right-stack">
+    <RenderPanel state={state} actions={actions} />
     </div>
     {contextMenu && (
       <CreationMenu
