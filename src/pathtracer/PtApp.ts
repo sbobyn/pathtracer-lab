@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import PtActions from "./PtActions";
-import { PresetPtScenes } from "./PresetPtScenes";
+import { PresetPtScenes, resolutionScaleForPreset } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
 import {
   clearPtPreferences,
@@ -102,11 +102,21 @@ export default class PtApp {
     createUi: PtUiFactory
   ) {
     const defaults = createDefaultPtState();
-    const initialState = loadPtPreferences(
+    const loadedState = loadPtPreferences(
       window.localStorage,
       defaults,
       Object.keys(PresetPtScenes)
     );
+    const initialState = {
+      ...loadedState,
+      settings: {
+        ...loadedState.settings,
+        resolutionScale: resolutionScaleForPreset(
+          loadedState.sceneKey,
+          loadedState.settings.resolutionScale
+        ),
+      },
+    };
     const ptScene = PresetPtScenes[initialState.sceneKey]();
     ptScene.backgroundColorTop.set(initialState.settings.backgroundColorTop);
     ptScene.backgroundColorBottom.set(initialState.settings.backgroundColorBottom);

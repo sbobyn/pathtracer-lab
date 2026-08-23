@@ -2,19 +2,47 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
     Hit hit;
     vec3 radiance = vec3(0.0);
     vec3 throughput = vec3(1.0);
+    vec3 previousOrigin = ray.origin;
+    float previousBsdfPdf = 0.0;
+    bool previousWasLambert = false;
     for (int depth = 0; depth < uMaxRayDepth; depth++) {
         bool didHit = hitWorld(world, ray, Interval(1e-3, 1e4), hit);
         if (didHit) {
             Material material = uMaterials[hit.materialId];
-            radiance += throughput * emitted(material, hit);
+            vec3 emission = emitted(material, hit);
+            if (material.type == 3) {
+                float emissionWeight = 1.0;
+                if (previousWasLambert && uIntegratorMode == 1) {
+                    emissionWeight = 0.0;
+                } else if (previousWasLambert && uIntegratorMode == 2) {
+                    float lightPdf = lightPdfForHit(previousOrigin, hit);
+                    emissionWeight = powerHeuristic(previousBsdfPdf, lightPdf);
+                }
+                radiance += throughput * emissionWeight * emission;
+            }
             if (!materialScatters(material)) break;
 
-            ray.origin = hit.position;
             vec2 bounceSeed = seed + vec2(
                 17.0 * float(depth) + 11.0,
                 59.0 * float(depth) + 23.0
             );
+            if (material.type == 0 && uIntegratorMode != 0) {
+                radiance += estimateDirectLambert(
+                    world,
+                    hit,
+                    material,
+                    throughput,
+                    bounceSeed + vec2(131.0, 197.0)
+                );
+            }
+
+            previousOrigin = hit.position;
+            ray.origin = hit.position;
             ray.direction = scatter(ray, hit, bounceSeed);
+            previousWasLambert = material.type == 0;
+            previousBsdfPdf = previousWasLambert
+                ? lambertPdf(hit.normal, ray.direction)
+                : 0.0;
             throughput *= sampleTexture(material.textureId, hit);
         } else {
             vec3 unitDirection = normalize(ray.direction);

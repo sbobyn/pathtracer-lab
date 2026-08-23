@@ -4,6 +4,9 @@
 #ifndef MAX_QUADS
 #define MAX_QUADS 1
 #endif
+#ifndef MAX_LIGHTS
+#define MAX_LIGHTS 1
+#endif
 
 precision highp float;
 #define PI 3.141592653
@@ -24,6 +27,9 @@ uniform Camera uCamera;
 uniform World uWorld;
 uniform int uSphereCount;
 uniform int uQuadCount;
+uniform Light uLights[MAX_LIGHTS];
+uniform int uLightCount;
+uniform int uIntegratorMode;
 uniform Material uMaterials[MAX_SPHERES];
 uniform Texture uTextures[MAX_SPHERES];
 uniform sampler2D uImageTexture0;
@@ -35,6 +41,8 @@ uniform sampler2D uImageTexture3;
 #include random.glsl
 #include textures.glsl
 #include materials.glsl
+// Light estimators are kept separate from path-state bookkeeping (STE-488).
+#include lighting.glsl
 #include camera.glsl
 #include integrator.glsl
 #include accumulation.glsl

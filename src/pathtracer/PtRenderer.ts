@@ -20,6 +20,12 @@ import {
 import GpuScene from "./GpuScene";
 import SceneCompiler from "./SceneCompiler";
 
+function integratorModeValue(mode: PtSettings["integratorMode"]): number {
+  if (mode === "direct") return 1;
+  if (mode === "mis") return 2;
+  return 0;
+}
+
 export default class PtRenderer {
   public ptScene: PtScene;
   public camera: THREE.PerspectiveCamera;
@@ -182,6 +188,12 @@ export default class PtRenderer {
     this.invalidate(PtInvalidationLevel.Settings, "maximum ray depth changed");
   }
 
+  public setIntegratorMode(mode: PtSettings["integratorMode"]) {
+    this.settings.integratorMode = mode;
+    this.uniforms.uIntegratorMode.value = integratorModeValue(mode);
+    this.invalidate(PtInvalidationLevel.Settings, "integrator mode changed");
+  }
+
   public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
     this.settings.enableDepthOfField = enabled;
     this.uniforms.uEnableDoF.value = enabled;
@@ -278,11 +290,13 @@ export default class PtRenderer {
   private setupShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
+    const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
       fragmentShader: `#define MAX_SPHERES ${capacity}
        #define MAX_QUADS ${quadCapacity}
+       #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`,
       uniforms: this.uniforms,
       renderer: this.renderer,
@@ -295,9 +309,11 @@ export default class PtRenderer {
   private updateShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
+    const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas
       .setShader(`#define MAX_SPHERES ${capacity}
        #define MAX_QUADS ${quadCapacity}
+       #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`);
   }
 
@@ -311,6 +327,10 @@ export default class PtRenderer {
 
   private quadUniformCapacity() {
     return Math.max(1, this.gpuScene.quads.length);
+  }
+
+  private lightUniformCapacity() {
+    return Math.max(1, this.gpuScene.lights.length);
   }
 
   private setupControls() {
@@ -359,6 +379,7 @@ export default class PtRenderer {
 
     this.uniforms.uNumSamples.value = this.settings.numSamples;
     this.uniforms.uMaxRayDepth.value = this.settings.maxRayDepth;
+    this.uniforms.uIntegratorMode.value = integratorModeValue(this.settings.integratorMode);
     this.uniforms.uBackgroundColorTop.value = this.ptScene.backgroundColorTop;
     this.uniforms.uBackgroundColorBottom.value =
       this.ptScene.backgroundColorBottom;
@@ -392,6 +413,9 @@ export default class PtRenderer {
       },
       uSphereCount: { value: this.gpuScene.spheres.length },
       uQuadCount: { value: this.gpuScene.quads.length },
+      uLights: { value: this.uniformLightValues() },
+      uLightCount: { value: this.gpuScene.lights.length },
+      uIntegratorMode: { value: integratorModeValue(this.settings.integratorMode) },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
       uMaterials: { value: this.uniformMaterialValues() },
@@ -414,6 +438,8 @@ export default class PtRenderer {
     this.uniforms.uWorld.value.quads = this.uniformQuadValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
     this.uniforms.uQuadCount.value = this.gpuScene.quads.length;
+    this.uniforms.uLights.value = this.uniformLightValues();
+    this.uniforms.uLightCount.value = this.gpuScene.lights.length;
     this.uniforms.uMaterials.value = this.uniformMaterialValues();
     this.uniforms.uTextures.value = this.uniformTextureValues();
     this.uniforms.uImageTexture0.value = this.gpuScene.imageTextures[0] ?? this.fallbackImageTexture;
@@ -455,6 +481,20 @@ export default class PtRenderer {
     return Array.from(
       { length: capacity },
       (_, index) => this.gpuScene.materials[index] ?? fallback
+    );
+  }
+
+  private uniformLightValues() {
+    const padding = {
+      primitiveType: 0 as const,
+      primitiveIndex: 0,
+      materialId: 0,
+      area: 1,
+      emissionTwoSided: false,
+    };
+    return Array.from(
+      { length: this.lightUniformCapacity() },
+      (_, index) => this.gpuScene.lights[index] ?? padding
     );
   }
 

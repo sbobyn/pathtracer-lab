@@ -81,6 +81,7 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             closestSoFar = candidate.t;
             hit = candidate;
             hit.materialId = sphere.materialId;
+            hit.primitiveType = 0;
             hit.primitiveId = i;
         }
     }
@@ -92,7 +93,8 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             closestSoFar = candidate.t;
             hit = candidate;
             hit.materialId = quad.materialId;
-            hit.primitiveId = uSphereCount + i;
+            hit.primitiveType = 1;
+            hit.primitiveId = i;
         }
     }
     return hitAnything;

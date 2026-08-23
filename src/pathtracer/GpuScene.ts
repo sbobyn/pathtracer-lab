@@ -42,7 +42,7 @@ export interface GpuMaterial {
 }
 
 export interface GpuLight {
-  primitiveType: "sphere" | "quad";
+  primitiveType: 0 | 1;
   primitiveIndex: number;
   materialId: number;
   area: number;

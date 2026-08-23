@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PresetPtScenes } from "./PresetPtScenes";
+import { PresetPtScenes, resolutionScaleForPreset } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
 import {
   getMaterialMetadata,
@@ -137,6 +137,11 @@ export default class PtActions {
     this.renderer.setFov(scene.camera.fov, false);
     this.renderer.setDepthOfFieldEnabled(false, false);
     this.renderer.setNumSamples(1, false);
+    const resolutionScale = resolutionScaleForPreset(
+      sceneKey,
+      this.store.getState().settings.resolutionScale
+    );
+    this.renderer.setResolutionScale(resolutionScale);
 
     this.store.update((state) => ({
       ...state,
@@ -147,6 +152,7 @@ export default class PtActions {
         backgroundColorBottom: `#${scene.backgroundColorBottom.getHexString()}`,
         fov: scene.camera.fov,
         numSamples: 1,
+        resolutionScale,
         enableDepthOfField: false,
       },
       selection: this.emptySelection(),
@@ -199,6 +205,11 @@ export default class PtActions {
   public setMaxRayDepth(depth: number) {
     this.renderer.setMaxRayDepth(depth);
     this.updateSetting("maxRayDepth", depth);
+  }
+
+  public setIntegratorMode(mode: PtSettings["integratorMode"]) {
+    this.renderer.setIntegratorMode(mode);
+    this.updateSetting("integratorMode", mode);
   }
 
   public setResolutionScale(scale: number) {
@@ -1176,6 +1187,9 @@ export default class PtActions {
     }
     if (current.maxRayDepth !== settings.maxRayDepth) {
       this.setMaxRayDepth(settings.maxRayDepth);
+    }
+    if (current.integratorMode !== settings.integratorMode) {
+      this.setIntegratorMode(settings.integratorMode);
     }
     if (current.resolutionScale !== settings.resolutionScale) {
       this.setResolutionScale(settings.resolutionScale);

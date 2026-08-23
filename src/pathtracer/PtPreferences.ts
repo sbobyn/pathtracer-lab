@@ -18,6 +18,7 @@ interface PtPreferencesV1 {
 const accumulationFormats = new Set(["rgba8", "rgba16f", "rgba32f"]);
 const transformModes = new Set(["translate", "rotate", "scale"]);
 const transformSpaces = new Set(["global", "local"]);
+const integratorModes = new Set(["bsdf", "direct", "mis"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
 const colorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -43,6 +44,7 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   settings.fov = finiteNumber(candidate.fov, 10, 120) ?? settings.fov;
   settings.numSamples = integer(candidate.numSamples, 1, 20) ?? settings.numSamples;
   settings.maxRayDepth = integer(candidate.maxRayDepth, 1, 20) ?? settings.maxRayDepth;
+  if (integratorModes.has(candidate.integratorMode as string)) settings.integratorMode = candidate.integratorMode as PtSettings["integratorMode"];
   if (resolutionScales.has(candidate.resolutionScale as number)) settings.resolutionScale = candidate.resolutionScale as number;
   if (accumulationFormats.has(candidate.accumulationFormat as string)) settings.accumulationFormat = candidate.accumulationFormat as PtSettings["accumulationFormat"];
   settings.maxAccumulationFrames = integer(candidate.maxAccumulationFrames, 0, 100000) ?? settings.maxAccumulationFrames;

@@ -7,6 +7,10 @@ import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCame
 import { checkerTexture, imageTexture, perlinTexture } from "./PtTexture";
 import textureStudyImage from "../assets/texture-study.svg?url";
 
+export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
+  return sceneKey === "CornellBox" ? 0.5 : fallback;
+}
+
 export const PresetPtScenes: { [key: string]: () => PtScene } = {
   Part1Simple: () => {
     const spheres: PtSphere[] = [

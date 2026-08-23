@@ -169,7 +169,7 @@ export default class SceneCompiler {
       if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
       const radius = sphereRadius(mesh);
       lights.push({
-        primitiveType: "sphere",
+        primitiveType: 0,
         primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
         materialId: metadata.materialId,
         area: 4 * Math.PI * radius * radius,
@@ -180,7 +180,7 @@ export default class SceneCompiler {
       const metadata = getMaterialMetadata(mesh.material);
       if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
       lights.push({
-        primitiveType: "quad",
+        primitiveType: 1,
         primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
         materialId: metadata.materialId,
         area: Math.abs(mesh.scale.x * mesh.scale.y),

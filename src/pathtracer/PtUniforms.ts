@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { GpuMaterial, GpuQuad, GpuSphere, GpuTexture } from "./GpuScene";
+import type { GpuLight, GpuMaterial, GpuQuad, GpuSphere, GpuTexture } from "./GpuScene";
 
 export default interface PtUniforms {
   uCamera: {
@@ -22,6 +22,9 @@ export default interface PtUniforms {
   };
   uSphereCount: { value: number };
   uQuadCount: { value: number };
+  uLights: { value: GpuLight[] };
+  uLightCount: { value: number };
+  uIntegratorMode: { value: number };
   uNumSamples: { value: number };
   uMaxRayDepth: { value: number };
   uMaterials: { value: GpuMaterial[] };

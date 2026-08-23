@@ -27,6 +27,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
       numSamples: 8,
       fov: 60,
       resolutionScale: 0.5,
+      integratorMode: "mis",
       transformMode: "rotate",
       transformSpace: "local",
     },
@@ -36,6 +37,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
   assert.equal(state.settings.numSamples, 8);
   assert.equal(state.settings.fov, 60);
   assert.equal(state.settings.resolutionScale, 0.5);
+  assert.equal(state.settings.integratorMode, "mis");
   assert.equal(state.settings.transformMode, "rotate");
   assert.equal(state.settings.transformSpace, "local");
   assert.equal(state.settings.maxRayDepth, 10);
@@ -47,12 +49,18 @@ test("invalid, obsolete, and out-of-range data falls back safely", () => {
   storage.value = JSON.stringify({
     version: PT_PREFERENCES_VERSION,
     sceneKey: "MissingScene",
-    settings: { numSamples: "many", fov: 999, backgroundColorTop: "blue" },
+    settings: {
+      numSamples: "many",
+      fov: 999,
+      integratorMode: "roulette",
+      backgroundColorTop: "blue",
+    },
   });
   const state = loadPtPreferences(storage, defaults, ["Part1Simple"]);
   assert.equal(state.sceneKey, defaults.sceneKey);
   assert.equal(state.settings.numSamples, defaults.settings.numSamples);
   assert.equal(state.settings.fov, 120);
+  assert.equal(state.settings.integratorMode, defaults.settings.integratorMode);
   assert.equal(state.settings.backgroundColorTop, defaults.settings.backgroundColorTop);
 
   storage.value = JSON.stringify({ version: 999, sceneKey: "Part1Final" });

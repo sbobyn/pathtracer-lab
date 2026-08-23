@@ -23,6 +23,7 @@ The path tracer currently supports:
 - constant, checker, image, and procedural Perlin textures
 - spherical and box-projected sphere UV mapping
 - authorable emissive quad and sphere lights with intensity and sidedness controls
+- selectable BSDF-only, explicit direct-light, and multiple-importance-sampling integrators
 - Cornell-box and black-background emissive-lighting study presets
 - depth of field / defocus blur
 - progressive ping-pong accumulation with selectable 8-bit, 16-bit float, and 32-bit float storage
@@ -48,6 +49,22 @@ actions perform edits and classify their renderer invalidation consequences. A
 editor mutate uniforms directly. The path-tracing shader is split into focused
 camera, geometry, material, texture, sampling, integration, and accumulation
 modules under `src/pathtracer/shaders/`.
+
+## Light-transport comparison modes
+
+The Render panel exposes three estimators so their convergence can be compared
+on the same authored scene:
+
+- **BSDF only** discovers emissive geometry through ordinary path scattering.
+- **Direct light** also selects an emissive sphere or quad and samples a point on
+  its surface, then traces a shadow ray to it.
+- **MIS** combines both strategies with the power heuristic so paths found well
+  by either strategy contribute without being counted twice.
+
+Light surfaces are sampled uniformly by area. Their area probability density is
+converted to solid angle at the shaded point before evaluating the Lambertian
+BRDF. This initial implementation applies explicit sampling to diffuse bounces;
+specular metal and dielectric paths continue through ordinary scattering.
 
 React owns presentation and ephemeral interface state. It does not own mutable
 Three.js objects, compiled scene data, GPU resources, or accumulation buffers.
@@ -106,7 +123,7 @@ Known baseline limitations:
 - `Part1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
-- Environment-map lighting, triangles, BVH traversal, mesh rendering, and direct-light importance sampling are not implemented yet.
+- Environment-map lighting, triangles, BVH traversal, and mesh rendering are not implemented yet.
 - A WebGL-capable browser is required. There is no WebGPU backend yet.
 
 ## Roadmap
@@ -114,7 +131,6 @@ Known baseline limitations:
 Broad future directions include:
 
 - add environment lighting and analytic light types
-- add explicit light sampling and multiple importance sampling
 - original triangle intersection and mesh data paths
 - BVH construction, traversal, and visualization
 - glTF mesh rendering built on the triangle, BVH, material, and texture systems

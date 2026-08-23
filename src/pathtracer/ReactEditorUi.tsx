@@ -329,6 +329,22 @@ function RenderSettings({
           setValue={(value) => actions.setMaxRayDepth(value)}
         />
       <SelectField
+          label="Integrator"
+          value={settings.integratorMode}
+          options={[
+            { value: "bsdf", label: "BSDF only" },
+            { value: "direct", label: "Direct light" },
+            { value: "mis", label: "MIS" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change integrator", () =>
+              actions.setIntegratorMode(value as typeof settings.integratorMode)
+            )
+          }
+      />
+      <SelectField
           label="Resolution"
           value={String(settings.resolutionScale)}
           options={[2, 1, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({
