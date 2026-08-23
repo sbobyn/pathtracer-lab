@@ -18,8 +18,50 @@ body {
 #editor-root {
   position: fixed;
   inset: 0;
+  --eui-field-label-width: 8.5rem;
   pointer-events: none;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+#editor-root .eui-field-row[data-density="compact"] {
+  --eui-control-height: 22px;
+  --eui-control-padding-inline: 5px;
+  --eui-inspector-gap: 6px;
+}
+
+#editor-root .eui-number-field-row .eui-field-row__body {
+  width: 48px;
+  justify-self: end;
+}
+
+#editor-root .eui-checkbox-field-row .eui-field-row__body {
+  width: 48px;
+  justify-self: end;
+}
+
+#editor-root .eui-checkbox-field-row .eui-field-row__control-line,
+#editor-root .eui-checkbox-field-row .eui-field-row__control {
+  justify-content: flex-end;
+}
+
+#editor-root .eui-number-field {
+  --eui-control-padding-inline: 3px;
+}
+
+#editor-root .eui-select-field-row .eui-field-row__body {
+  max-width: calc(100cqw - 64px);
+  justify-self: end;
+}
+
+#editor-root .eui-select-field-row .eui-field-row__layout {
+  grid-template-columns: minmax(0, 1fr) minmax(48px, max-content) auto;
+}
+
+#editor-root .eui-select-field {
+  width: fit-content;
+  max-width: 100%;
+  min-width: 48px;
+  field-sizing: content;
 }
 
 .editor-left-stack,
@@ -120,23 +162,36 @@ body {
   display: none;
 }
 
-.scene-toolbar {
-  position: relative;
+.editor-top-toolbar {
+  position: absolute;
+  z-index: 10;
+  top: 16px;
+  left: 50%;
   display: flex;
-  padding: 8px 12px;
-  border-top: 1px solid rgb(255 255 255 / 10%);
+  padding: 4px;
+  background: rgb(24 24 27 / 88%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  transform: translateX(-50%);
 }
 
 .scene-toolbar__add {
-  min-width: 66px;
-  padding: 5px 8px;
-  color: #f4f4f5;
-  background: #3f3f46;
-  border: 1px solid #52525b;
-  border-radius: 5px;
+  min-width: 64px;
+  min-height: 27px;
+  padding: 4px 9px;
+  color: #18200d;
+  background: #bff169;
+  border: 0;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 11px;
+  font-weight: 650;
 }
+
+.scene-toolbar__add:hover { background: #cdf77f; }
 
 .creation-menu {
   z-index: 20;
@@ -152,10 +207,11 @@ body {
   pointer-events: auto;
 }
 
-.scene-toolbar .creation-menu {
+.editor-top-toolbar .creation-menu {
   position: absolute;
-  top: 38px;
-  left: 12px;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .creation-menu button {
@@ -251,6 +307,8 @@ body {
 .editor-panel:not([open]) summary::after { transform: rotate(180deg); }
 
 .editor-panel__content {
+  display: grid;
+  gap: 4px;
   padding: 0 12px 10px;
 }
 
@@ -265,6 +323,8 @@ body {
 }
 
 .editor-controls-group {
+  display: grid;
+  gap: 4px;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -303,10 +363,42 @@ body {
   justify-self: end;
 }
 
-.editor-control input[type="color"] {
-  width: 100%;
-  height: 24px;
-  padding: 2px;
+.editor-color-picker {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 25px;
+  padding: 0;
+  overflow: hidden;
+  background: #27272a;
+  border: 1px solid #52525b;
+  border-radius: 5px;
+  cursor: pointer;
+  justify-self: end;
+}
+
+.editor-color-picker > span {
+  display: block;
+  width: 24px;
+  height: 13px;
+  border: 1px solid rgb(255 255 255 / 38%);
+  border-radius: 1px;
+}
+
+.editor-color-picker:focus {
+  outline: none;
+}
+
+.editor-color-picker:focus-visible {
+  border-color: #71717a;
+}
+
+.editor-color-picker__native {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .editor-action-button {
@@ -546,7 +638,14 @@ body {
 }
 
 .render-panel__content {
+  display: grid;
+  gap: 4px;
   padding: 8px 12px 12px;
+}
+
+.editor-subpanel > .eui-field-row + .eui-field-row,
+.procedural-texture-controls > .eui-field-row + .eui-field-row {
+  margin-top: 4px;
 }
 
 .object-inspector[data-collapsed="true"] {

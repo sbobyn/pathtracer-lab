@@ -7,15 +7,21 @@ import {
   type ReactNode,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import {
+  CheckboxField,
+  NumberField as EditorNumberField,
+  SelectField,
+  VectorField,
+} from "@nybobs/editor-ui";
 import * as THREE from "three";
 import type PtActions from "./PtActions";
 import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState } from "./PtState";
 import { PresetPtScenes } from "./PresetPtScenes";
-import { computeNumberScrubValue } from "./numberScrub";
 import { builtinTextures } from "./BuiltinTextures";
 
 const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
+const pathTracerScrubSpeed = 0.25;
 
 function readPersistedBoolean(key: string, fallback: boolean) {
   try {
@@ -70,119 +76,153 @@ function commitSetting(actions: PtActions, label: string, update: () => void) {
   actions.commitSettingsEdit();
 }
 
-function NumberField({
-  actions,
+function ColorField({
   label,
   value,
-  minimum,
-  maximum,
+  onBegin,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onBegin: () => void;
+  onChange: (value: string) => void;
+  onCommit: () => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const openRef = useRef(false);
+  const suppressClick = useRef(false);
+  const [open, setOpen] = useState(false);
+
+  const close = () => {
+    if (!openRef.current) return;
+    openRef.current = false;
+    setOpen(false);
+    input.current?.blur();
+    onCommit();
+  };
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!openRef.current || button.current?.contains(event.target as Node)) return;
+      close();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    const nativeInput = input.current;
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    nativeInput?.addEventListener("change", close);
+    nativeInput?.addEventListener("cancel", close);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+      nativeInput?.removeEventListener("change", close);
+      nativeInput?.removeEventListener("cancel", close);
+    };
+  });
+
+  return (
+    <div className="editor-control">
+      <span>{label}</span>
+      <button
+        ref={button}
+        type="button"
+        className="editor-color-picker"
+        aria-label={label}
+        aria-expanded={open}
+        onPointerDown={(event) => {
+          if (!openRef.current) return;
+          event.preventDefault();
+          suppressClick.current = true;
+          close();
+        }}
+        onClick={() => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
+          if (openRef.current) {
+            close();
+            return;
+          }
+          onBegin();
+          openRef.current = true;
+          setOpen(true);
+          try {
+            input.current?.showPicker();
+          } catch {
+            openRef.current = false;
+            setOpen(false);
+            onCommit();
+          }
+        }}
+      >
+        <span style={{ backgroundColor: value }} />
+      </button>
+      <input
+        ref={input}
+        className="editor-color-picker__native"
+        type="color"
+        tabIndex={-1}
+        value={value}
+        onInput={(event) => onChange(event.currentTarget.value)}
+      />
+    </div>
+  );
+}
+
+function SettingsNumberField({
+  actions,
+  label,
+  historyLabel,
+  value,
+  min,
+  max,
   step,
-  coarseStep,
+  precisionStep,
+  snapInterval,
+  sensitivity,
   integer = false,
   disabled = false,
   setValue,
 }: {
   actions: PtActions;
   label: string;
+  historyLabel: string;
   value: number;
-  minimum: number;
-  maximum: number;
+  min: number;
+  max: number;
   step: number;
-  coarseStep: number;
+  precisionStep: number;
+  snapInterval: number;
+  sensitivity: number;
   integer?: boolean;
   disabled?: boolean;
   setValue: (value: number) => void;
 }) {
-  const gesture = useRef<{
-    pointerId: number;
-    startY: number;
-    lastY: number;
-    lastValue: number;
-    scrubbing: boolean;
-  } | null>(null);
-
-  const apply = (nextValue: number) => {
-    if (!Number.isFinite(nextValue)) return null;
-    const bounded = Math.min(maximum, Math.max(minimum, nextValue));
-    setValue(integer ? Math.round(bounded) : Number(bounded.toFixed(6)));
-    return bounded;
-  };
-
-  const begin = () => actions.beginSettingsEdit(label);
-  const finish = () => actions.commitSettingsEdit();
-
   return (
-    <input
-      type="number"
-      min={minimum}
-      max={maximum}
-      step={step}
-      disabled={disabled}
+    <EditorNumberField
+      label={label}
       value={value}
-      title="Drag up/down to adjust · Shift for precision · Ctrl/⌘ to snap"
-      data-scrubbing={gesture.current?.scrubbing ?? false}
-      onFocus={begin}
-      onChange={(event) => {
-        begin();
-        apply(event.currentTarget.valueAsNumber);
+      min={min}
+      max={max}
+      step={step}
+      precisionStep={precisionStep}
+      snapInterval={snapInterval}
+      sensitivity={sensitivity * pathTracerScrubSpeed}
+      integer={integer}
+      disabled={disabled}
+      density="compact"
+      layout="horizontal"
+      onChange={(nextValue) => {
+        actions.beginSettingsEdit(historyLabel);
+        setValue(nextValue);
       }}
-      onBlur={finish}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") {
-          actions.cancelSettingsEdit();
-          event.currentTarget.blur();
-        }
-      }}
-      onPointerDown={(event) => {
-        if (disabled || event.button !== 0) return;
-        begin();
-        gesture.current = {
-          pointerId: event.pointerId,
-          startY: event.clientY,
-          lastY: event.clientY,
-          lastValue: value,
-          scrubbing: false,
-        };
-      }}
-      onPointerMove={(event) => {
-        const active = gesture.current;
-        if (!active || active.pointerId !== event.pointerId) return;
-        const totalDeltaY = event.clientY - active.startY;
-        if (!active.scrubbing && Math.abs(totalDeltaY) < 4) return;
-        if (!active.scrubbing) {
-          active.scrubbing = true;
-          event.currentTarget.setPointerCapture(event.pointerId);
-        }
-        const deltaY = event.clientY - active.lastY;
-        active.lastY = event.clientY;
-        const nextValue = computeNumberScrubValue(
-          active.lastValue,
-          deltaY,
-          step,
-          coarseStep,
-          event.shiftKey,
-          event.ctrlKey || event.metaKey
-        );
-        active.lastValue = apply(nextValue) ?? active.lastValue;
-        event.preventDefault();
-      }}
-      onPointerUp={(event) => {
-        if (gesture.current?.pointerId !== event.pointerId) return;
-        const wasScrubbing = gesture.current.scrubbing;
-        gesture.current = null;
-        if (wasScrubbing) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-          event.currentTarget.blur();
-        } else {
-          finish();
-        }
-      }}
-      onPointerCancel={(event) => {
-        if (gesture.current?.pointerId !== event.pointerId) return;
-        gesture.current = null;
-        actions.cancelSettingsEdit();
-      }}
+      onCommit={() => actions.commitSettingsEdit()}
+      onCancel={() => actions.cancelSettingsEdit()}
     />
   );
 }
@@ -198,57 +238,31 @@ function SceneSettings({
     <PersistentDetails className="editor-panel" storageKey="scene">
       <summary id="scene-settings-title">Scene</summary>
       <div className="editor-panel__content">
-      <label className="editor-control">
-        <span>Preset</span>
-        <select
-          value={state.sceneKey}
-          onChange={(event) => actions.setScene(event.currentTarget.value)}
-        >
-          {Object.keys(PresetPtScenes).map((sceneKey) => (
-            <option key={sceneKey} value={sceneKey}>
-              {sceneKey}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="editor-control">
-        <span>Field of view</span>
-        <NumberField
-          actions={actions}
-          label="Change field of view"
-          value={state.settings.fov}
-          minimum={10}
-          maximum={120}
-          step={1}
-          coarseStep={5}
-          integer
-          setValue={(value) => actions.setFov(value)}
-        />
-      </label>
-      <label className="editor-control">
-        <span>Sky color</span>
-        <input
-          type="color"
-          value={state.settings.backgroundColorTop}
-          onFocus={() => actions.beginSettingsEdit("Change sky color")}
-          onChange={(event) =>
-            actions.setBackgroundColorTop(event.currentTarget.value)
-          }
-          onBlur={() => actions.commitSettingsEdit()}
-        />
-      </label>
-      <label className="editor-control">
-        <span>Horizon color</span>
-        <input
-          type="color"
-          value={state.settings.backgroundColorBottom}
-          onFocus={() => actions.beginSettingsEdit("Change horizon color")}
-          onChange={(event) =>
-            actions.setBackgroundColorBottom(event.currentTarget.value)
-          }
-          onBlur={() => actions.commitSettingsEdit()}
-        />
-      </label>
+      <SelectField
+        label="Preset"
+        value={state.sceneKey}
+        options={Object.keys(PresetPtScenes).map((sceneKey) => ({
+          value: sceneKey,
+          label: sceneKey,
+        }))}
+        density="compact"
+        layout="horizontal"
+        onChange={(value) => actions.setScene(value)}
+      />
+      <ColorField
+        label="Sky color"
+        value={state.settings.backgroundColorTop}
+        onBegin={() => actions.beginSettingsEdit("Change sky color")}
+        onChange={(value) => actions.setBackgroundColorTop(value)}
+        onCommit={() => actions.commitSettingsEdit()}
+      />
+      <ColorField
+        label="Horizon color"
+        value={state.settings.backgroundColorBottom}
+        onBegin={() => actions.beginSettingsEdit("Change horizon color")}
+        onChange={(value) => actions.setBackgroundColorBottom(value)}
+        onCommit={() => actions.commitSettingsEdit()}
+      />
       <button
         type="button"
         className="editor-action-button"
@@ -271,98 +285,96 @@ function RenderSettings({
   const { settings } = state;
   return (
       <div className="render-panel__content">
-      <label className="editor-control editor-control--checkbox">
-        <span>Path tracing</span>
-        <input
-          type="checkbox"
+      <CheckboxField
+          label="Path tracing"
           checked={settings.pathtracingEnabled}
-          onChange={(event) =>
+          density="compact"
+          layout="horizontal"
+          onChange={(checked) =>
             commitSetting(actions, "Toggle path tracing", () =>
-              actions.setPathtracingEnabled(event.currentTarget.checked)
+              actions.setPathtracingEnabled(checked)
             )
           }
-        />
-      </label>
+      />
       <fieldset
         className="editor-controls-group"
         disabled={!settings.pathtracingEnabled}
       >
-      <label className="editor-control">
-        <span>Samples</span>
-        <NumberField
+        <SettingsNumberField
           actions={actions}
-          label="Change samples per frame"
+          label="Samples"
+          historyLabel="Change samples per frame"
           value={settings.numSamples}
-          minimum={1}
-          maximum={20}
+          min={1}
+          max={20}
           step={1}
-          coarseStep={1}
+          precisionStep={0.1}
+          snapInterval={1}
+          sensitivity={0.5}
           integer
           setValue={(value) => actions.setNumSamples(value)}
         />
-      </label>
-      <label className="editor-control">
-        <span>Ray depth</span>
-        <NumberField
+        <SettingsNumberField
           actions={actions}
-          label="Change maximum ray depth"
+          label="Ray depth"
+          historyLabel="Change maximum ray depth"
           value={settings.maxRayDepth}
-          minimum={1}
-          maximum={20}
+          min={1}
+          max={20}
           step={1}
-          coarseStep={1}
+          precisionStep={0.1}
+          snapInterval={1}
+          sensitivity={0.5}
           integer
           setValue={(value) => actions.setMaxRayDepth(value)}
         />
-      </label>
-      <label className="editor-control">
-        <span>Resolution</span>
-        <select
-          value={settings.resolutionScale}
-          onChange={(event) =>
+      <SelectField
+          label="Resolution"
+          value={String(settings.resolutionScale)}
+          options={[2, 1, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({
+            value: String(scale),
+            label: `${scale}×`,
+          }))}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
             commitSetting(actions, "Change resolution scale", () =>
-              actions.setResolutionScale(Number(event.currentTarget.value))
+              actions.setResolutionScale(Number(value))
             )
           }
-        >
-          {[2, 1, 0.5, 0.25, 0.125, 0.0625].map((scale) => (
-            <option key={scale} value={scale}>
-              {scale}×
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="editor-control">
-        <span>Accumulation</span>
-        <select
+      />
+      <SelectField
+          label="Accumulation"
           value={settings.accumulationFormat}
-          onChange={(event) =>
+          options={[
+            { value: "rgba32f", label: "32-bit" },
+            { value: "rgba16f", label: "16-bit" },
+            { value: "rgba8", label: "8-bit" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
             commitSetting(actions, "Change accumulation format", () =>
               actions.setAccumulationFormat(
-                event.currentTarget.value as typeof settings.accumulationFormat
+                value as typeof settings.accumulationFormat
               )
             )
           }
-        >
-          <option value="rgba32f">32-bit float</option>
-          <option value="rgba16f">16-bit float</option>
-          <option value="rgba8">8-bit</option>
-        </select>
-      </label>
-      <label className="editor-control">
-        <span>Frame limit</span>
-        <NumberField
+      />
+        <SettingsNumberField
           actions={actions}
-          label="Change accumulation frame limit"
+          label="Frame limit"
+          historyLabel="Change accumulation frame limit"
           value={settings.maxAccumulationFrames}
-          minimum={0}
-          maximum={100000}
+          min={0}
+          max={100000}
           step={1}
-          coarseStep={100}
+          precisionStep={0.1}
+          snapInterval={100}
+          sensitivity={10}
           integer
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
-      </label>
       </fieldset>
       </div>
   );
@@ -380,48 +392,61 @@ function CameraSettings({
     <PersistentDetails className="editor-panel" storageKey="camera">
       <summary id="camera-settings-title">Camera</summary>
       <div className="editor-panel__content">
-      <label className="editor-control editor-control--checkbox">
-        <span>Depth of field</span>
-        <input
-          type="checkbox"
+      <SettingsNumberField
+        actions={actions}
+        label="Field of view"
+        historyLabel="Change field of view"
+        value={state.settings.fov}
+        min={10}
+        max={120}
+        step={1}
+        precisionStep={0.1}
+        snapInterval={5}
+        sensitivity={1}
+        integer
+        setValue={(value) => actions.setFov(value)}
+      />
+      <CheckboxField
+          label="Depth of field"
           checked={settings.enableDepthOfField}
-          onChange={(event) =>
+          density="compact"
+          layout="horizontal"
+          onChange={(checked) =>
             commitSetting(actions, "Toggle depth of field", () =>
-              actions.setDepthOfFieldEnabled(event.currentTarget.checked)
+              actions.setDepthOfFieldEnabled(checked)
             )
           }
-        />
-      </label>
+      />
       <fieldset
         className="editor-controls-group"
         disabled={!settings.enableDepthOfField}
       >
-      <label className="editor-control">
-        <span>Aperture</span>
-        <NumberField
+        <SettingsNumberField
           actions={actions}
-          label="Change camera aperture"
+          label="Aperture"
+          historyLabel="Change camera aperture"
           value={settings.aperture}
-          minimum={0}
-          maximum={0.1}
+          min={0}
+          max={0.1}
           step={0.001}
-          coarseStep={0.01}
+          precisionStep={0.0001}
+          snapInterval={0.01}
+          sensitivity={1}
           setValue={(value) => actions.setAperture(value)}
         />
-      </label>
-      <label className="editor-control">
-        <span>Focus distance</span>
-        <NumberField
+        <SettingsNumberField
           actions={actions}
-          label="Change camera focus distance"
+          label="Focus distance"
+          historyLabel="Change camera focus distance"
           value={settings.focusDistance}
-          minimum={0.1}
-          maximum={20}
+          min={0.1}
+          max={20}
           step={0.1}
-          coarseStep={1}
+          precisionStep={0.01}
+          snapInterval={1}
+          sensitivity={1}
           setValue={(value) => actions.setFocusDistance(value)}
         />
-      </label>
       </fieldset>
       </div>
     </PersistentDetails>
@@ -533,29 +558,6 @@ function ObjectInspectorContent({
     return null;
   }
 
-  const transformNumber = (
-    label: string,
-    value: number,
-    setValue: (value: number) => void,
-    minimum?: number
-  ) => (
-    <label className="editor-control">
-      <span>{label}</span>
-      <input
-        type="number"
-        value={value}
-        min={minimum}
-        step={0.01}
-        onFocus={() => actions.beginSelectedTransform()}
-        onChange={(event) => {
-          const nextValue = event.currentTarget.valueAsNumber;
-          if (Number.isFinite(nextValue)) setValue(nextValue);
-        }}
-        onBlur={() => actions.commitSelectedTransform()}
-      />
-    </label>
-  );
-
   return (
       <div className="object-inspector__content">
         <div className="editor-inspector__identity">
@@ -570,27 +572,58 @@ function ObjectInspectorContent({
         />
         <PersistentDetails className="editor-subpanel" storageKey="object-transform">
           <summary>Transform</summary>
-          {transformNumber("Position X", selection.position.x, (value) =>
-            actions.setSelectedPosition("x", value)
-          )}
-          {transformNumber("Position Y", selection.position.y, (value) =>
-            actions.setSelectedPosition("y", value)
-          )}
-          {transformNumber("Position Z", selection.position.z, (value) =>
-            actions.setSelectedPosition("z", value)
-          )}
-          {transformNumber("Radius", selection.radius, (value) =>
-            actions.setSelectedRadius(value), 0
-          )}
-          <label className="editor-control">
-            <span>UV mapping</span>
-            <select value={selection.uvMapping ?? "spherical"} onChange={(event) =>
-              actions.setSelectedUvMapping(event.currentTarget.value as "spherical" | "box")
-            }>
-              <option value="spherical">Spherical</option>
-              <option value="box">Box projection</option>
-            </select>
-          </label>
+          <VectorField
+            label="Position"
+            value={[
+              selection.position.x,
+              selection.position.y,
+              selection.position.z,
+            ]}
+            step={0.01}
+            precisionStep={0.001}
+            snapInterval={1}
+            min={-10000}
+            max={10000}
+            sensitivity={10 * pathTracerScrubSpeed}
+            density="compact"
+            onComponentChange={(index, value) => {
+              actions.beginSelectedTransform();
+              actions.setSelectedPosition((["x", "y", "z"] as const)[index], value);
+            }}
+            onCommit={() => actions.commitSelectedTransform()}
+            onCancel={() => actions.cancelSelectedTransform()}
+          />
+          <EditorNumberField
+            label="Radius"
+            value={selection.radius}
+            min={0.001}
+            max={10000}
+            step={0.01}
+            precisionStep={0.001}
+            snapInterval={1}
+            sensitivity={10 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => {
+              actions.beginSelectedTransform();
+              actions.setSelectedRadius(value);
+            }}
+            onCommit={() => actions.commitSelectedTransform()}
+            onCancel={() => actions.cancelSelectedTransform()}
+          />
+          <SelectField
+            label="UV mapping"
+            value={selection.uvMapping ?? "spherical"}
+            options={[
+              { value: "spherical", label: "Spherical" },
+              { value: "box", label: "Box projection" },
+            ]}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) =>
+              actions.setSelectedUvMapping(value as "spherical" | "box")
+            }
+          />
         </PersistentDetails>
         <PersistentDetails className="editor-subpanel" storageKey="object-material">
           <summary>Material · {material.kind}</summary>
@@ -645,80 +678,104 @@ function ObjectInspectorContent({
           )}
           {(material.texture.type === "checker" || material.texture.type === "perlin") && (
             <div className="procedural-texture-controls">
-              <label className="editor-control"><span>Color A</span><input type="color" value={material.texture.colorA!}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) => actions.setTextureColor(material.id, "colorA", new THREE.Color(event.currentTarget.value))}
-                onBlur={() => actions.commitMaterialEdit()} /></label>
-              <label className="editor-control"><span>Color B</span><input type="color" value={material.texture.colorB!}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) => actions.setTextureColor(material.id, "colorB", new THREE.Color(event.currentTarget.value))}
-                onBlur={() => actions.commitMaterialEdit()} /></label>
-              <label className="editor-control"><span>{material.texture.type === "checker" ? "Repeats" : "Scale"}</span><input type="number" min="0.1" step="0.1" value={material.texture.scale!}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) => Number.isFinite(event.currentTarget.valueAsNumber) && actions.setTextureScale(material.id, event.currentTarget.valueAsNumber)}
-                onBlur={() => actions.commitMaterialEdit()} /></label>
-              {material.texture.type === "perlin" && <label className="editor-control"><span>Turbulence</span><input type="number" min="0" step="0.5" value={material.texture.turbulence!}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) => Number.isFinite(event.currentTarget.valueAsNumber) && actions.setTextureTurbulence(material.id, event.currentTarget.valueAsNumber)}
-                onBlur={() => actions.commitMaterialEdit()} /></label>}
+              <ColorField label="Color A" value={material.texture.colorA!}
+                onBegin={() => actions.beginMaterialEdit(material.id)}
+                onChange={(value) => actions.setTextureColor(material.id, "colorA", new THREE.Color(value))}
+                onCommit={() => actions.commitMaterialEdit()} />
+              <ColorField label="Color B" value={material.texture.colorB!}
+                onBegin={() => actions.beginMaterialEdit(material.id)}
+                onChange={(value) => actions.setTextureColor(material.id, "colorB", new THREE.Color(value))}
+                onCommit={() => actions.commitMaterialEdit()} />
+              <EditorNumberField
+                label={material.texture.type === "checker" ? "Repeats" : "Scale"}
+                value={material.texture.scale!}
+                min={0.1}
+                max={100}
+                step={0.1}
+                precisionStep={0.01}
+                snapInterval={1}
+                sensitivity={5 * pathTracerScrubSpeed}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => {
+                  actions.beginMaterialEdit(material.id);
+                  actions.setTextureScale(material.id, value);
+                }}
+                onCommit={() => actions.commitMaterialEdit()}
+                onCancel={() => actions.cancelMaterialEdit()}
+              />
+              {material.texture.type === "perlin" && (
+                <EditorNumberField
+                  label="Turbulence"
+                  value={material.texture.turbulence!}
+                  min={0}
+                  max={20}
+                  step={0.5}
+                  precisionStep={0.05}
+                  snapInterval={1}
+                  sensitivity={0.5 * pathTracerScrubSpeed}
+                  density="compact"
+                  layout="horizontal"
+                  onChange={(value) => {
+                    actions.beginMaterialEdit(material.id);
+                    actions.setTextureTurbulence(material.id, value);
+                  }}
+                  onCommit={() => actions.commitMaterialEdit()}
+                  onCancel={() => actions.cancelMaterialEdit()}
+                />
+              )}
             </div>
           )}
           {material.texture.type === "constant" && (
-            <label className="editor-control">
-              <span>Color</span>
-              <input
-                type="color"
-                value={material.color}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) =>
-                  actions.setMaterialColor(
-                    material.id,
-                    new THREE.Color(event.currentTarget.value)
-                  )
-                }
-                onBlur={() => actions.commitMaterialEdit()}
-              />
-            </label>
+            <ColorField
+              label="Color"
+              value={material.color}
+              onBegin={() => actions.beginMaterialEdit(material.id)}
+              onChange={(value) =>
+                actions.setMaterialColor(material.id, new THREE.Color(value))
+              }
+              onCommit={() => actions.commitMaterialEdit()}
+            />
           )}
           {material.roughness !== null && (
-            <label className="editor-control">
-              <span>Roughness</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={material.roughness}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget.valueAsNumber;
-                  if (Number.isFinite(nextValue)) {
-                    actions.setMaterialFuzz(material.id, nextValue);
-                  }
-                }}
-                onBlur={() => actions.commitMaterialEdit()}
-              />
-            </label>
+            <EditorNumberField
+              label="Roughness"
+              value={material.roughness}
+              min={0}
+              max={1}
+              step={0.01}
+              precisionStep={0.001}
+              snapInterval={0.1}
+              sensitivity={1 * pathTracerScrubSpeed}
+              density="compact"
+              layout="horizontal"
+              onChange={(value) => {
+                actions.beginMaterialEdit(material.id);
+                actions.setMaterialFuzz(material.id, value);
+              }}
+              onCommit={() => actions.commitMaterialEdit()}
+              onCancel={() => actions.cancelMaterialEdit()}
+            />
           )}
           {material.ior !== null && (
-            <label className="editor-control">
-              <span>IOR</span>
-              <input
-                type="number"
-                min={1}
-                max={2.5}
-                step={0.01}
-                value={material.ior}
-                onFocus={() => actions.beginMaterialEdit(material.id)}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget.valueAsNumber;
-                  if (Number.isFinite(nextValue)) {
-                    actions.setMaterialIor(material.id, nextValue);
-                  }
-                }}
-                onBlur={() => actions.commitMaterialEdit()}
-              />
-            </label>
+            <EditorNumberField
+              label="IOR"
+              value={material.ior}
+              min={1}
+              max={2.5}
+              step={0.01}
+              precisionStep={0.001}
+              snapInterval={0.1}
+              sensitivity={1 * pathTracerScrubSpeed}
+              density="compact"
+              layout="horizontal"
+              onChange={(value) => {
+                actions.beginMaterialEdit(material.id);
+                actions.setMaterialIor(material.id, value);
+              }}
+              onCommit={() => actions.commitMaterialEdit()}
+              onCancel={() => actions.cancelMaterialEdit()}
+            />
           )}
         </PersistentDetails>
         <div className="editor-inspector__commands">
@@ -1091,14 +1148,14 @@ function EditorShell({ actions }: { actions: PtActions }) {
         setContextMenu(null);
       }
     };
-    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp, true);
     window.addEventListener("pointercancel", handlePointerCancel);
     window.addEventListener("contextmenu", handleContextMenu);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp, true);
       window.removeEventListener("pointercancel", handlePointerCancel);
@@ -1149,6 +1206,28 @@ function EditorShell({ actions }: { actions: PtActions }) {
 
   return (
     <>
+    <div className="editor-top-toolbar">
+      <button
+        className="scene-toolbar__add"
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={addMenuOpen}
+        onClick={() => {
+          setContextMenu(null);
+          setAddMenuOpen((open) => !open);
+        }}
+      >
+        <span aria-hidden="true">＋</span> Add
+      </button>
+      {addMenuOpen && (
+        <CreationMenu
+          actions={actions}
+          selectionActive={state.selection.objectId !== null}
+          onClose={() => setAddMenuOpen(false)}
+          onRename={() => setRenameFocusRequest((request) => request + 1)}
+        />
+      )}
+    </div>
     <div className="editor-left-stack">
     <HistoryPanel state={state} actions={actions} />
     <aside
@@ -1174,28 +1253,6 @@ function EditorShell({ actions }: { actions: PtActions }) {
         </button>
       </div>
       <div className="editor-shell__body">
-        <div className="scene-toolbar">
-          <button
-            className="scene-toolbar__add"
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={addMenuOpen}
-            onClick={() => {
-              setContextMenu(null);
-              setAddMenuOpen((open) => !open);
-            }}
-          >
-            Add <span aria-hidden="true">⌄</span>
-          </button>
-          {addMenuOpen && (
-            <CreationMenu
-              actions={actions}
-              selectionActive={state.selection.objectId !== null}
-              onClose={() => setAddMenuOpen(false)}
-              onRename={() => setRenameFocusRequest((request) => request + 1)}
-            />
-          )}
-        </div>
         <SceneSettings state={state} actions={actions} />
         <SceneHierarchy state={state} actions={actions} />
         <CameraSettings state={state} actions={actions} />
