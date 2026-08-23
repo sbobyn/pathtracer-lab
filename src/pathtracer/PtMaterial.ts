@@ -18,14 +18,16 @@ export default class PtMaterial {
 
   public static emissive(
     colorOrTexture: THREE.Color | PtTexture,
-    strength: number
+    strength: number,
+    twoSided = false
   ) {
     return new PtMaterial(
       PtMaterialType.Emissive,
       colorOrTexture,
       0,
       0,
-      strength
+      strength,
+      twoSided
     );
   }
 
@@ -34,7 +36,8 @@ export default class PtMaterial {
     albedoOrTexture: THREE.Color | PtTexture,
     public fuzz: number = 0,
     public ior: number = 0,
-    public emissionStrength: number = 0
+    public emissionStrength: number = 0,
+    public emissionTwoSided: boolean = false
   ) {
     this.texture =
       albedoOrTexture instanceof THREE.Color

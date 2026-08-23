@@ -38,6 +38,15 @@ export interface GpuMaterial {
   fuzz: number;
   ior: number;
   emissionStrength: number;
+  emissionTwoSided: boolean;
+}
+
+export interface GpuLight {
+  primitiveType: "sphere" | "quad";
+  primitiveIndex: number;
+  materialId: number;
+  area: number;
+  emissionTwoSided: boolean;
 }
 
 export default class GpuScene {
@@ -46,6 +55,7 @@ export default class GpuScene {
   public materials: GpuMaterial[];
   public textures: GpuTexture[];
   public imageTextures: THREE.Texture[];
+  public lights: GpuLight[];
   private disposed = false;
 
   constructor(
@@ -53,13 +63,15 @@ export default class GpuScene {
     quads: GpuQuad[],
     materials: GpuMaterial[],
     textures: GpuTexture[],
-    imageTextures: THREE.Texture[]
+    imageTextures: THREE.Texture[],
+    lights: GpuLight[]
   ) {
     this.spheres = spheres;
     this.quads = quads;
     this.materials = materials;
     this.textures = textures;
     this.imageTextures = imageTextures;
+    this.lights = lights;
   }
 
   public updateSpheres(spheres: GpuSphere[]) {
@@ -83,6 +95,11 @@ export default class GpuScene {
     this.imageTextures = imageTextures;
   }
 
+  public updateLights(lights: GpuLight[]) {
+    this.assertUsable();
+    this.lights = lights;
+  }
+
   public dispose() {
     if (this.disposed) return;
     this.disposed = true;
@@ -91,6 +108,7 @@ export default class GpuScene {
     this.materials = [];
     this.textures = [];
     this.imageTextures = [];
+    this.lights = [];
   }
 
   private assertUsable() {

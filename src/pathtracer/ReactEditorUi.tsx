@@ -788,6 +788,37 @@ function ObjectInspectorContent({
               onCommit={() => actions.commitMaterialEdit()}
             />
           )}
+          {material.emissionStrength !== null && (
+            <EditorNumberField
+              label="Intensity"
+              value={material.emissionStrength}
+              min={0}
+              max={100}
+              step={0.1}
+              precisionStep={0.01}
+              snapInterval={1}
+              sensitivity={1 * pathTracerScrubSpeed}
+              density="compact"
+              layout="horizontal"
+              onChange={(value) => {
+                actions.beginMaterialEdit(material.id);
+                actions.setMaterialEmissionStrength(material.id, value);
+              }}
+              onCommit={() => actions.commitMaterialEdit()}
+              onCancel={() => actions.cancelMaterialEdit()}
+            />
+          )}
+          {material.emissionTwoSided !== null && (
+            <CheckboxField
+              label="Two-sided"
+              checked={material.emissionTwoSided}
+              density="compact"
+              layout="horizontal"
+              onChange={(checked) =>
+                actions.setMaterialEmissionTwoSided(material.id, checked)
+              }
+            />
+          )}
           {material.roughness !== null && (
             <EditorNumberField
               label="Roughness"
@@ -1156,6 +1187,14 @@ function CreationMenu({
       </button>
       <button type="button" role="menuitem" onClick={() => run(() => actions.addQuad())}>
         <span>Add quad</span>
+      </button>
+      <div className="creation-menu__separator" />
+      <span className="creation-menu__section-label">Add Light</span>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addEmissiveQuad())}>
+        <span>Area light</span><small>Emissive quad</small>
+      </button>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addEmissiveSphere())}>
+        <span>Sphere light</span><small>Emissive sphere</small>
       </button>
       <button type="button" role="menuitem" disabled title="Available after triangle support">
         <span>Import mesh</span><small>Not traceable yet</small>

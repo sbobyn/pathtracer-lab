@@ -29,6 +29,7 @@ import {
   PtTextureType,
   type PtTexture,
 } from "./PtTexture";
+import PtMaterial from "./PtMaterial";
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
@@ -41,6 +42,8 @@ interface MaterialSnapshot {
   readonly roughness?: number;
   readonly ior?: number;
   readonly texture: PtTexture;
+  readonly emissionStrength: number;
+  readonly emissionTwoSided: boolean;
 }
 
 export default class PtActions {
@@ -60,6 +63,7 @@ export default class PtActions {
   } | null = null;
   private nextSphereName = 0;
   private nextQuadName = 0;
+  private nextLightName = 0;
 
   constructor(
     private readonly store: PtStore,
@@ -386,6 +390,84 @@ export default class PtActions {
     return true;
   }
 
+  public addEmissiveSphere() {
+    const scene = this.renderer.ptScene;
+    const materialId = scene.addMaterial(
+      PtMaterial.emissive(new THREE.Color(1, 0.72, 0.38), 8, true)
+    );
+    return this.addSphereWithMaterial(
+      materialId,
+      `Sphere Light ${this.nextLightName++}`
+    );
+  }
+
+  public addEmissiveQuad() {
+    const scene = this.renderer.ptScene;
+    const materialId = scene.addMaterial(
+      PtMaterial.emissive(new THREE.Color(1, 0.86, 0.62), 10)
+    );
+    return this.addQuadWithMaterial(
+      materialId,
+      `Quad Light ${this.nextLightName++}`
+    );
+  }
+
+  private addSphereWithMaterial(materialId: number, objectName: string) {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+    const object = scene.createSphereMesh(position, 0.35, materialId, objectName);
+    return this.insertNewObject(object, "emissive sphere light added");
+  }
+
+  private addQuadWithMaterial(materialId: number, objectName: string) {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+    const object = scene.createQuadMesh(
+      position,
+      this.renderer.camera.quaternion.clone(),
+      1,
+      1,
+      materialId,
+      objectName
+    );
+    return this.insertNewObject(object, "emissive quad light added");
+  }
+
+  private insertNewObject(object: PtTraceableMesh, reason: string) {
+    const scene = this.renderer.ptScene;
+    const index = scene.intersectGroup.children.length;
+    const insert = () => {
+      if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
+      else scene.insertQuadMesh(object, index);
+      this.publishSceneObjects();
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, reason);
+    };
+    const remove = () => {
+      if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
+      else scene.removeQuadMesh(object);
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, `${reason} undone`);
+    };
+    insert();
+    this.history.record({
+      label: `Add ${object.userData.pathTracer.objectName}`,
+      execute: insert,
+      undo: remove,
+    });
+    this.publishHistory();
+    return true;
+  }
+
   public renameSelectedObject(nextName: string) {
     const object = this.selectedObject;
     const name = nextName.trim();
@@ -653,6 +735,27 @@ export default class PtActions {
     this.publishSelection();
   }
 
+  public setMaterialEmissionStrength(materialId: number, strength: number) {
+    this.beginMaterialEdit(materialId);
+    const metadata = getMaterialMetadata(this.renderer.ptScene.getMaterial(materialId));
+    metadata.emissionStrength = strength;
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} emission changed`);
+    this.publishSelection();
+  }
+
+  public setMaterialEmissionTwoSided(materialId: number, twoSided: boolean) {
+    this.commitMaterialEdit();
+    const before = this.captureMaterial(materialId);
+    const after = { ...before, emissionTwoSided: twoSided };
+    this.applyMaterialHistory(materialId, after);
+    this.history.record({
+      label: `${twoSided ? "Enable" : "Disable"} two-sided emission`,
+      execute: () => this.applyMaterialHistory(materialId, after),
+      undo: () => this.applyMaterialHistory(materialId, before),
+    });
+    this.publishHistory();
+  }
+
   public setMaterialImage(materialId: number, source: string, label = "Image") {
     this.commitMaterialEdit();
     const before = this.captureMaterial(materialId);
@@ -768,7 +871,7 @@ export default class PtActions {
     const { x, y, z } = selectedObject.position;
     const radius = sphere ? sphereRadius(selectedObject) : null;
     const rotation = selectedObject.rotation;
-    const { materialId, materialType, texture } = getMaterialMetadata(
+    const { materialId, materialType, texture, emissionStrength, emissionTwoSided } = getMaterialMetadata(
       selectedObject.material
     );
     const material = this.renderer.ptScene.getMaterial(materialId);
@@ -805,6 +908,8 @@ export default class PtActions {
             material instanceof THREE.MeshPhysicalMaterial
               ? material.ior
               : null,
+          emissionStrength: materialType === 3 ? emissionStrength : null,
+          emissionTwoSided: materialType === 3 ? emissionTwoSided : null,
           texture: {
             type: texture.type === PtTextureType.Image ? "image" : texture.type === PtTextureType.Checker ? "checker" : texture.type === PtTextureType.Perlin ? "perlin" : "constant",
             label: texture.type === PtTextureType.Image
@@ -874,6 +979,18 @@ export default class PtActions {
         capability: "preview lighting",
       },
       {
+        id: "group:lights",
+        label: "Lights",
+        kind: "group",
+        parentId: "scene:root",
+        depth: 1,
+        sphereIndex: null,
+        quadIndex: null,
+        selectable: false,
+        traceable: false,
+        capability: "emissive geometry",
+      },
+      {
         id: "group:traceables",
         label: "Traceable Objects",
         kind: "group",
@@ -890,33 +1007,38 @@ export default class PtActions {
       .getSphereMeshes()
       .map((sphere) => {
       const sphereIndex = sphere.userData.pathTracer.primitiveIndex;
+      const emissive = getMaterialMetadata(sphere.material).materialType === 3;
       return {
         id: sphere.userData.pathTracer.objectId,
         label: sphere.userData.pathTracer.objectName,
         kind: "sphere" as const,
-        parentId: "group:traceables",
+        parentId: emissive ? "group:lights" : "group:traceables",
         depth: 2,
         sphereIndex,
         quadIndex: null,
         selectable: true,
         traceable: true,
-        capability: "path traced",
+        capability: emissive ? "emissive sphere light" : "path traced",
       };
     });
     const quads: PtState["sceneObjects"] = this.renderer.ptScene
       .getQuadMeshes()
-      .map((quad) => ({
-        id: quad.userData.pathTracer.objectId,
-        label: quad.userData.pathTracer.objectName,
-        kind: "quad" as const,
-        parentId: "group:traceables",
-        depth: 2,
-        sphereIndex: null,
-        quadIndex: quad.userData.pathTracer.primitiveIndex,
-        selectable: true,
-        traceable: true,
-        capability: "path-traced quad",
-      }));
+      .map((quad) => {
+        const emissive =
+          getMaterialMetadata(quad.material).materialType === 3;
+        return {
+          id: quad.userData.pathTracer.objectId,
+          label: quad.userData.pathTracer.objectName,
+          kind: "quad" as const,
+          parentId: emissive ? "group:lights" : "group:traceables",
+          depth: 2,
+          sphereIndex: null,
+          quadIndex: quad.userData.pathTracer.primitiveIndex,
+          selectable: true,
+          traceable: true,
+          capability: emissive ? "emissive quad light" : "path-traced quad",
+        };
+      });
     return [...fixedObjects, ...spheres, ...quads];
   }
 
@@ -958,6 +1080,8 @@ export default class PtActions {
           ? material.ior
           : undefined,
       texture: cloneTexture(getMaterialMetadata(material).texture),
+      emissionStrength: getMaterialMetadata(material).emissionStrength,
+      emissionTwoSided: getMaterialMetadata(material).emissionTwoSided,
     };
   }
 
@@ -965,6 +1089,9 @@ export default class PtActions {
     const material = this.renderer.ptScene.getMaterial(materialId);
     this.renderer.ptScene.setMaterialTexture(materialId, cloneTexture(snapshot.texture));
     material.color.setHex(snapshot.color);
+    const metadata = getMaterialMetadata(material);
+    metadata.emissionStrength = snapshot.emissionStrength;
+    metadata.emissionTwoSided = snapshot.emissionTwoSided;
     if (
       snapshot.roughness !== undefined &&
       material instanceof THREE.MeshStandardMaterial
@@ -1019,6 +1146,8 @@ export default class PtActions {
   private materialsEqual(a: MaterialSnapshot, b: MaterialSnapshot) {
     return (
       a.color === b.color && a.roughness === b.roughness && a.ior === b.ior &&
+      a.emissionStrength === b.emissionStrength &&
+      a.emissionTwoSided === b.emissionTwoSided &&
       JSON.stringify(this.serializeTexture(a.texture)) === JSON.stringify(this.serializeTexture(b.texture))
     );
   }

@@ -22,6 +22,8 @@ export interface PtSelectionMaterialState {
   color: string;
   roughness: number | null;
   ior: number | null;
+  emissionStrength: number | null;
+  emissionTwoSided: boolean | null;
   texture: {
     type: "constant" | "checker" | "image" | "perlin";
     label: string;

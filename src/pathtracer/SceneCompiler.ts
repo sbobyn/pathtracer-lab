@@ -2,6 +2,7 @@ import * as THREE from "three";
 import GpuScene, {
   GpuTextureType,
   type GpuMaterial,
+  type GpuLight,
   type GpuQuad,
   type GpuSphere,
   type GpuTexture,
@@ -23,7 +24,8 @@ export default class SceneCompiler {
       this.compileQuads(scene),
       materials,
       textures,
-      imageTextures
+      imageTextures,
+      this.compileLights(scene)
     );
   }
 
@@ -31,6 +33,7 @@ export default class SceneCompiler {
     if (level === PtInvalidationLevel.Material) {
       const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
       gpuScene.updateMaterials(materials, textures, imageTextures);
+      gpuScene.updateLights(this.compileLights(scene));
       return;
     }
     if (level >= PtInvalidationLevel.Geometry) {
@@ -40,6 +43,7 @@ export default class SceneCompiler {
         const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
         gpuScene.updateMaterials(materials, textures, imageTextures);
       }
+      gpuScene.updateLights(this.compileLights(scene));
     }
   }
 
@@ -86,7 +90,8 @@ export default class SceneCompiler {
         material,
         metadata.materialType,
         textureId,
-        metadata.emissionStrength
+        metadata.emissionStrength,
+        metadata.emissionTwoSided
       );
     });
     return { materials, textures, imageTextures };
@@ -144,7 +149,8 @@ export default class SceneCompiler {
     material: PtPreviewMaterial,
     materialType: PtMaterial["type"],
     textureId: number,
-    emissionStrength: number
+    emissionStrength: number,
+    emissionTwoSided: boolean
   ): GpuMaterial {
     return {
       type: materialType,
@@ -152,6 +158,35 @@ export default class SceneCompiler {
       fuzz: material instanceof THREE.MeshStandardMaterial ? material.roughness : 0,
       ior: material instanceof THREE.MeshPhysicalMaterial ? material.ior : 0,
       emissionStrength,
+      emissionTwoSided,
     };
+  }
+
+  private compileLights(scene: PtScene): GpuLight[] {
+    const lights: GpuLight[] = [];
+    scene.getSphereMeshes().forEach((mesh) => {
+      const metadata = getMaterialMetadata(mesh.material);
+      if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
+      const radius = sphereRadius(mesh);
+      lights.push({
+        primitiveType: "sphere",
+        primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
+        materialId: metadata.materialId,
+        area: 4 * Math.PI * radius * radius,
+        emissionTwoSided: metadata.emissionTwoSided,
+      });
+    });
+    scene.getQuadMeshes().forEach((mesh) => {
+      const metadata = getMaterialMetadata(mesh.material);
+      if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
+      lights.push({
+        primitiveType: "quad",
+        primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
+        materialId: metadata.materialId,
+        area: Math.abs(mesh.scale.x * mesh.scale.y),
+        emissionTwoSided: metadata.emissionTwoSided,
+      });
+    });
+    return lights;
   }
 }

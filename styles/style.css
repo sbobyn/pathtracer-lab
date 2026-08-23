@@ -309,6 +309,15 @@ body {
   background: rgb(255 255 255 / 10%);
 }
 
+.creation-menu__section-label {
+  padding: 3px 7px 1px;
+  color: #71717a;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .creation-menu .creation-menu__danger {
   color: #fca5a5;
 }

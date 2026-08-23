@@ -172,6 +172,50 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return new PtScene(spheres, materials, camera, quads);
   },
 
+  EmissiveStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(
+        PtMaterialType.Lambert,
+        perlinTexture(0x111722, 0x8b7451, 2.5, 7)
+      ),
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.72, 0.18, 0.08)),
+      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xd8e2ee), 0),
+      PtMaterial.emissive(new THREE.Color(1, 0.64, 0.28), 14),
+      PtMaterial.emissive(new THREE.Color(0.2, 0.48, 1), 9, true),
+    ];
+    const spheres = [
+      new PtSphere(new THREE.Vector3(-1.25, 0.15, -0.6), 0.65, 1),
+      new PtSphere(new THREE.Vector3(0.65, 0.05, -1.1), 0.55, 2),
+      new PtSphere(new THREE.Vector3(2.1, 1.15, -0.35), 0.3, 4),
+    ];
+    const quads = [
+      new PtQuad(
+        new THREE.Vector3(-5, -0.5, 3),
+        new THREE.Vector3(10, 0, 0),
+        new THREE.Vector3(0, 0, -10),
+        0
+      ),
+      // The winding points the emitting face down toward the study objects.
+      new PtQuad(
+        new THREE.Vector3(-1.2, 3, -1.2),
+        new THREE.Vector3(2.4, 0, 0),
+        new THREE.Vector3(0, 0, 1.4),
+        3
+      ),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 1.7, 5.6),
+      lookAt: new THREE.Vector3(0.25, 0.45, -0.65),
+      far: 10000,
+    });
+    camera.fov = 45;
+    const scene = new PtScene(spheres, materials, camera, quads);
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    return scene;
+  },
+
   CornellBox: () => {
     const materials: PtMaterial[] = [
       new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.73, 0.73, 0.73)),

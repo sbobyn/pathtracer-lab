@@ -242,6 +242,12 @@ export default class PtScene {
     return material;
   }
 
+  public addMaterial(material: PtMaterial): number {
+    const materialId = this.previewMaterials.size;
+    this.previewMaterials.set(materialId, createPreviewMaterial(material, materialId));
+    return materialId;
+  }
+
   public setMaterialTexture(materialId: number, texture: PtTexture) {
     const material = this.getMaterial(materialId);
     const metadata = getMaterialMetadata(material);
@@ -324,6 +330,7 @@ function createPreviewMaterial(
     materialType: material.type,
     texture: material.texture,
     emissionStrength: material.emissionStrength,
+    emissionTwoSided: material.emissionTwoSided,
   };
   return previewMaterial;
 }
@@ -361,13 +368,15 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
   materialType: PtMaterialType;
   texture: PtTexture;
   emissionStrength: number;
+  emissionTwoSided: boolean;
 } {
   const metadata = material.userData.pathTracer;
   if (
     typeof metadata?.materialId !== "number" ||
     typeof metadata?.materialType !== "number" ||
     !metadata.texture ||
-    typeof metadata.emissionStrength !== "number"
+    typeof metadata.emissionStrength !== "number" ||
+    typeof metadata.emissionTwoSided !== "boolean"
   ) {
     throw new TypeError("Material is missing path-tracing metadata");
   }

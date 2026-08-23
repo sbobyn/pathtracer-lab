@@ -47,6 +47,6 @@ bool materialScatters(Material material) {
 }
 
 vec3 emitted(Material material, Hit hit) {
-    if (material.type != 3 || !hit.frontFace) return vec3(0.0);
+    if (material.type != 3 || (!material.emissionTwoSided && !hit.frontFace)) return vec3(0.0);
     return material.emissionStrength * sampleTexture(material.textureId, hit);
 }
