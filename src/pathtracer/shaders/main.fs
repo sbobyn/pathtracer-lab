@@ -4,9 +4,6 @@
 #ifndef MAX_QUADS
 #define MAX_QUADS 1
 #endif
-#ifndef MAX_TRIANGLES
-#define MAX_TRIANGLES 1
-#endif
 #ifndef MAX_LIGHTS
 #define MAX_LIGHTS 1
 #endif
@@ -16,7 +13,8 @@ precision highp float;
 
 #include types.glsl
 
-varying vec2 vNDC;
+in vec2 vNDC;
+out vec4 fragmentColor;
 uniform vec2 uResolution;
 uniform vec3 uBackgroundColorTop;
 uniform vec3 uBackgroundColorBottom;
@@ -37,16 +35,21 @@ uniform World uWorld;
 uniform int uSphereCount;
 uniform int uQuadCount;
 uniform int uTriangleCount;
+uniform sampler2D uTriangleData;
+uniform vec2 uTriangleDataSize;
 uniform Light uLights[MAX_LIGHTS];
 uniform int uLightCount;
 uniform int uIntegratorMode;
-uniform Material uMaterials[MAX_SPHERES];
-uniform Texture uTextures[MAX_SPHERES];
+uniform sampler2D uMaterialData;
+uniform vec2 uMaterialDataSize;
+uniform sampler2D uTextureData;
+uniform vec2 uTextureDataSize;
 uniform sampler2D uImageTexture0;
 uniform sampler2D uImageTexture1;
 uniform sampler2D uImageTexture2;
 uniform sampler2D uImageTexture3;
 
+#include packedData.glsl
 #include geometry.glsl
 #include random.glsl
 #include textures.glsl
@@ -74,5 +77,5 @@ void main() {
         color += rayColor(ray, uWorld, sampleSeed + vec2(101.13, 47.77));
     }
     color /= uNumSamples;
-    gl_FragColor = vec4(accumulateSample(color), 1.0);
+    fragmentColor = vec4(accumulateSample(color), 1.0);
 }

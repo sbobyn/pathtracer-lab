@@ -35,7 +35,7 @@ float perlinTurbulence(vec3 position) {
 }
 
 vec3 sampleTexture(int textureId, Hit hit) {
-    Texture textureValue = uTextures[textureId];
+    Texture textureValue = readTexture(textureId);
     if (textureValue.type == 0) return textureValue.colorA;
     if (textureValue.type == 1) {
         vec2 cell = floor(hit.uv * textureValue.scale);
@@ -43,10 +43,10 @@ vec3 sampleTexture(int textureId, Hit hit) {
         return mix(textureValue.colorA, textureValue.colorB, parity);
     }
     if (textureValue.type == 2) {
-        if (textureValue.imageId == 0) return texture2D(uImageTexture0, hit.uv).rgb;
-        if (textureValue.imageId == 1) return texture2D(uImageTexture1, hit.uv).rgb;
-        if (textureValue.imageId == 2) return texture2D(uImageTexture2, hit.uv).rgb;
-        if (textureValue.imageId == 3) return texture2D(uImageTexture3, hit.uv).rgb;
+        if (textureValue.imageId == 0) return texture(uImageTexture0, hit.uv).rgb;
+        if (textureValue.imageId == 1) return texture(uImageTexture1, hit.uv).rgb;
+        if (textureValue.imageId == 2) return texture(uImageTexture2, hit.uv).rgb;
+        if (textureValue.imageId == 3) return texture(uImageTexture3, hit.uv).rgb;
     }
     if (textureValue.type == 3) {
         float marble = 0.5 * (1.0 + sin(

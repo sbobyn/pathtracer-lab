@@ -1,6 +1,6 @@
 vec3 accumulateSample(vec3 currentColor) {
     if (uFrameCount <= 1) return currentColor;
-    vec3 accumulatedColor = texture2D(
+    vec3 accumulatedColor = texture(
         uAccumTexture,
         gl_FragCoord.xy / uResolution
     ).rgb;

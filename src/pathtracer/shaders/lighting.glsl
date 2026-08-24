@@ -164,7 +164,7 @@ vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 through
 
     vec3 lightRadiance = light.radiance;
     if (!light.delta) {
-        Material lightMaterial = uMaterials[light.materialId];
+        Material lightMaterial = readMaterial(light.materialId);
         Hit lightHit;
         lightHit.position = light.position;
         lightHit.normal = light.normal;

@@ -19,6 +19,8 @@ import {
 } from "./PtInvalidation";
 import GpuScene from "./GpuScene";
 import SceneCompiler from "./SceneCompiler";
+import { packTriangleTexture, type PackedTriangleTexture } from "./PackedTriangleTexture";
+import { packMaterialTexture, packTextureTexture, type PackedDataTexture } from "./PackedMaterialTextures";
 
 function integratorModeValue(mode: PtSettings["integratorMode"]): number {
   if (mode === "direct") return 1;
@@ -50,6 +52,9 @@ export default class PtRenderer {
   public uniforms: PtUniforms;
   private readonly sceneCompiler = new SceneCompiler();
   private gpuScene: GpuScene;
+  private packedTriangles!: PackedTriangleTexture;
+  private packedMaterials!: PackedDataTexture;
+  private packedTextures!: PackedDataTexture;
   private readonly fallbackImageTexture = new THREE.DataTexture(
     new Uint8Array([255, 0, 255, 255]),
     1,
@@ -109,6 +114,9 @@ export default class PtRenderer {
     this.gpuScene = this.sceneCompiler.compile(ptScene);
 
     this.setupRenderer();
+    this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
+    this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
+    this.packedTextures = packTextureTexture(this.gpuScene.textures, this.renderer.capabilities.maxTextureSize);
     this.setupControls();
     this.setupCamera();
     this.uniforms = this.createUniforms();
@@ -142,6 +150,9 @@ export default class PtRenderer {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
     });
+    if (!this.renderer.capabilities.isWebGL2) {
+      throw new Error("The packed scene-data path requires WebGL2");
+    }
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.autoClear = false;
@@ -149,8 +160,14 @@ export default class PtRenderer {
 
   setScene(ptScene: PtScene, invalidate = true) {
     this.gpuScene.dispose();
+    this.packedTriangles.texture.dispose();
+    this.packedMaterials.texture.dispose();
+    this.packedTextures.texture.dispose();
     this.ptScene = ptScene;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
+    this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
+    this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
+    this.packedTextures = packTextureTexture(this.gpuScene.textures, this.renderer.capabilities.maxTextureSize);
     this.watchImageTextures(this.gpuScene);
     this.watchEnvironmentTexture();
     this.camera = ptScene.camera;
@@ -258,6 +275,8 @@ export default class PtRenderer {
   public invalidate(level: PtInvalidationLevel, reason: string) {
     if (level >= PtInvalidationLevel.Material) {
       this.sceneCompiler.update(this.gpuScene, this.ptScene, level);
+      if (level >= PtInvalidationLevel.Geometry) this.updatePackedTriangleTexture();
+      this.updatePackedMaterialTextures();
       this.updateSceneUniforms();
       this.watchImageTextures(this.gpuScene);
       if (level === PtInvalidationLevel.Scene) this.updateShaderCanvas();
@@ -293,14 +312,12 @@ export default class PtRenderer {
   private setupShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
-    const triangleCapacity = this.triangleUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
       fragmentShader: `#define MAX_SPHERES ${capacity}
        #define MAX_QUADS ${quadCapacity}
-       #define MAX_TRIANGLES ${triangleCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`,
       uniforms: this.uniforms,
@@ -314,30 +331,20 @@ export default class PtRenderer {
   private updateShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
-    const triangleCapacity = this.triangleUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas
       .setShader(`#define MAX_SPHERES ${capacity}
        #define MAX_QUADS ${quadCapacity}
-       #define MAX_TRIANGLES ${triangleCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`);
   }
 
   private sceneUniformCapacity() {
-    return Math.max(
-      1,
-      this.gpuScene.spheres.length,
-      this.gpuScene.materials.length
-    );
+    return Math.max(1, this.gpuScene.spheres.length);
   }
 
   private quadUniformCapacity() {
     return Math.max(1, this.gpuScene.quads.length);
-  }
-
-  private triangleUniformCapacity() {
-    return Math.max(1, this.gpuScene.triangles.length);
   }
 
   private lightUniformCapacity() {
@@ -440,19 +447,22 @@ export default class PtRenderer {
         value: {
           spheres: this.uniformSphereValues(),
           quads: this.uniformQuadValues(),
-          triangles: this.uniformTriangleValues(),
         },
       },
       uSphereCount: { value: this.gpuScene.spheres.length },
       uQuadCount: { value: this.gpuScene.quads.length },
       uTriangleCount: { value: this.gpuScene.triangles.length },
+      uTriangleData: { value: this.packedTriangles.texture },
+      uTriangleDataSize: { value: this.packedTriangles.size },
       uLights: { value: this.uniformLightValues() },
       uLightCount: { value: this.gpuScene.lights.length },
       uIntegratorMode: { value: integratorModeValue(this.settings.integratorMode) },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
-      uMaterials: { value: this.uniformMaterialValues() },
-      uTextures: { value: this.uniformTextureValues() },
+      uMaterialData: { value: this.packedMaterials.texture },
+      uMaterialDataSize: { value: this.packedMaterials.size },
+      uTextureData: { value: this.packedTextures.texture },
+      uTextureDataSize: { value: this.packedTextures.size },
       uImageTexture0: {
         value: this.gpuScene.imageTextures[0] ?? this.fallbackImageTexture,
       },
@@ -475,14 +485,17 @@ export default class PtRenderer {
   private updateSceneUniforms() {
     this.uniforms.uWorld.value.spheres = this.uniformSphereValues();
     this.uniforms.uWorld.value.quads = this.uniformQuadValues();
-    this.uniforms.uWorld.value.triangles = this.uniformTriangleValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
     this.uniforms.uQuadCount.value = this.gpuScene.quads.length;
     this.uniforms.uTriangleCount.value = this.gpuScene.triangles.length;
+    this.uniforms.uTriangleData.value = this.packedTriangles.texture;
+    this.uniforms.uTriangleDataSize.value.copy(this.packedTriangles.size);
     this.uniforms.uLights.value = this.uniformLightValues();
     this.uniforms.uLightCount.value = this.gpuScene.lights.length;
-    this.uniforms.uMaterials.value = this.uniformMaterialValues();
-    this.uniforms.uTextures.value = this.uniformTextureValues();
+    this.uniforms.uMaterialData.value = this.packedMaterials.texture;
+    this.uniforms.uMaterialDataSize.value.copy(this.packedMaterials.size);
+    this.uniforms.uTextureData.value = this.packedTextures.texture;
+    this.uniforms.uTextureDataSize.value.copy(this.packedTextures.size);
     this.uniforms.uImageTexture0.value = this.gpuScene.imageTextures[0] ?? this.fallbackImageTexture;
     this.uniforms.uImageTexture1.value = this.gpuScene.imageTextures[1] ?? this.fallbackImageTexture;
     this.uniforms.uImageTexture2.value = this.gpuScene.imageTextures[2] ?? this.fallbackImageTexture;
@@ -515,23 +528,9 @@ export default class PtRenderer {
     return Array.from({ length: capacity }, (_, index) => this.gpuScene.quads[index] ?? padding);
   }
 
-  private uniformTriangleValues() {
-    const padding = {
-      a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(),
-      normalA: new THREE.Vector3(0, 1, 0), normalB: new THREE.Vector3(0, 1, 0), normalC: new THREE.Vector3(0, 1, 0),
-      uvA: new THREE.Vector2(), uvB: new THREE.Vector2(), uvC: new THREE.Vector2(), materialId: 0,
-    };
-    return Array.from({ length: this.triangleUniformCapacity() }, (_, index) => this.gpuScene.triangles[index] ?? padding);
-  }
-
-  private uniformMaterialValues() {
-    const capacity = this.sceneUniformCapacity();
-    const fallback = this.gpuScene.materials[0];
-    if (!fallback) throw new Error("GpuScene requires at least one material");
-    return Array.from(
-      { length: capacity },
-      (_, index) => this.gpuScene.materials[index] ?? fallback
-    );
+  private updatePackedTriangleTexture() {
+    this.packedTriangles.texture.dispose();
+    this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
   }
 
   private uniformLightValues() {
@@ -556,14 +555,11 @@ export default class PtRenderer {
     );
   }
 
-  private uniformTextureValues() {
-    const capacity = this.sceneUniformCapacity();
-    const fallback = this.gpuScene.textures[0];
-    if (!fallback) throw new Error("GpuScene requires at least one texture");
-    return Array.from(
-      { length: capacity },
-      (_, index) => this.gpuScene.textures[index] ?? fallback
-    );
+  private updatePackedMaterialTextures() {
+    this.packedMaterials.texture.dispose();
+    this.packedTextures.texture.dispose();
+    this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
+    this.packedTextures = packTextureTexture(this.gpuScene.textures, this.renderer.capabilities.maxTextureSize);
   }
 
   private watchImageTextures(gpuScene: GpuScene) {

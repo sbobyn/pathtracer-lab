@@ -132,9 +132,8 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             hit.primitiveId = i;
         }
     }
-    for (int i = 0; i < MAX_TRIANGLES; i++) {
-        if (i >= uTriangleCount) break;
-        Triangle triangle = world.triangles[i];
+    for (int i = 0; i < uTriangleCount; i++) {
+        Triangle triangle = readTriangle(i);
         if (hitTriangle(triangle, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
             hitAnything = true;
             closestSoFar = candidate.t;

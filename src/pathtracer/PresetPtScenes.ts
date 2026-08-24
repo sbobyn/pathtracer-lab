@@ -10,6 +10,7 @@ import { syncAnalyticLightPreview } from "./PtAnalyticLight";
 import { builtinEnvironments } from "./BuiltinEnvironments";
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
+  if (sceneKey === "PackedTrianglesStudy") return 0.125;
   return sceneKey === "CornellBox" ? 0.5 : fallback;
 }
 
@@ -370,6 +371,32 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return scene;
   },
 
+  PackedTrianglesStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x172a3a, 0xd89b4a, 18)),
+      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xe8edf4), 0.04),
+    ];
+    const spheres = [new PtSphere(new THREE.Vector3(0, 0.25, -0.8), 0.65, 1)];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(4.8, 3.5, 5.8),
+      lookAt: new THREE.Vector3(0, -0.3, -0.7),
+      far: 10000,
+    });
+    camera.fov = 43;
+    const scene = new PtScene(spheres, materials, camera);
+    const wave = scene.addTriangleMesh(createIndexedWaveGeometry(32, 8), 0, "Packed 2,048-triangle wave");
+    wave.position.set(0, -0.55, -1.1);
+    scene.triangleMeshGroup.updateMatrixWorld(true);
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    const environment = builtinEnvironments.find(
+      (candidate) => candidate.id === "relax-inn-seaview-suite"
+    );
+    if (environment) scene.setEnvironmentMap(environment.source, environment.label);
+    return scene;
+  },
+
   CornellBox: () => {
     const materials: PtMaterial[] = [
       new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.73, 0.73, 0.73)),
@@ -431,6 +458,39 @@ function createIndexedPyramidGeometry() {
     0, 2, 1, 0, 3, 2,
     0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4,
   ]);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createIndexedWaveGeometry(segments: number, size: number) {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let z = 0; z <= segments; z++) {
+    for (let x = 0; x <= segments; x++) {
+      const u = x / segments;
+      const v = z / segments;
+      const px = (u - 0.5) * size;
+      const pz = (v - 0.5) * size;
+      const py = 0.18 * Math.sin(px * 1.7) * Math.cos(pz * 1.35);
+      positions.push(px, py, pz);
+      uvs.push(u, v);
+    }
+  }
+  const stride = segments + 1;
+  for (let z = 0; z < segments; z++) {
+    for (let x = 0; x < segments; x++) {
+      const a = z * stride + x;
+      const b = a + 1;
+      const d = (z + 1) * stride + x;
+      const c = d + 1;
+      indices.push(a, d, b, b, d, c);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
 }
