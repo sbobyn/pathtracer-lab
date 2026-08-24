@@ -126,6 +126,7 @@ The baseline has been manually verified in a Chromium browser on macOS with Thre
 - `QuadStudy` exercises bounded quad intersection, quad UVs, and mixed sphere/quad closest-hit behavior.
 - `EmissiveStudy` exercises authored quad/sphere emitters against a procedural floor and reflective/diffuse objects on a black environment.
 - `EnvironmentStudy` exercises image-based lighting and camera-visible HDR backgrounds with diffuse, rough-metal, and mirror materials.
+- `TriangleStudy` exercises brute-force indexed triangles, barycentric UV interpolation, smooth vertex normals, and HDR reflections.
 - orbit controls, object selection, object lifecycle commands, transforms, material editing, resolution scale, accumulation controls, and depth-of-field controls respond without browser warnings or errors.
 - unit tests, random-seed verification, TypeScript checking, and the production Vite build pass.
 
