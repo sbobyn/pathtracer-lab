@@ -41,6 +41,13 @@ export interface PtSelectionMaterialState {
 /** Serializable render and camera preferences. */
 export interface PtSettings {
   pathtracingEnabled: boolean;
+  environmentMode: "gradient" | "map";
+  environmentSource: string;
+  environmentLabel: string;
+  environmentRotation: number;
+  environmentIntensity: number;
+  environmentBackgroundVisible: boolean;
+  environmentLightingEnabled: boolean;
   backgroundColorTop: string;
   backgroundColorBottom: string;
   fov: number;
@@ -101,6 +108,13 @@ export interface PtState {
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
   pathtracingEnabled: true,
+  environmentMode: "gradient",
+  environmentSource: "",
+  environmentLabel: "Gradient",
+  environmentRotation: 0,
+  environmentIntensity: 1,
+  environmentBackgroundVisible: true,
+  environmentLightingEnabled: true,
   backgroundColorTop: "#bcdaff",
   backgroundColorBottom: "#ffffff",
   fov: 75,

@@ -736,6 +736,7 @@ body {
 
 .render-panel__content {
   display: grid;
+  align-content: start;
   gap: 4px;
   min-height: 0;
   padding: 8px 12px 12px;

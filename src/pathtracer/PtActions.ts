@@ -171,6 +171,9 @@ export default class PtActions {
         ...state.settings,
         backgroundColorTop: `#${scene.backgroundColorTop.getHexString()}`,
         backgroundColorBottom: `#${scene.backgroundColorBottom.getHexString()}`,
+        environmentMode: scene.environmentSource ? "map" : "gradient",
+        environmentSource: scene.environmentSource,
+        environmentLabel: scene.environmentLabel,
         fov: scene.camera.fov,
         numSamples: 1,
         resolutionScale,
@@ -211,6 +214,75 @@ export default class PtActions {
       "background bottom color changed"
     );
     this.updateSetting("backgroundColorBottom", `#${color.getHexString()}`);
+  }
+
+  public setEnvironmentGradient() {
+    this.renderer.ptScene.scene.background = this.renderer.ptScene.backgroundColorTop;
+    this.renderer.ptScene.scene.environment = null;
+    this.renderer.settings.environmentMode = "gradient";
+    this.renderer.uniforms.uEnvironmentEnabled.value = false;
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "gradient environment selected");
+    this.store.update((state) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        environmentMode: "gradient",
+        environmentSource: "",
+        environmentLabel: "Gradient",
+      },
+    }));
+  }
+
+  public setEnvironmentMap(source: string, label: string) {
+    this.renderer.settings.environmentMode = "map";
+    this.renderer.setEnvironmentMap(source, label);
+    this.store.update((state) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        environmentMode: "map",
+        environmentSource: source,
+        environmentLabel: label,
+      },
+    }));
+  }
+
+  public setEnvironmentRotation(value: number) {
+    this.renderer.ptScene.scene.backgroundRotation.y = THREE.MathUtils.degToRad(value);
+    this.renderer.ptScene.scene.environmentRotation.y = THREE.MathUtils.degToRad(value);
+    this.renderer.settings.environmentRotation = value;
+    this.renderer.uniforms.uEnvironmentRotation.value = value;
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment rotation changed");
+    this.updateSetting("environmentRotation", value);
+  }
+
+  public setEnvironmentIntensity(value: number) {
+    this.renderer.ptScene.scene.backgroundIntensity = value;
+    this.renderer.ptScene.scene.environmentIntensity = value;
+    this.renderer.settings.environmentIntensity = value;
+    this.renderer.uniforms.uEnvironmentIntensity.value = value;
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment intensity changed");
+    this.updateSetting("environmentIntensity", value);
+  }
+
+  public setEnvironmentBackgroundVisible(value: boolean) {
+    this.renderer.settings.environmentBackgroundVisible = value;
+    this.renderer.uniforms.uEnvironmentBackgroundVisible.value = value;
+    this.renderer.ptScene.scene.background = value
+      ? this.renderer.ptScene.environmentTexture
+      : null;
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment background visibility changed");
+    this.updateSetting("environmentBackgroundVisible", value);
+  }
+
+  public setEnvironmentLightingEnabled(value: boolean) {
+    this.renderer.settings.environmentLightingEnabled = value;
+    this.renderer.uniforms.uEnvironmentLightingEnabled.value = value;
+    this.renderer.ptScene.scene.environment = value
+      ? this.renderer.ptScene.environmentTexture
+      : null;
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment lighting changed");
+    this.updateSetting("environmentLightingEnabled", value);
   }
 
   public setFov(fov: number) {
@@ -1498,6 +1570,25 @@ export default class PtActions {
     }
     if (current.backgroundColorBottom !== settings.backgroundColorBottom) {
       this.setBackgroundColorBottom(settings.backgroundColorBottom);
+    }
+    if (
+      current.environmentMode !== settings.environmentMode ||
+      current.environmentSource !== settings.environmentSource
+    ) {
+      if (settings.environmentMode === "gradient") this.setEnvironmentGradient();
+      else this.setEnvironmentMap(settings.environmentSource, settings.environmentLabel);
+    }
+    if (current.environmentRotation !== settings.environmentRotation) {
+      this.setEnvironmentRotation(settings.environmentRotation);
+    }
+    if (current.environmentIntensity !== settings.environmentIntensity) {
+      this.setEnvironmentIntensity(settings.environmentIntensity);
+    }
+    if (current.environmentBackgroundVisible !== settings.environmentBackgroundVisible) {
+      this.setEnvironmentBackgroundVisible(settings.environmentBackgroundVisible);
+    }
+    if (current.environmentLightingEnabled !== settings.environmentLightingEnabled) {
+      this.setEnvironmentLightingEnabled(settings.environmentLightingEnabled);
     }
     if (current.fov !== settings.fov) this.setFov(settings.fov);
     if (current.numSamples !== settings.numSamples) {

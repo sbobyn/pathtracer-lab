@@ -35,5 +35,11 @@ export default interface PtUniforms {
   uImageTexture3: { value: THREE.Texture };
   uBackgroundColorTop: { value: THREE.Color };
   uBackgroundColorBottom: { value: THREE.Color };
+  uEnvironmentMap: { value: THREE.Texture };
+  uEnvironmentEnabled: { value: boolean };
+  uEnvironmentBackgroundVisible: { value: boolean };
+  uEnvironmentLightingEnabled: { value: boolean };
+  uEnvironmentRotation: { value: number };
+  uEnvironmentIntensity: { value: number };
   uEnableDoF: { value: boolean };
 }

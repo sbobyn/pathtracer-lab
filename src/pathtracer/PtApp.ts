@@ -120,10 +120,26 @@ export default class PtApp {
       },
     };
     const ptScene = PresetPtScenes[initialState.sceneKey]();
-    ptScene.backgroundColorTop.set(initialState.settings.backgroundColorTop);
-    ptScene.backgroundColorBottom.set(initialState.settings.backgroundColorBottom);
+    // Environment presets own their loading fallback. Do not replace that
+    // fallback with globally persisted gradient colors during startup, or an
+    // HDR scene can briefly flash another scene's blue/white sky on refresh.
+    if (ptScene.environmentSource) {
+      initialState.settings.backgroundColorTop =
+        `#${ptScene.backgroundColorTop.getHexString()}`;
+      initialState.settings.backgroundColorBottom =
+        `#${ptScene.backgroundColorBottom.getHexString()}`;
+    } else {
+      ptScene.backgroundColorTop.set(initialState.settings.backgroundColorTop);
+      ptScene.backgroundColorBottom.set(initialState.settings.backgroundColorBottom);
+    }
     ptScene.scene.background = ptScene.backgroundColorTop;
     ptScene.dirLight.color = ptScene.backgroundColorTop;
+    if (initialState.settings.environmentMode === "map" && initialState.settings.environmentSource) {
+      ptScene.setEnvironmentMap(
+        initialState.settings.environmentSource,
+        initialState.settings.environmentLabel
+      );
+    }
     ptScene.camera.fov = initialState.settings.fov;
     ptScene.camera.updateProjectionMatrix();
     const store = new PtStore(initialState);

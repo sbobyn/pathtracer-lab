@@ -19,6 +19,7 @@ import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState } from "./PtState";
 import { PresetPtScenes } from "./PresetPtScenes";
 import { builtinTextures } from "./BuiltinTextures";
+import { builtinEnvironments, findBuiltinEnvironment } from "./BuiltinEnvironments";
 
 const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
 const pathTracerScrubSpeed = 0.25;
@@ -249,20 +250,123 @@ function SceneSettings({
         layout="horizontal"
         onChange={(value) => actions.setScene(value)}
       />
-      <ColorField
-        label="Sky color"
-        value={state.settings.backgroundColorTop}
-        onBegin={() => actions.beginSettingsEdit("Change sky color")}
-        onChange={(value) => actions.setBackgroundColorTop(value)}
-        onCommit={() => actions.commitSettingsEdit()}
+      <SelectField
+        label="Environment"
+        value={state.settings.environmentMode === "gradient" ? "gradient" : state.settings.environmentSource}
+        options={[
+          { value: "gradient", label: "Sky gradient" },
+          ...builtinEnvironments.map((environment) => ({ value: environment.source, label: environment.label })),
+          ...(state.settings.environmentMode === "map" && !findBuiltinEnvironment(state.settings.environmentSource)
+            ? [{ value: state.settings.environmentSource, label: state.settings.environmentLabel }]
+            : []),
+        ]}
+        density="compact"
+        layout="horizontal"
+        onChange={(value) => {
+          actions.beginSettingsEdit("Change environment");
+          if (value === "gradient") actions.setEnvironmentGradient();
+          else {
+            const environment = findBuiltinEnvironment(value);
+            if (environment) actions.setEnvironmentMap(environment.source, environment.label);
+          }
+          actions.commitSettingsEdit();
+        }}
       />
-      <ColorField
-        label="Horizon color"
-        value={state.settings.backgroundColorBottom}
-        onBegin={() => actions.beginSettingsEdit("Change horizon color")}
-        onChange={(value) => actions.setBackgroundColorBottom(value)}
-        onCommit={() => actions.commitSettingsEdit()}
-      />
+      <label className="editor-action-button">
+        Upload HDR
+        <input
+          type="file"
+          accept=".hdr,image/vnd.radiance"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            actions.beginSettingsEdit("Upload environment");
+            actions.setEnvironmentMap(URL.createObjectURL(file), file.name);
+            actions.commitSettingsEdit();
+            event.currentTarget.value = "";
+          }}
+        />
+      </label>
+      {state.settings.environmentMode === "gradient" ? (
+        <>
+          <ColorField
+            label="Sky color"
+            value={state.settings.backgroundColorTop}
+            onBegin={() => actions.beginSettingsEdit("Change sky color")}
+            onChange={(value) => actions.setBackgroundColorTop(value)}
+            onCommit={() => actions.commitSettingsEdit()}
+          />
+          <ColorField
+            label="Horizon color"
+            value={state.settings.backgroundColorBottom}
+            onBegin={() => actions.beginSettingsEdit("Change horizon color")}
+            onChange={(value) => actions.setBackgroundColorBottom(value)}
+            onCommit={() => actions.commitSettingsEdit()}
+          />
+        </>
+      ) : (
+        <>
+          <EditorNumberField
+            label="Rotation"
+            value={state.settings.environmentRotation}
+            min={-180}
+            max={180}
+            step={1}
+            precisionStep={0.1}
+            snapInterval={15}
+            sensitivity={1 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => {
+              actions.beginSettingsEdit("Rotate environment");
+              actions.setEnvironmentRotation(value);
+            }}
+            onCommit={() => actions.commitSettingsEdit()}
+            onCancel={() => actions.cancelSettingsEdit()}
+          />
+          <EditorNumberField
+            label="Intensity"
+            value={state.settings.environmentIntensity}
+            min={0}
+            max={20}
+            step={0.1}
+            precisionStep={0.01}
+            snapInterval={1}
+            sensitivity={1 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => {
+              actions.beginSettingsEdit("Change environment intensity");
+              actions.setEnvironmentIntensity(value);
+            }}
+            onCommit={() => actions.commitSettingsEdit()}
+            onCancel={() => actions.cancelSettingsEdit()}
+          />
+          <CheckboxField
+            label="Visible background"
+            checked={state.settings.environmentBackgroundVisible}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => {
+              actions.beginSettingsEdit("Toggle environment background");
+              actions.setEnvironmentBackgroundVisible(value);
+              actions.commitSettingsEdit();
+            }}
+          />
+          <CheckboxField
+            label="Light scene"
+            checked={state.settings.environmentLightingEnabled}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => {
+              actions.beginSettingsEdit("Toggle environment lighting");
+              actions.setEnvironmentLightingEnabled(value);
+              actions.commitSettingsEdit();
+            }}
+          />
+        </>
+      )}
       <button
         type="button"
         className="editor-action-button"
