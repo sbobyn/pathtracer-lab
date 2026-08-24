@@ -8,3 +8,9 @@
 - `relax_inn_seaview_suite_4k.hdr` is [Relax Inn Seaview Suite](https://polyhaven.com/a/relax_inn_seaview_suite) by Dario Barresi and Jenelle van Heerden.
 
 The HDR files above were downloaded from Poly Haven as built-in studio, outdoor, open-sky, and interior environment presets. Poly Haven publishes all of them under CC0. Most presets use 2K files to keep the repository and initial download reasonable; the default Relax Inn showcase uses 4K because its detailed interior is visibly clearer as a camera background.
+
+`gltf/box/Box.glb` is the official Khronos glTF Sample Assets Box model by Cesium, used as the static glTF loader smoke test under CC BY 4.0. Its original license is preserved beside the asset.
+
+`static/models/suzanne/` contains the official Khronos glTF Sample Assets Suzanne model by UX3D/Norbert Nopper under CC0. The separate glTF, buffer, and image files intentionally preserve their published relative layout; the original license is included in that directory. The STE-194 geometry study uses a local fallback material, while its included PBR textures are reserved for the later material-loading work.
+
+`static/models/simple-meshes/` contains the official Khronos glTF Sample Assets Simple Meshes model under CC0. Its two nodes reference the same indexed triangle mesh, providing a compact integration check that node transforms and shared mesh data are flattened correctly. The original license is included in that directory.
