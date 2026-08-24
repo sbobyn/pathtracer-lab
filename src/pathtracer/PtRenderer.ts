@@ -433,7 +433,7 @@ export default class PtRenderer {
     this.updateBvhHelperVisibility();
   }
 
-  private createTriangleDebugLine(triangleIndex: number, color: number, linewidth = 4) {
+  private createTriangleDebugLine(triangleIndex: number, color: number, linewidth = 3) {
     const triangle = this.gpuScene.triangles[triangleIndex];
     if (!triangle) return null;
     const geometry = new LineSegmentsGeometry();
