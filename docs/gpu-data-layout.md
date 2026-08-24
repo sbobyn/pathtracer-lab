@@ -40,4 +40,15 @@ Procedural and image-texture descriptors occupy three RGBA texels. Image pixels 
 
 Integer identifiers are encoded as floats and rounded when decoded. This is exact for the scene sizes supported here. Packers reject records that exceed the maximum 2D texture dimensions reported by the active WebGL2 device.
 
+## Triangle BVH
+
+The CPU builder emits depth-first nodes and a separate triangle-index list. Each node uses two RGBA texels:
+
+| Offset | R | G | B | A |
+| --- | --- | --- | --- | --- |
+| 0 | bounds min x | bounds min y | bounds min z | payload |
+| 1 | bounds max x | bounds max y | bounds max z | triangle count |
+
+A positive triangle count marks a leaf, where `payload` is the first offset in the triangle-index texture. A zero count marks a branch: its left child is the next node and `payload` is its right-child node index. The iterative shader traversal uses a fixed stack of 64 entries. If it encounters stack overflow or malformed indices it falls back to brute-force triangle traversal so geometry is not silently omitted.
+
 Spheres, quads, lights, and the four image samplers still use the earlier bounded uniforms. They can migrate independently when their authored counts justify it; triangle and material storage no longer depend on those limits.

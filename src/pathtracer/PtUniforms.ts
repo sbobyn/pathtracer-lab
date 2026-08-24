@@ -25,9 +25,15 @@ export default interface PtUniforms {
   uTriangleCount: { value: number };
   uTriangleData: { value: THREE.DataTexture };
   uTriangleDataSize: { value: THREE.Vector2 };
+  uBvhNodeCount: { value: number };
+  uBvhNodeData: { value: THREE.DataTexture };
+  uBvhNodeDataSize: { value: THREE.Vector2 };
+  uBvhIndexData: { value: THREE.DataTexture };
+  uBvhIndexDataSize: { value: THREE.Vector2 };
   uLights: { value: GpuLight[] };
   uLightCount: { value: number };
   uIntegratorMode: { value: number };
+  uTriangleTraversalMode: { value: number };
   uNumSamples: { value: number };
   uMaxRayDepth: { value: number };
   uMaterialData: { value: THREE.DataTexture };

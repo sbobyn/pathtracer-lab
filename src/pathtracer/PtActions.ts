@@ -101,6 +101,14 @@ export default class PtActions {
     return this.store.getState();
   }
 
+  public getTriangleBvhStats() {
+    return this.renderer.getTriangleBvhStats();
+  }
+
+  public getTriangleBvhProbeStats() {
+    return this.renderer.getTriangleBvhProbeStats();
+  }
+
   public subscribe(listener: PtStateListener) {
     return this.store.subscribe(listener);
   }
@@ -303,6 +311,11 @@ export default class PtActions {
   public setIntegratorMode(mode: PtSettings["integratorMode"]) {
     this.renderer.setIntegratorMode(mode);
     this.updateSetting("integratorMode", mode);
+  }
+
+  public setTriangleTraversalMode(mode: PtSettings["triangleTraversalMode"]) {
+    this.renderer.setTriangleTraversalMode(mode);
+    this.updateSetting("triangleTraversalMode", mode);
   }
 
   public setResolutionScale(scale: number) {
@@ -1613,6 +1626,9 @@ export default class PtActions {
     }
     if (current.integratorMode !== settings.integratorMode) {
       this.setIntegratorMode(settings.integratorMode);
+    }
+    if (current.triangleTraversalMode !== settings.triangleTraversalMode) {
+      this.setTriangleTraversalMode(settings.triangleTraversalMode);
     }
     if (current.resolutionScale !== settings.resolutionScale) {
       this.setResolutionScale(settings.resolutionScale);

@@ -744,6 +744,27 @@ body {
   overscroll-behavior: contain;
 }
 
+.render-panel__bvh-stats {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  color: #a1a1aa;
+  font-size: 10px;
+}
+
+.render-panel__bvh-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.render-panel__bvh-stats dt,
+.render-panel__bvh-stats dd {
+  margin: 0;
+}
+
 .editor-subpanel > .eui-field-row + .eui-field-row,
 .procedural-texture-controls > .eui-field-row + .eui-field-row {
   margin-top: 4px;

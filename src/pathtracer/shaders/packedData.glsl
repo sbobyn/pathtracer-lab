@@ -49,3 +49,17 @@ Triangle readTriangle(int triangleIndex) {
         int(round(a.w))
     );
 }
+
+void readBvhNode(int nodeIndex, out vec3 boundsMin, out vec3 boundsMax, out int payload, out int triangleCount) {
+    int base = nodeIndex * 2;
+    vec4 minimum = readPackedTexel(uBvhNodeData, uBvhNodeDataSize, base);
+    vec4 maximum = readPackedTexel(uBvhNodeData, uBvhNodeDataSize, base + 1);
+    boundsMin = minimum.xyz;
+    boundsMax = maximum.xyz;
+    payload = int(round(minimum.w));
+    triangleCount = int(round(maximum.w));
+}
+
+int readBvhTriangleIndex(int indexOffset) {
+    return int(round(readPackedTexel(uBvhIndexData, uBvhIndexDataSize, indexOffset).x));
+}

@@ -2,6 +2,7 @@ export type AccumulationFormat = "rgba8" | "rgba16f" | "rgba32f";
 export type TransformMode = "translate" | "rotate" | "scale";
 export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
+export type TriangleTraversalMode = "bvh" | "bruteForce";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Unknown";
 
 export interface PtSceneObjectState {
@@ -54,6 +55,7 @@ export interface PtSettings {
   numSamples: number;
   maxRayDepth: number;
   integratorMode: IntegratorMode;
+  triangleTraversalMode: TriangleTraversalMode;
   resolutionScale: number;
   accumulationFormat: AccumulationFormat;
   maxAccumulationFrames: number;
@@ -121,6 +123,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   numSamples: 1,
   maxRayDepth: 10,
   integratorMode: "bsdf",
+  triangleTraversalMode: "bvh",
   resolutionScale: 1.0,
   accumulationFormat: "rgba32f",
   maxAccumulationFrames: 0,

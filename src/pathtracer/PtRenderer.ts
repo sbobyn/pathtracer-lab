@@ -21,6 +21,8 @@ import GpuScene from "./GpuScene";
 import SceneCompiler from "./SceneCompiler";
 import { packTriangleTexture, type PackedTriangleTexture } from "./PackedTriangleTexture";
 import { packMaterialTexture, packTextureTexture, type PackedDataTexture } from "./PackedMaterialTextures";
+import { packTriangleBvh, type PackedTriangleBvh } from "./PackedTriangleBvh";
+import { measureTriangleBvh, type TriangleBvhStats } from "./TriangleBvh";
 
 function integratorModeValue(mode: PtSettings["integratorMode"]): number {
   if (mode === "direct") return 1;
@@ -53,6 +55,7 @@ export default class PtRenderer {
   private readonly sceneCompiler = new SceneCompiler();
   private gpuScene: GpuScene;
   private packedTriangles!: PackedTriangleTexture;
+  private packedTriangleBvh!: PackedTriangleBvh;
   private packedMaterials!: PackedDataTexture;
   private packedTextures!: PackedDataTexture;
   private readonly fallbackImageTexture = new THREE.DataTexture(
@@ -115,6 +118,7 @@ export default class PtRenderer {
 
     this.setupRenderer();
     this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
+    this.packedTriangleBvh = packTriangleBvh(this.gpuScene.triangleBvh, this.renderer.capabilities.maxTextureSize);
     this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
     this.packedTextures = packTextureTexture(this.gpuScene.textures, this.renderer.capabilities.maxTextureSize);
     this.setupControls();
@@ -161,11 +165,13 @@ export default class PtRenderer {
   setScene(ptScene: PtScene, invalidate = true) {
     this.gpuScene.dispose();
     this.packedTriangles.texture.dispose();
+    this.disposePackedTriangleBvh();
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
     this.ptScene = ptScene;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
     this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
+    this.packedTriangleBvh = packTriangleBvh(this.gpuScene.triangleBvh, this.renderer.capabilities.maxTextureSize);
     this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
     this.packedTextures = packTextureTexture(this.gpuScene.textures, this.renderer.capabilities.maxTextureSize);
     this.watchImageTextures(this.gpuScene);
@@ -212,6 +218,12 @@ export default class PtRenderer {
     this.settings.integratorMode = mode;
     this.uniforms.uIntegratorMode.value = integratorModeValue(mode);
     this.invalidate(PtInvalidationLevel.Settings, "integrator mode changed");
+  }
+
+  public setTriangleTraversalMode(mode: PtSettings["triangleTraversalMode"]) {
+    this.settings.triangleTraversalMode = mode;
+    this.uniforms.uTriangleTraversalMode.value = mode === "bvh" ? 1 : 0;
+    this.invalidate(PtInvalidationLevel.Settings, "triangle traversal mode changed");
   }
 
   public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
@@ -295,6 +307,14 @@ export default class PtRenderer {
 
   public getInvalidationHistory(): readonly PtInvalidationEvent[] {
     return [...this.invalidationHistory];
+  }
+
+  public getTriangleBvhStats(): Readonly<TriangleBvhStats> {
+    return { ...this.gpuScene.triangleBvh.stats };
+  }
+
+  public getTriangleBvhProbeStats() {
+    return measureTriangleBvh(this.gpuScene.triangleBvh, this.gpuScene.triangles);
   }
 
   private reset() {
@@ -410,6 +430,7 @@ export default class PtRenderer {
     this.uniforms.uNumSamples.value = this.settings.numSamples;
     this.uniforms.uMaxRayDepth.value = this.settings.maxRayDepth;
     this.uniforms.uIntegratorMode.value = integratorModeValue(this.settings.integratorMode);
+    this.uniforms.uTriangleTraversalMode.value = this.settings.triangleTraversalMode === "bvh" ? 1 : 0;
     this.uniforms.uBackgroundColorTop.value = this.ptScene.backgroundColorTop;
     this.uniforms.uBackgroundColorBottom.value =
       this.ptScene.backgroundColorBottom;
@@ -454,9 +475,15 @@ export default class PtRenderer {
       uTriangleCount: { value: this.gpuScene.triangles.length },
       uTriangleData: { value: this.packedTriangles.texture },
       uTriangleDataSize: { value: this.packedTriangles.size },
+      uBvhNodeCount: { value: this.packedTriangleBvh.nodeCount },
+      uBvhNodeData: { value: this.packedTriangleBvh.nodeTexture },
+      uBvhNodeDataSize: { value: this.packedTriangleBvh.nodeTextureSize },
+      uBvhIndexData: { value: this.packedTriangleBvh.indexTexture },
+      uBvhIndexDataSize: { value: this.packedTriangleBvh.indexTextureSize },
       uLights: { value: this.uniformLightValues() },
       uLightCount: { value: this.gpuScene.lights.length },
       uIntegratorMode: { value: integratorModeValue(this.settings.integratorMode) },
+      uTriangleTraversalMode: { value: this.settings.triangleTraversalMode === "bvh" ? 1 : 0 },
       uNumSamples: { value: this.settings.numSamples },
       uMaxRayDepth: { value: this.settings.maxRayDepth },
       uMaterialData: { value: this.packedMaterials.texture },
@@ -490,6 +517,11 @@ export default class PtRenderer {
     this.uniforms.uTriangleCount.value = this.gpuScene.triangles.length;
     this.uniforms.uTriangleData.value = this.packedTriangles.texture;
     this.uniforms.uTriangleDataSize.value.copy(this.packedTriangles.size);
+    this.uniforms.uBvhNodeCount.value = this.packedTriangleBvh.nodeCount;
+    this.uniforms.uBvhNodeData.value = this.packedTriangleBvh.nodeTexture;
+    this.uniforms.uBvhNodeDataSize.value.copy(this.packedTriangleBvh.nodeTextureSize);
+    this.uniforms.uBvhIndexData.value = this.packedTriangleBvh.indexTexture;
+    this.uniforms.uBvhIndexDataSize.value.copy(this.packedTriangleBvh.indexTextureSize);
     this.uniforms.uLights.value = this.uniformLightValues();
     this.uniforms.uLightCount.value = this.gpuScene.lights.length;
     this.uniforms.uMaterialData.value = this.packedMaterials.texture;
@@ -530,7 +562,14 @@ export default class PtRenderer {
 
   private updatePackedTriangleTexture() {
     this.packedTriangles.texture.dispose();
+    this.disposePackedTriangleBvh();
     this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
+    this.packedTriangleBvh = packTriangleBvh(this.gpuScene.triangleBvh, this.renderer.capabilities.maxTextureSize);
+  }
+
+  private disposePackedTriangleBvh() {
+    this.packedTriangleBvh.nodeTexture.dispose();
+    this.packedTriangleBvh.indexTexture.dispose();
   }
 
   private uniformLightValues() {
@@ -718,6 +757,10 @@ export default class PtRenderer {
 
     this.shaderCanvas.dispose();
     this.gpuScene.dispose();
+    this.packedTriangles.texture.dispose();
+    this.disposePackedTriangleBvh();
+    this.packedMaterials.texture.dispose();
+    this.packedTextures.texture.dispose();
     this.fallbackImageTexture.dispose();
     this.disposePostProcessing();
     this.renderer.dispose();

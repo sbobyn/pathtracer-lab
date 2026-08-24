@@ -387,6 +387,8 @@ function RenderSettings({
   actions: PtActions;
 }) {
   const { settings } = state;
+  const bvhStats = actions.getTriangleBvhStats();
+  const bvhProbeStats = actions.getTriangleBvhProbeStats();
   return (
       <div className="render-panel__content">
       <CheckboxField
@@ -448,6 +450,23 @@ function RenderSettings({
             )
           }
       />
+      {bvhStats.triangleCount > 0 && (
+        <SelectField
+          label="Triangles"
+          value={settings.triangleTraversalMode}
+          options={[
+            { value: "bvh", label: "BVH" },
+            { value: "bruteForce", label: "Brute force" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change triangle traversal", () =>
+              actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
+            )
+          }
+        />
+      )}
       <SelectField
           label="Resolution"
           value={String(settings.resolutionScale)}
@@ -496,6 +515,21 @@ function RenderSettings({
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
       </fieldset>
+      {bvhStats.triangleCount > 0 && (
+        <dl className="render-panel__bvh-stats" aria-label="Triangle BVH statistics">
+          <div><dt>BVH triangles</dt><dd>{bvhStats.triangleCount}</dd></div>
+          <div><dt>Nodes / leaves</dt><dd>{bvhStats.nodeCount} / {bvhStats.leafCount}</dd></div>
+          <div><dt>Depth / leaf max</dt><dd>{bvhStats.maxDepth} / {bvhStats.maxLeafSize}</dd></div>
+          <div title="Average triangle intersection tests across six deterministic CPU probe rays">
+            <dt>Probe tests: BVH / brute</dt>
+            <dd>{bvhProbeStats.averageTriangleTests.toFixed(1)} / {bvhProbeStats.bruteForceTriangleTests}</dd>
+          </div>
+          <div title="Average BVH node tests across six deterministic CPU probe rays">
+            <dt>Probe nodes / hits</dt>
+            <dd>{bvhProbeStats.averageNodeTests.toFixed(1)} / {bvhProbeStats.hitCount} of {bvhProbeStats.rayCount}</dd>
+          </div>
+        </dl>
+      )}
       </div>
   );
 }

@@ -1,5 +1,6 @@
 import type * as THREE from "three";
 import type PtMaterial from "./PtMaterial";
+import type { TriangleBvh } from "./TriangleBvh";
 
 export interface GpuSphere {
   position: THREE.Vector3;
@@ -74,6 +75,7 @@ export default class GpuScene {
   public spheres: GpuSphere[];
   public quads: GpuQuad[];
   public triangles: GpuTriangle[];
+  public triangleBvh: TriangleBvh;
   public materials: GpuMaterial[];
   public textures: GpuTexture[];
   public imageTextures: THREE.Texture[];
@@ -84,6 +86,7 @@ export default class GpuScene {
     spheres: GpuSphere[],
     quads: GpuQuad[],
     triangles: GpuTriangle[],
+    triangleBvh: TriangleBvh,
     materials: GpuMaterial[],
     textures: GpuTexture[],
     imageTextures: THREE.Texture[],
@@ -92,6 +95,7 @@ export default class GpuScene {
     this.spheres = spheres;
     this.quads = quads;
     this.triangles = triangles;
+    this.triangleBvh = triangleBvh;
     this.materials = materials;
     this.textures = textures;
     this.imageTextures = imageTextures;
@@ -108,9 +112,10 @@ export default class GpuScene {
     this.quads = quads;
   }
 
-  public updateTriangles(triangles: GpuTriangle[]) {
+  public updateTriangles(triangles: GpuTriangle[], triangleBvh: TriangleBvh) {
     this.assertUsable();
     this.triangles = triangles;
+    this.triangleBvh = triangleBvh;
   }
 
   public updateMaterials(
@@ -135,6 +140,7 @@ export default class GpuScene {
     this.spheres = [];
     this.quads = [];
     this.triangles = [];
+    this.triangleBvh = { nodes: [], triangleIndices: [], stats: { triangleCount: 0, nodeCount: 0, leafCount: 0, maxDepth: 0, maxLeafSize: 0 } };
     this.materials = [];
     this.textures = [];
     this.imageTextures = [];
