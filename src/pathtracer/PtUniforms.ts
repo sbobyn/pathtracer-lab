@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { GpuLight, GpuMaterial, GpuQuad, GpuSphere, GpuTexture, GpuTriangle } from "./GpuScene";
+import type { GpuLight, GpuQuad, GpuSphere } from "./GpuScene";
 
 export default interface PtUniforms {
   uCamera: {
@@ -18,19 +18,22 @@ export default interface PtUniforms {
     value: {
       spheres: GpuSphere[];
       quads: GpuQuad[];
-      triangles: GpuTriangle[];
     };
   };
   uSphereCount: { value: number };
   uQuadCount: { value: number };
   uTriangleCount: { value: number };
+  uTriangleData: { value: THREE.DataTexture };
+  uTriangleDataSize: { value: THREE.Vector2 };
   uLights: { value: GpuLight[] };
   uLightCount: { value: number };
   uIntegratorMode: { value: number };
   uNumSamples: { value: number };
   uMaxRayDepth: { value: number };
-  uMaterials: { value: GpuMaterial[] };
-  uTextures: { value: GpuTexture[] };
+  uMaterialData: { value: THREE.DataTexture };
+  uMaterialDataSize: { value: THREE.Vector2 };
+  uTextureData: { value: THREE.DataTexture };
+  uTextureDataSize: { value: THREE.Vector2 };
   uImageTexture0: { value: THREE.Texture };
   uImageTexture1: { value: THREE.Texture };
   uImageTexture2: { value: THREE.Texture };

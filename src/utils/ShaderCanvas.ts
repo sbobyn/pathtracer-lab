@@ -31,7 +31,7 @@ export class ShaderCanvas {
     height,
     fragmentShader,
     vertexShader = `
-      varying vec2 vNDC;
+      out vec2 vNDC;
 
       void main() {
         vNDC = uv * 2.0 - 1.0;
@@ -63,6 +63,7 @@ export class ShaderCanvas {
 
     const geometry = new THREE.PlaneGeometry(2, 2);
     this.material = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
       vertexShader,
       fragmentShader,
       uniforms: {

@@ -8,7 +8,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
     for (int depth = 0; depth < uMaxRayDepth; depth++) {
         bool didHit = hitWorld(world, ray, Interval(1e-3, 1e4), hit);
         if (didHit) {
-            Material material = uMaterials[hit.materialId];
+            Material material = readMaterial(hit.materialId);
             vec3 emission = emitted(material, hit);
             if (material.type == 3) {
                 float emissionWeight = 1.0;
@@ -56,7 +56,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                     fract(longitude / (2.0 * PI) + 0.5),
                     1.0 - acos(clamp(unitDirection.y, -1.0, 1.0)) / PI
                 );
-                radiance += throughput * texture2D(uEnvironmentMap, environmentUv).rgb * uEnvironmentIntensity;
+                radiance += throughput * texture(uEnvironmentMap, environmentUv).rgb * uEnvironmentIntensity;
             } else if (!uEnvironmentEnabled) {
                 float blend = 0.5 * (unitDirection.y + 1.0);
                 radiance += throughput * mix(uBackgroundColorBottom, uBackgroundColorTop, blend);

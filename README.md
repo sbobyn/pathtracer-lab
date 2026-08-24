@@ -118,6 +118,8 @@ checking, and the production build.
 
 ## Verified baseline
 
+The current packed triangle, material, and procedural-texture descriptor contract is documented in [`docs/gpu-data-layout.md`](docs/gpu-data-layout.md).
+
 The baseline has been manually verified in a Chromium browser on macOS with Three.js r177 and WebGL:
 
 - `Part1Simple` renders in raster and path-traced modes.
@@ -127,6 +129,7 @@ The baseline has been manually verified in a Chromium browser on macOS with Thre
 - `EmissiveStudy` exercises authored quad/sphere emitters against a procedural floor and reflective/diffuse objects on a black environment.
 - `EnvironmentStudy` exercises image-based lighting and camera-visible HDR backgrounds with diffuse, rough-metal, and mirror materials.
 - `TriangleStudy` exercises brute-force indexed triangles, barycentric UV interpolation, smooth vertex normals, and HDR reflections.
+- `PackedTrianglesStudy` stress-tests packed GPU triangle transport with a 2,048-triangle indexed wave before BVH acceleration.
 - orbit controls, object selection, object lifecycle commands, transforms, material editing, resolution scale, accumulation controls, and depth-of-field controls respond without browser warnings or errors.
 - unit tests, random-seed verification, TypeScript checking, and the production Vite build pass.
 

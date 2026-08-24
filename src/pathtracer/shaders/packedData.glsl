@@ -1,0 +1,51 @@
+const int TRIANGLE_TEXELS = 8;
+const int MATERIAL_TEXELS = 2;
+const int TEXTURE_TEXELS = 3;
+
+vec4 readPackedTexel(sampler2D dataTexture, vec2 dataSize, int linearIndex) {
+    int width = int(dataSize.x);
+    return texelFetch(dataTexture, ivec2(linearIndex % width, linearIndex / width), 0);
+}
+
+vec4 readTriangleTexel(int triangleIndex, int texelOffset) {
+    int linearIndex = triangleIndex * TRIANGLE_TEXELS + texelOffset;
+    return readPackedTexel(uTriangleData, uTriangleDataSize, linearIndex);
+}
+
+Material readMaterial(int materialIndex) {
+    int base = materialIndex * MATERIAL_TEXELS;
+    vec4 properties = readPackedTexel(uMaterialData, uMaterialDataSize, base);
+    vec4 emission = readPackedTexel(uMaterialData, uMaterialDataSize, base + 1);
+    return Material(
+        int(round(properties.x)), int(round(properties.y)),
+        properties.z, properties.w, emission.x, emission.y > 0.5
+    );
+}
+
+Texture readTexture(int textureIndex) {
+    int base = textureIndex * TEXTURE_TEXELS;
+    vec4 properties = readPackedTexel(uTextureData, uTextureDataSize, base);
+    vec4 colorA = readPackedTexel(uTextureData, uTextureDataSize, base + 1);
+    vec4 colorB = readPackedTexel(uTextureData, uTextureDataSize, base + 2);
+    return Texture(
+        int(round(properties.x)), colorA.rgb, colorB.rgb,
+        properties.z, properties.w, int(round(properties.y))
+    );
+}
+
+Triangle readTriangle(int triangleIndex) {
+    vec4 a = readTriangleTexel(triangleIndex, 0);
+    vec4 b = readTriangleTexel(triangleIndex, 1);
+    vec4 c = readTriangleTexel(triangleIndex, 2);
+    vec4 normalA = readTriangleTexel(triangleIndex, 3);
+    vec4 normalB = readTriangleTexel(triangleIndex, 4);
+    vec4 normalC = readTriangleTexel(triangleIndex, 5);
+    vec4 uvAB = readTriangleTexel(triangleIndex, 6);
+    vec4 uvC = readTriangleTexel(triangleIndex, 7);
+    return Triangle(
+        a.xyz, b.xyz, c.xyz,
+        normalA.xyz, normalB.xyz, normalC.xyz,
+        uvAB.xy, uvAB.zw, uvC.xy,
+        int(round(a.w))
+    );
+}

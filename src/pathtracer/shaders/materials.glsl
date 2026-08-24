@@ -22,7 +22,7 @@ float reflectance(float cosine, float ior) {
 }
 
 vec3 scatterDielectric(Ray incomingRay, Hit hit, vec2 seed) {
-    float materialIor = uMaterials[hit.materialId].ior;
+    float materialIor = readMaterial(hit.materialId).ior;
     float ratio = hit.frontFace ? 1.0 / materialIor : materialIor;
     vec3 unitDirection = normalize(incomingRay.direction);
     float cosTheta = min(dot(-unitDirection, hit.normal), 1.0);
@@ -35,7 +35,7 @@ vec3 scatterDielectric(Ray incomingRay, Hit hit, vec2 seed) {
 }
 
 vec3 scatter(Ray incomingRay, Hit hit, vec2 seed) {
-    Material material = uMaterials[hit.materialId];
+    Material material = readMaterial(hit.materialId);
     if (material.type == 0) return scatterLambert(hit, seed);
     if (material.type == 1) return scatterMetal(incomingRay, hit, seed, material.fuzz);
     if (material.type == 2) return scatterDielectric(incomingRay, hit, seed);
