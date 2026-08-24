@@ -11,4 +11,6 @@ The HDR files above were downloaded from Poly Haven as built-in studio, outdoor,
 
 `gltf/box/Box.glb` is the official Khronos glTF Sample Assets Box model by Cesium, used as the static glTF loader smoke test under CC BY 4.0. Its original license is preserved beside the asset.
 
-`public/models/suzanne/` contains the official Khronos glTF Sample Assets Suzanne model by UX3D/Norbert Nopper under CC0. The separate glTF, buffer, and image files intentionally preserve their published relative layout; the original license is included in that directory. The STE-194 geometry study uses a local fallback material, while its included PBR textures are reserved for the later material-loading work.
+`static/models/suzanne/` contains the official Khronos glTF Sample Assets Suzanne model by UX3D/Norbert Nopper under CC0. The separate glTF, buffer, and image files intentionally preserve their published relative layout; the original license is included in that directory. The STE-194 geometry study uses a local fallback material, while its included PBR textures are reserved for the later material-loading work.
+
+`static/models/simple-meshes/` contains the official Khronos glTF Sample Assets Simple Meshes model under CC0. Its two nodes reference the same indexed triangle mesh, providing a compact integration check that node transforms and shared mesh data are flattened correctly. The original license is included in that directory.

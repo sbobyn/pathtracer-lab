@@ -73,6 +73,28 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     if (environment) scene.setEnvironmentMap(environment.source, environment.label);
     return scene;
   },
+  GlTFSimpleMeshesStudy: () => {
+    const materials = [
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xe2a84d)),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(1, 0.5, 3),
+      lookAt: new THREE.Vector3(1, 0.5, 0),
+      far: 10000,
+    });
+    camera.fov = 38;
+    const scene = new PtScene([], materials, camera);
+    const source = `${import.meta.env.BASE_URL}models/simple-meshes/SimpleMeshes.gltf`;
+    void scene.loadStaticGltf(source, 0, "Khronos glTF Simple Meshes");
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    const environment = builtinEnvironments.find(
+      (candidate) => candidate.id === "studio-small-03"
+    );
+    if (environment) scene.setEnvironmentMap(environment.source, environment.label);
+    return scene;
+  },
   Part1Simple: () => {
     const spheres: PtSphere[] = [
       new PtSphere(new THREE.Vector3(0, -100.5, 0), 100, 0), // Ground
