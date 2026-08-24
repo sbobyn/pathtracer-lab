@@ -16,6 +16,7 @@ import {
   disposeEnvironmentImportanceDistribution,
   type EnvironmentImportanceDistribution,
 } from "./EnvironmentImportanceDistribution";
+import { loadStaticGltf } from "./StaticGltfLoader";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
@@ -71,6 +72,8 @@ export default class PtScene {
   environmentTexture: THREE.Texture | null = null;
   environmentDistribution: EnvironmentImportanceDistribution | null = null;
   environmentLoaded: Promise<THREE.Texture> | null = null;
+  staticAssetsLoaded: Promise<void> | null = null;
+  staticAssetError: Error | null = null;
 
   camera: THREE.PerspectiveCamera;
 
@@ -221,6 +224,23 @@ export default class PtScene {
     this.triangleMeshGroup.add(mesh);
     this.triangleMeshGroup.updateMatrixWorld(true);
     return mesh;
+  }
+
+  public loadStaticGltf(source: string, fallbackMaterialId: number, label: string) {
+    this.staticAssetError = null;
+    this.staticAssetsLoaded = loadStaticGltf(source).then((primitives) => {
+      primitives.forEach((primitive, index) => {
+        this.addTriangleMesh(
+          primitive.geometry,
+          fallbackMaterialId,
+          primitives.length === 1 ? label : `${label} · ${primitive.name || index + 1}`
+        );
+      });
+    }).catch((error: unknown) => {
+      this.staticAssetError = error instanceof Error ? error : new Error(String(error));
+      throw this.staticAssetError;
+    });
+    return this.staticAssetsLoaded;
   }
 
   public createPointLightNode(position: THREE.Vector3, objectName: string) {

@@ -108,6 +108,7 @@ export default class PtActions {
         },
       }));
     });
+    this.renderer.onStaticSceneLoaded(() => this.publishSceneObjects());
     this.configureTransformControls();
     this.publishSceneObjects();
   }

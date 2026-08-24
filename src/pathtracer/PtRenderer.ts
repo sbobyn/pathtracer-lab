@@ -83,6 +83,8 @@ export default class PtRenderer {
   );
   private readonly watchedImageTextures = new WeakSet<THREE.Texture>();
   private watchedEnvironmentLoad: Promise<THREE.Texture> | null = null;
+  private watchedStaticAssetLoad: Promise<void> | null = null;
+  private staticSceneLoadedListener: (() => void) | null = null;
 
   private cameraForward!: THREE.Vector3;
   private cameraUp!: THREE.Vector3;
@@ -145,6 +147,7 @@ export default class PtRenderer {
     this.setupShaderCanvas();
     this.watchImageTextures(this.gpuScene);
     this.watchEnvironmentTexture();
+    this.watchStaticAssets();
 
     // Setup Post Processing / Composer Passes
     const renderTarget = new THREE.WebGLRenderTarget(
@@ -196,6 +199,7 @@ export default class PtRenderer {
     this.packedTextures = packTextureTexture(this.gpuScene.textures, this.renderer.capabilities.maxTextureSize);
     this.watchImageTextures(this.gpuScene);
     this.watchEnvironmentTexture();
+    this.watchStaticAssets();
     this.camera = ptScene.camera;
     this.reset();
     if (invalidate) {
@@ -796,6 +800,21 @@ export default class PtRenderer {
         : null;
       this.invalidate(PtInvalidationLevel.Settings, "environment map loaded");
     }).catch((error) => console.error("Failed to load environment map", error));
+  }
+
+  public onStaticSceneLoaded(listener: () => void) {
+    this.staticSceneLoadedListener = listener;
+  }
+
+  private watchStaticAssets() {
+    const loaded = this.ptScene.staticAssetsLoaded;
+    if (!loaded || loaded === this.watchedStaticAssetLoad) return;
+    this.watchedStaticAssetLoad = loaded;
+    loaded.then(() => {
+      if (this.ptScene.staticAssetsLoaded !== loaded) return;
+      this.invalidate(PtInvalidationLevel.Scene, "static glTF loaded");
+      this.staticSceneLoadedListener?.();
+    }).catch((error) => console.error("Failed to load static glTF", error));
   }
 
   private updateEnvironmentDistributionUniforms() {
