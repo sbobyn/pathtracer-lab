@@ -326,7 +326,7 @@ function SceneSettings({
             onCancel={() => actions.cancelSettingsEdit()}
           />
           <EditorNumberField
-            label="Intensity"
+            label="Background intensity"
             value={state.settings.environmentIntensity}
             min={0}
             max={20}
@@ -337,8 +337,26 @@ function SceneSettings({
             density="compact"
             layout="horizontal"
             onChange={(value) => {
-              actions.beginSettingsEdit("Change environment intensity");
+              actions.beginSettingsEdit("Change environment background intensity");
               actions.setEnvironmentIntensity(value);
+            }}
+            onCommit={() => actions.commitSettingsEdit()}
+            onCancel={() => actions.cancelSettingsEdit()}
+          />
+          <EditorNumberField
+            label="Lighting intensity"
+            value={state.settings.environmentLightingIntensity}
+            min={0}
+            max={20}
+            step={0.1}
+            precisionStep={0.01}
+            snapInterval={1}
+            sensitivity={1 * pathTracerScrubSpeed}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => {
+              actions.beginSettingsEdit("Change environment lighting intensity");
+              actions.setEnvironmentLightingIntensity(value);
             }}
             onCommit={() => actions.commitSettingsEdit()}
             onCancel={() => actions.cancelSettingsEdit()}

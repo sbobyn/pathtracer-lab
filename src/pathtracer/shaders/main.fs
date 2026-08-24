@@ -19,11 +19,15 @@ uniform vec2 uResolution;
 uniform vec3 uBackgroundColorTop;
 uniform vec3 uBackgroundColorBottom;
 uniform sampler2D uEnvironmentMap;
+uniform sampler2D uEnvironmentConditionalCdf;
+uniform sampler2D uEnvironmentMarginalCdf;
+uniform vec2 uEnvironmentDistributionSize;
 uniform bool uEnvironmentEnabled;
 uniform bool uEnvironmentBackgroundVisible;
 uniform bool uEnvironmentLightingEnabled;
 uniform float uEnvironmentRotation;
 uniform float uEnvironmentIntensity;
+uniform float uEnvironmentLightingIntensity;
 uniform int uMaxRayDepth;
 uniform float uNumSamples;
 uniform bool uEnableDoF;
@@ -60,6 +64,7 @@ uniform sampler2D uImageTexture3;
 #include random.glsl
 #include textures.glsl
 #include materials.glsl
+#include environment.glsl
 // Light estimators are kept separate from path-state bookkeeping (STE-488).
 #include lighting.glsl
 #include camera.glsl

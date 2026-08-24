@@ -7,9 +7,14 @@ struct LightSample {
     float pdf;
     int materialId;
     vec3 radiance;
+    bool environment;
     bool delta;
     bool valid;
 };
+
+int lightStrategyCount() {
+    return uLightCount + ((uEnvironmentEnabled && uEnvironmentLightingEnabled) ? 1 : 0);
+}
 
 float powerHeuristic(float pdfA, float pdfB) {
     float a2 = pdfA * pdfA;
@@ -41,13 +46,31 @@ LightSample sampleLight(World world, vec3 origin, vec2 seed) {
     LightSample lightSample;
     lightSample.valid = false;
     lightSample.pdf = 0.0;
+    lightSample.environment = false;
     lightSample.delta = false;
-    if (uLightCount <= 0) return lightSample;
+    int strategyCount = lightStrategyCount();
+    if (strategyCount <= 0) return lightSample;
 
-    int lightIndex = int(floor(hash12(seed) * float(uLightCount)));
-    if (lightIndex >= uLightCount) lightIndex = uLightCount - 1;
-    Light light = uLights[lightIndex];
+    int lightIndex = int(floor(hash12(seed) * float(strategyCount)));
+    if (lightIndex >= strategyCount) lightIndex = strategyCount - 1;
     vec2 surfaceSeed = hash22(seed + vec2(19.19, 73.73));
+    if (lightIndex == uLightCount) {
+        float directionPdf = 0.0;
+        lightSample.direction = sampleEnvironmentDirection(surfaceSeed, directionPdf);
+        lightSample.distance = 1e4;
+        lightSample.position = origin + lightSample.direction * lightSample.distance;
+        lightSample.normal = -lightSample.direction;
+        lightSample.uv = environmentUv(lightSample.direction);
+        lightSample.pdf = directionPdf / float(strategyCount);
+        lightSample.radiance = environmentRadiance(
+            lightSample.direction,
+            uEnvironmentLightingIntensity
+        );
+        lightSample.environment = true;
+        lightSample.valid = lightSample.pdf > 0.0;
+        return lightSample;
+    }
+    Light light = uLights[lightIndex];
 
     if (light.kind == 3) {
         vec3 incomingAxis = normalize(-light.direction);
@@ -56,11 +79,11 @@ LightSample sampleLight(World world, vec3 origin, vec2 seed) {
             float cosThetaMax = cos(angularRadius);
             float solidAngle = 2.0 * PI * (1.0 - cosThetaMax);
             lightSample.direction = sampleCone(incomingAxis, cosThetaMax, surfaceSeed);
-            lightSample.pdf = 1.0 / (float(uLightCount) * solidAngle);
+            lightSample.pdf = 1.0 / (float(strategyCount) * solidAngle);
             lightSample.radiance = light.color * light.intensity / solidAngle;
         } else {
             lightSample.direction = incomingAxis;
-            lightSample.pdf = 1.0 / float(uLightCount);
+            lightSample.pdf = 1.0 / float(strategyCount);
             lightSample.radiance = light.color * light.intensity;
         }
         lightSample.distance = 1e4;
@@ -81,7 +104,7 @@ LightSample sampleLight(World world, vec3 origin, vec2 seed) {
         lightSample.position = light.position;
         lightSample.normal = -lightSample.direction;
         lightSample.uv = vec2(0.0);
-        lightSample.pdf = 1.0 / float(uLightCount);
+        lightSample.pdf = 1.0 / float(strategyCount);
         float falloff = 1.0;
         if (light.kind == 4) {
             float coneCosine = dot(normalize(light.direction), -lightSample.direction);
@@ -117,7 +140,7 @@ LightSample sampleLight(World world, vec3 origin, vec2 seed) {
     if (lightCosine <= 1e-6) return lightSample;
 
     lightSample.pdf = distanceSquared /
-        (lightCosine * light.area * float(uLightCount));
+        (lightCosine * light.area * float(strategyCount));
     lightSample.materialId = light.materialId;
     lightSample.radiance = vec3(0.0);
     lightSample.valid = lightSample.pdf > 0.0;
@@ -145,9 +168,15 @@ float lightPdfForHit(vec3 origin, Hit hit) {
         lightCosine = light.emissionTwoSided ? abs(lightCosine) : lightCosine;
         if (lightCosine <= 1e-6) return 0.0;
         return distanceSquared /
-            (lightCosine * light.area * float(uLightCount));
+            (lightCosine * light.area * float(lightStrategyCount()));
     }
     return 0.0;
+}
+
+float environmentLightPdf(vec3 direction) {
+    int strategyCount = lightStrategyCount();
+    if (!uEnvironmentEnabled || !uEnvironmentLightingEnabled || strategyCount <= 0) return 0.0;
+    return environmentPdf(direction) / float(strategyCount);
 }
 
 vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 throughput, vec2 seed) {
@@ -163,7 +192,7 @@ vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 through
     }
 
     vec3 lightRadiance = light.radiance;
-    if (!light.delta) {
+    if (!light.delta && !light.environment) {
         Material lightMaterial = readMaterial(light.materialId);
         Hit lightHit;
         lightHit.position = light.position;
