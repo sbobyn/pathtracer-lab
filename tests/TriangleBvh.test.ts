@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import type { GpuTriangle } from "../src/pathtracer/GpuScene.ts";
-import { buildTriangleBvh, hitAabb, hitTriangleDistance, measureTriangleBvh, traverseTriangleBvh } from "../src/pathtracer/TriangleBvh.ts";
+import { buildTriangleBvh, describeTriangleBvh, hitAabb, hitTriangleDistance, measureTriangleBvh, traverseTriangleBvh } from "../src/pathtracer/TriangleBvh.ts";
 
 function triangleAt(x: number, y = 0, z = 0): GpuTriangle {
   const normal = new THREE.Vector3(0, 0, 1);
@@ -73,4 +73,25 @@ test("deterministic probe statistics expose BVH work relative to brute force", (
   assert.deepEqual(measureTriangleBvh(buildTriangleBvh([], 2), []), {
     rayCount: 0, hitCount: 0, averageNodeTests: 0, averageTriangleTests: 0, bruteForceTriangleTests: 0,
   });
+});
+
+test("hierarchy descriptions reconstruct the flattened production layout", () => {
+  const bvh = buildTriangleBvh(Array.from({ length: 8 }, (_, index) => triangleAt(index * 2)), 2);
+  const descriptions = describeTriangleBvh(bvh);
+  assert.equal(descriptions.length, bvh.nodes.length);
+  assert.equal(descriptions[0]!.depth, 0);
+  assert.equal(descriptions[0]!.parentIndex, null);
+  for (const description of descriptions) {
+    if (description.leaf) {
+      assert.ok(description.triangleCount > 0);
+      assert.equal(description.leftChild, null);
+      assert.equal(description.rightChild, null);
+    } else {
+      assert.equal(description.leftChild, description.index + 1);
+      assert.equal(descriptions[description.leftChild!]!.parentIndex, description.index);
+      assert.equal(descriptions[description.rightChild!]!.parentIndex, description.index);
+      assert.equal(descriptions[description.leftChild!]!.depth, description.depth + 1);
+    }
+  }
+  assert.deepEqual(describeTriangleBvh(buildTriangleBvh([])), []);
 });

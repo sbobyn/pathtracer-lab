@@ -389,6 +389,7 @@ function RenderSettings({
   const { settings } = state;
   const bvhStats = actions.getTriangleBvhStats();
   const bvhProbeStats = actions.getTriangleBvhProbeStats();
+  const [showBvhVisualizationHelp, setShowBvhVisualizationHelp] = useState(false);
   return (
       <div className="render-panel__content">
       <CheckboxField
@@ -450,23 +451,6 @@ function RenderSettings({
             )
           }
       />
-      {bvhStats.triangleCount > 0 && (
-        <SelectField
-          label="Triangles"
-          value={settings.triangleTraversalMode}
-          options={[
-            { value: "bvh", label: "BVH" },
-            { value: "bruteForce", label: "Brute force" },
-          ]}
-          density="compact"
-          layout="horizontal"
-          onChange={(value) =>
-            commitSetting(actions, "Change triangle traversal", () =>
-              actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
-            )
-          }
-        />
-      )}
       {bvhStats.triangleCount > 0 && (
         <SelectField
           label="Wireframe"
@@ -532,6 +516,82 @@ function RenderSettings({
           integer
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
+      {bvhStats.triangleCount > 0 && (
+        <SelectField
+          label="Triangles"
+          value={settings.triangleTraversalMode}
+          options={[
+            { value: "bvh", label: "BVH" },
+            { value: "bruteForce", label: "Brute force" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change triangle traversal", () =>
+              actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
+            )
+          }
+        />
+      )}
+      {bvhStats.nodeCount > 0 && (
+        <PersistentDetails
+          className="editor-subpanel render-panel__bvh-visualization"
+          storageKey="bvh-visualization"
+        >
+          <summary>BVH visualization</summary>
+          <div className="render-panel__bvh-help-row">
+            <span>About this overlay</span>
+            <button
+              type="button"
+              className="editor-help-button"
+              aria-label="Explain BVH visualization"
+              aria-expanded={showBvhVisualizationHelp}
+              title="Explain BVH visualization"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setShowBvhVisualizationHelp((visible) => !visible);
+              }}
+            >
+              ?
+            </button>
+          </div>
+          {showBvhVisualizationHelp && (
+            <p className="render-panel__bvh-help">
+              Shows the bounding boxes used to organize triangles. Depth 0 is the
+              root; higher values reveal progressively smaller child boxes. These
+              controls affect only the debug overlay—not the BVH build, ray
+              traversal, or accumulated image.
+            </p>
+          )}
+          <CheckboxField
+            label="Show bounds"
+            checked={settings.bvhOverlayEnabled}
+            density="compact"
+            layout="horizontal"
+            onChange={(checked) =>
+              commitSetting(actions, "Toggle BVH bounds", () =>
+                actions.setBvhOverlayEnabled(checked)
+              )
+            }
+          />
+          <SettingsNumberField
+            actions={actions}
+            label="Visible depth"
+            historyLabel="Change visible BVH depth"
+            value={Math.min(settings.bvhOverlayDepth, bvhStats.maxDepth)}
+            min={0}
+            max={bvhStats.maxDepth}
+            step={1}
+            precisionStep={1}
+            snapInterval={1}
+            sensitivity={0.5}
+            integer
+            disabled={!settings.bvhOverlayEnabled}
+            setValue={(value) => actions.setBvhOverlayDepth(value)}
+          />
+        </PersistentDetails>
+      )}
       </fieldset>
       {bvhStats.triangleCount > 0 && (
         <dl className="render-panel__bvh-stats" aria-label="Triangle BVH statistics">

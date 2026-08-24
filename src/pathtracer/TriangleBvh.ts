@@ -24,6 +24,17 @@ export interface TriangleBvh {
   stats: TriangleBvhStats;
 }
 
+export interface TriangleBvhNodeInfo {
+  index: number;
+  parentIndex: number | null;
+  depth: number;
+  leaf: boolean;
+  leftChild: number | null;
+  rightChild: number | null;
+  firstTriangleOffset: number | null;
+  triangleCount: number;
+}
+
 export interface BvhRay {
   origin: THREE.Vector3;
   direction: THREE.Vector3;
@@ -105,6 +116,46 @@ export function buildTriangleBvh(
     triangleIndices,
     stats: { triangleCount: triangles.length, nodeCount: nodes.length, leafCount, maxDepth, maxLeafSize },
   };
+}
+
+/** Reconstructs hierarchy metadata from the exact depth-first GPU layout. */
+export function describeTriangleBvh(bvh: TriangleBvh): TriangleBvhNodeInfo[] {
+  if (bvh.nodes.length === 0) return [];
+  const descriptions: TriangleBvhNodeInfo[] = new Array(bvh.nodes.length);
+  const visited = new Set<number>();
+  const stack = [{ index: 0, parentIndex: null as number | null, depth: 0 }];
+  while (stack.length > 0) {
+    const entry = stack.pop()!;
+    if (entry.index < 0 || entry.index >= bvh.nodes.length) {
+      throw new Error(`Malformed BVH: node ${entry.index} does not exist`);
+    }
+    if (visited.has(entry.index)) throw new Error(`Malformed BVH: node ${entry.index} is referenced more than once`);
+    visited.add(entry.index);
+    const node = bvh.nodes[entry.index]!;
+    const leaf = node.triangleCount > 0;
+    const leftChild = leaf ? null : entry.index + 1;
+    const rightChild = leaf ? null : node.payload;
+    descriptions[entry.index] = {
+      index: entry.index,
+      parentIndex: entry.parentIndex,
+      depth: entry.depth,
+      leaf,
+      leftChild,
+      rightChild,
+      firstTriangleOffset: leaf ? node.payload : null,
+      triangleCount: node.triangleCount,
+    };
+    if (!leaf) {
+      stack.push(
+        { index: rightChild!, parentIndex: entry.index, depth: entry.depth + 1 },
+        { index: leftChild!, parentIndex: entry.index, depth: entry.depth + 1 }
+      );
+    }
+  }
+  if (visited.size !== bvh.nodes.length) {
+    throw new Error(`Malformed BVH: ${bvh.nodes.length - visited.size} unreachable node(s)`);
+  }
+  return descriptions;
 }
 
 /** Robust slab test, including rays parallel to one or more box faces. */

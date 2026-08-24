@@ -58,6 +58,8 @@ export interface PtSettings {
   integratorMode: IntegratorMode;
   triangleTraversalMode: TriangleTraversalMode;
   triangleOverlayMode: TriangleOverlayMode;
+  bvhOverlayEnabled: boolean;
+  bvhOverlayDepth: number;
   resolutionScale: number;
   accumulationFormat: AccumulationFormat;
   maxAccumulationFrames: number;
@@ -132,6 +134,8 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   integratorMode: "bsdf",
   triangleTraversalMode: "bvh",
   triangleOverlayMode: "off",
+  bvhOverlayEnabled: false,
+  bvhOverlayDepth: 0,
   resolutionScale: 1.0,
   accumulationFormat: "rgba32f",
   maxAccumulationFrames: 0,

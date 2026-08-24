@@ -22,7 +22,7 @@ import SceneCompiler from "./SceneCompiler";
 import { packTriangleTexture, type PackedTriangleTexture } from "./PackedTriangleTexture";
 import { packMaterialTexture, packTextureTexture, type PackedDataTexture } from "./PackedMaterialTextures";
 import { packTriangleBvh, type PackedTriangleBvh } from "./PackedTriangleBvh";
-import { measureTriangleBvh, type TriangleBvhStats } from "./TriangleBvh";
+import { describeTriangleBvh, measureTriangleBvh, type TriangleBvhStats } from "./TriangleBvh";
 
 function integratorModeValue(mode: PtSettings["integratorMode"]): number {
   if (mode === "direct") return 1;
@@ -51,6 +51,7 @@ export default class PtRenderer {
   private gizmoScene!: THREE.Scene;
   private readonly debugOverlayScene = new THREE.Scene();
   private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
+  private readonly bvhHelpers: Array<{ helper: THREE.Box3Helper; depth: number }> = [];
   private selectedTriangleMeshId: string | null = null;
 
   public settings: PtSettings;
@@ -144,6 +145,7 @@ export default class PtRenderer {
 
     this.setupGizmo();
     this.setupTriangleWireframes();
+    this.setupBvhHelpers();
 
     // Set Render Loop
 
@@ -238,6 +240,16 @@ export default class PtRenderer {
   public setSelectedTriangleMesh(objectId: string | null) {
     this.selectedTriangleMeshId = objectId;
     this.updateTriangleWireframeVisibility();
+  }
+
+  public setBvhOverlayEnabled(enabled: boolean) {
+    this.settings.bvhOverlayEnabled = enabled;
+    this.updateBvhHelperVisibility();
+  }
+
+  public setBvhOverlayDepth(depth: number) {
+    this.settings.bvhOverlayDepth = depth;
+    this.updateBvhHelperVisibility();
   }
 
   public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
@@ -342,6 +354,7 @@ export default class PtRenderer {
 
     this.setupGizmo();
     this.setupTriangleWireframes();
+    this.setupBvhHelpers();
   }
 
   private setupShaderCanvas() {
@@ -748,6 +761,40 @@ export default class PtRenderer {
     }
   }
 
+  private setupBvhHelpers() {
+    for (const { helper } of this.bvhHelpers) {
+      helper.geometry.dispose();
+      (helper.material as THREE.Material).dispose();
+      this.debugOverlayScene.remove(helper);
+    }
+    this.bvhHelpers.length = 0;
+    const descriptions = describeTriangleBvh(this.gpuScene.triangleBvh);
+    for (const description of descriptions) {
+      const node = this.gpuScene.triangleBvh.nodes[description.index]!;
+      const helper = new THREE.Box3Helper(
+        new THREE.Box3(node.boundsMin.clone(), node.boundsMax.clone()),
+        description.leaf ? 0x9bea78 : 0x63b3ed
+      );
+      const material = helper.material as THREE.LineBasicMaterial;
+      material.transparent = true;
+      material.opacity = description.leaf ? 0.85 : 0.55;
+      material.depthTest = false;
+      material.depthWrite = false;
+      helper.visible = false;
+      helper.userData.bvhNodeIndex = description.index;
+      helper.userData.bvhNode = description;
+      this.debugOverlayScene.add(helper);
+      this.bvhHelpers.push({ helper, depth: description.depth });
+    }
+    this.updateBvhHelperVisibility();
+  }
+
+  private updateBvhHelperVisibility() {
+    for (const entry of this.bvhHelpers) {
+      entry.helper.visible = this.settings.bvhOverlayEnabled && entry.depth <= this.settings.bvhOverlayDepth;
+    }
+  }
+
   private readonly renderLoop = () => {
     this.renderer.clear();
 
@@ -828,6 +875,11 @@ export default class PtRenderer {
       (wireframe.material as THREE.Material).dispose();
     }
     this.triangleWireframes.clear();
+    for (const { helper } of this.bvhHelpers) {
+      helper.geometry.dispose();
+      (helper.material as THREE.Material).dispose();
+    }
+    this.bvhHelpers.length = 0;
     this.disposePostProcessing();
     this.renderer.dispose();
   }

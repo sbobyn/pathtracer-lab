@@ -78,6 +78,8 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   if (integratorModes.has(candidate.integratorMode as string)) settings.integratorMode = candidate.integratorMode as PtSettings["integratorMode"];
   if (triangleTraversalModes.has(candidate.triangleTraversalMode as string)) settings.triangleTraversalMode = candidate.triangleTraversalMode as PtSettings["triangleTraversalMode"];
   if (triangleOverlayModes.has(candidate.triangleOverlayMode as string)) settings.triangleOverlayMode = candidate.triangleOverlayMode as PtSettings["triangleOverlayMode"];
+  if (typeof candidate.bvhOverlayEnabled === "boolean") settings.bvhOverlayEnabled = candidate.bvhOverlayEnabled;
+  settings.bvhOverlayDepth = integer(candidate.bvhOverlayDepth, 0, 64) ?? settings.bvhOverlayDepth;
   if (resolutionScales.has(candidate.resolutionScale as number)) settings.resolutionScale = candidate.resolutionScale as number;
   if (accumulationFormats.has(candidate.accumulationFormat as string)) settings.accumulationFormat = candidate.accumulationFormat as PtSettings["accumulationFormat"];
   settings.maxAccumulationFrames = integer(candidate.maxAccumulationFrames, 0, 100000) ?? settings.maxAccumulationFrames;

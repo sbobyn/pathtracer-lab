@@ -765,6 +765,48 @@ body {
   margin: 0;
 }
 
+.render-panel__bvh-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: #a1a1aa;
+  font-size: 10px;
+}
+
+.editor-help-button {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  color: #a1a1aa;
+  background: #27272a;
+  border: 1px solid #52525b;
+  border-radius: 50%;
+  cursor: help;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.editor-help-button:hover,
+.editor-help-button[aria-expanded="true"] {
+  color: #f4f4f5;
+  border-color: #71717a;
+}
+
+.render-panel__bvh-help {
+  margin: 0 0 8px;
+  padding: 7px 8px;
+  color: #a1a1aa;
+  background: rgb(255 255 255 / 4%);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .object-inspector__mesh-stats {
   display: grid;
   gap: 5px;

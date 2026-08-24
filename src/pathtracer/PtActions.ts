@@ -325,6 +325,16 @@ export default class PtActions {
     this.updateSetting("triangleOverlayMode", mode);
   }
 
+  public setBvhOverlayEnabled(enabled: boolean) {
+    this.renderer.setBvhOverlayEnabled(enabled);
+    this.updateSetting("bvhOverlayEnabled", enabled);
+  }
+
+  public setBvhOverlayDepth(depth: number) {
+    this.renderer.setBvhOverlayDepth(depth);
+    this.updateSetting("bvhOverlayDepth", depth);
+  }
+
   public setResolutionScale(scale: number) {
     this.renderer.setResolutionScale(scale);
     this.updateSetting("resolutionScale", scale);
@@ -1650,6 +1660,12 @@ export default class PtActions {
     }
     if (current.triangleOverlayMode !== settings.triangleOverlayMode) {
       this.setTriangleOverlayMode(settings.triangleOverlayMode);
+    }
+    if (current.bvhOverlayEnabled !== settings.bvhOverlayEnabled) {
+      this.setBvhOverlayEnabled(settings.bvhOverlayEnabled);
+    }
+    if (current.bvhOverlayDepth !== settings.bvhOverlayDepth) {
+      this.setBvhOverlayDepth(settings.bvhOverlayDepth);
     }
     if (current.resolutionScale !== settings.resolutionScale) {
       this.setResolutionScale(settings.resolutionScale);
