@@ -19,6 +19,9 @@ rendering, WebGL/WebGPU comparisons, and raster approximations.
 The path tracer currently supports:
 
 - sphere and bounded-quad intersections with UVs and oriented normals
+- indexed and non-indexed triangle-mesh intersections with barycentric UV and normal interpolation
+- deterministic CPU BVH construction, packed GPU nodes, and iterative shader traversal
+- switchable brute-force/BVH triangle traversal with build and probe diagnostics
 - diffuse, metal, and dielectric materials
 - constant, checker, image, and procedural Perlin textures
 - spherical and box-projected sphere UV mapping
@@ -128,8 +131,8 @@ The baseline has been manually verified in a Chromium browser on macOS with Thre
 - `QuadStudy` exercises bounded quad intersection, quad UVs, and mixed sphere/quad closest-hit behavior.
 - `EmissiveStudy` exercises authored quad/sphere emitters against a procedural floor and reflective/diffuse objects on a black environment.
 - `EnvironmentStudy` exercises image-based lighting and camera-visible HDR backgrounds with diffuse, rough-metal, and mirror materials.
-- `TriangleStudy` exercises brute-force indexed triangles, barycentric UV interpolation, smooth vertex normals, and HDR reflections.
-- `PackedTrianglesStudy` stress-tests packed GPU triangle transport with a 2,048-triangle indexed wave before BVH acceleration.
+- `TriangleStudy` exercises indexed triangles, barycentric UV interpolation, smooth vertex normals, BVH traversal, and HDR reflections.
+- `PackedTrianglesStudy` stress-tests packed GPU triangle and BVH transport with a 2,048-triangle indexed wave and exposes a brute-force/BVH comparison mode.
 - orbit controls, object selection, object lifecycle commands, transforms, material editing, resolution scale, accumulation controls, and depth-of-field controls respond without browser warnings or errors.
 - unit tests, random-seed verification, TypeScript checking, and the production Vite build pass.
 
@@ -139,7 +142,7 @@ Known baseline limitations:
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
 - Environment-map sampling currently uses ordinary ray misses; importance sampling is not implemented yet, so small bright HDR features can converge slowly.
-- Triangles, BVH traversal, and mesh rendering are not implemented yet.
+- Static triangle meshes are currently preset-authored and read-only; glTF import, general mesh authoring, and triangle/BVH visualization are not implemented yet.
 - A WebGL-capable browser is required. There is no WebGPU backend yet.
 
 ## Roadmap
@@ -147,8 +150,7 @@ Known baseline limitations:
 Broad future directions include:
 
 - improve environment-light sampling and analytic light types
-- original triangle intersection and mesh data paths
-- BVH construction, traversal, and visualization
+- triangle-mesh and BVH hierarchy/traversal visualization
 - glTF mesh rendering built on the triangle, BVH, material, and texture systems
 - extend the authoritative scene/compiler and React editor workflows to new primitives and lights
 - a WebGPU backend and reproducible WebGL/WebGPU benchmarks

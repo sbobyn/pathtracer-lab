@@ -49,6 +49,9 @@ export default class PtRenderer {
 
   private gizmo!: THREE.Object3D;
   private gizmoScene!: THREE.Scene;
+  private readonly debugOverlayScene = new THREE.Scene();
+  private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
+  private selectedTriangleMeshId: string | null = null;
 
   public settings: PtSettings;
   public uniforms: PtUniforms;
@@ -140,6 +143,7 @@ export default class PtRenderer {
     this.initializeComposerPasses();
 
     this.setupGizmo();
+    this.setupTriangleWireframes();
 
     // Set Render Loop
 
@@ -224,6 +228,16 @@ export default class PtRenderer {
     this.settings.triangleTraversalMode = mode;
     this.uniforms.uTriangleTraversalMode.value = mode === "bvh" ? 1 : 0;
     this.invalidate(PtInvalidationLevel.Settings, "triangle traversal mode changed");
+  }
+
+  public setTriangleOverlayMode(mode: PtSettings["triangleOverlayMode"]) {
+    this.settings.triangleOverlayMode = mode;
+    this.updateTriangleWireframeVisibility();
+  }
+
+  public setSelectedTriangleMesh(objectId: string | null) {
+    this.selectedTriangleMeshId = objectId;
+    this.updateTriangleWireframeVisibility();
   }
 
   public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
@@ -327,6 +341,7 @@ export default class PtRenderer {
     this.updateComposerScene();
 
     this.setupGizmo();
+    this.setupTriangleWireframes();
   }
 
   private setupShaderCanvas() {
@@ -691,6 +706,48 @@ export default class PtRenderer {
     this.gizmoScene.add(this.gizmo);
   }
 
+  private setupTriangleWireframes() {
+    for (const wireframe of this.triangleWireframes.values()) {
+      wireframe.geometry.dispose();
+      (wireframe.material as THREE.Material).dispose();
+      this.debugOverlayScene.remove(wireframe);
+    }
+    this.triangleWireframes.clear();
+    for (const mesh of this.ptScene.getTriangleMeshes()) {
+      const wireframe = new THREE.LineSegments(
+        new THREE.WireframeGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({
+          color: 0x9bdcff,
+          transparent: true,
+          opacity: 0.9,
+          depthTest: false,
+          depthWrite: false,
+        })
+      );
+      wireframe.matrixAutoUpdate = false;
+      wireframe.visible = false;
+      wireframe.userData.sourceMesh = mesh;
+      this.debugOverlayScene.add(wireframe);
+      this.triangleWireframes.set(mesh.userData.pathTracer.objectId, wireframe);
+    }
+    this.updateTriangleWireframeVisibility();
+  }
+
+  private updateTriangleWireframeVisibility() {
+    for (const [objectId, wireframe] of this.triangleWireframes) {
+      wireframe.visible = this.settings.triangleOverlayMode === "all" ||
+        (this.settings.triangleOverlayMode === "selected" && objectId === this.selectedTriangleMeshId);
+    }
+  }
+
+  private syncTriangleWireframes() {
+    for (const wireframe of this.triangleWireframes.values()) {
+      const mesh = wireframe.userData.sourceMesh as THREE.Object3D;
+      mesh.updateWorldMatrix(true, false);
+      wireframe.matrix.copy(mesh.matrixWorld);
+    }
+  }
+
   private readonly renderLoop = () => {
     this.renderer.clear();
 
@@ -714,6 +771,10 @@ export default class PtRenderer {
     this.transformControls.update(this.clock.getDelta());
 
     this.composer.render();
+    this.syncTriangleWireframes();
+    this.renderer.clearDepth();
+    this.renderer.render(this.debugOverlayScene, this.camera);
+    this.renderer.clearDepth();
     this.renderer.render(this.gizmoScene, this.camera);
 
   };
@@ -762,6 +823,11 @@ export default class PtRenderer {
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
     this.fallbackImageTexture.dispose();
+    for (const wireframe of this.triangleWireframes.values()) {
+      wireframe.geometry.dispose();
+      (wireframe.material as THREE.Material).dispose();
+    }
+    this.triangleWireframes.clear();
     this.disposePostProcessing();
     this.renderer.dispose();
   }

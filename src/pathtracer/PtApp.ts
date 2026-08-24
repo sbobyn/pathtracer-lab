@@ -8,7 +8,7 @@ import {
   preferenceSnapshot,
   savePtPreferences,
 } from "./PtPreferences";
-import { isPtQuadMesh, isPtSphereMesh, type PtEditableObject } from "./PtScene";
+import { isPtQuadMesh, isPtSphereMesh, isPtTriangleMesh, type PtEditableObject } from "./PtScene";
 import { analyticLightNodeFromObject } from "./PtAnalyticLight";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
@@ -18,6 +18,7 @@ export default class PtApp {
   private selectedObject: PtEditableObject | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly mouse = new THREE.Vector2();
+  private selectionPointer: { pointerId: number; startX: number; startY: number; moved: boolean } | null = null;
   private intersectGroup: THREE.Group;
   private readonly ptRenderer: PtRenderer;
   private readonly actions: PtActions;
@@ -29,10 +30,32 @@ export default class PtApp {
     if (this.ui.contains(event.target as Node)) return;
     if (this.ptRenderer.transformControls.dragging) return;
     if (this.ptRenderer.transformControls.axis) return;
+    this.selectionPointer = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+  };
 
+  private readonly pointerMoveHandler = (event: PointerEvent) => {
+    const gesture = this.selectionPointer;
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return;
+    gesture.moved = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4;
+  };
+
+  private readonly pointerUpHandler = (event: PointerEvent) => {
+    const gesture = this.selectionPointer;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    this.selectionPointer = null;
+    if (gesture.moved || this.ui.contains(event.target as Node)) return;
     this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     this.selectAtPointer();
+  };
+
+  private readonly pointerCancelHandler = (event: PointerEvent) => {
+    if (this.selectionPointer?.pointerId === event.pointerId) this.selectionPointer = null;
   };
 
   private readonly transformChangeHandler = () => {
@@ -184,11 +207,15 @@ export default class PtApp {
             ...this.ptRenderer.ptScene.getSphereMeshes(),
             ...this.ptRenderer.ptScene.getQuadMeshes(),
             ...this.ptRenderer.ptScene.getAnalyticLightNodes(),
+            ...this.ptRenderer.ptScene.getTriangleMeshes(),
           ]
             .find((object) => object.userData.pathTracer.objectId === currentObjectId) ?? null;
     });
 
     window.addEventListener("pointerdown", this.pointerDownHandler, true);
+    window.addEventListener("pointermove", this.pointerMoveHandler, true);
+    window.addEventListener("pointerup", this.pointerUpHandler, true);
+    window.addEventListener("pointercancel", this.pointerCancelHandler, true);
     window.addEventListener("keydown", this.keyDownHandler);
     this.ptRenderer.transformControls.addEventListener(
       "change",
@@ -202,6 +229,9 @@ export default class PtApp {
 
   public dispose() {
     window.removeEventListener("pointerdown", this.pointerDownHandler, true);
+    window.removeEventListener("pointermove", this.pointerMoveHandler, true);
+    window.removeEventListener("pointerup", this.pointerUpHandler, true);
+    window.removeEventListener("pointercancel", this.pointerCancelHandler, true);
     window.removeEventListener("keydown", this.keyDownHandler);
     this.ptRenderer.transformControls.removeEventListener(
       "change",
@@ -223,13 +253,13 @@ export default class PtApp {
   private selectAtPointer() {
     this.raycaster.setFromCamera(this.mouse, this.ptRenderer.camera);
     const [intersection] = this.raycaster.intersectObjects(
-      [this.intersectGroup, this.ptRenderer.ptScene.analyticLightGroup],
+      [this.intersectGroup, this.ptRenderer.ptScene.analyticLightGroup, this.ptRenderer.ptScene.triangleMeshGroup],
       true
     );
     const object = intersection?.object;
     const analyticLight = analyticLightNodeFromObject(object ?? null);
 
-    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object) && !analyticLight)) {
+    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object) && !isPtTriangleMesh(object) && !analyticLight)) {
       this.selectedObject = null;
       this.actions.selectObject(null);
       return;

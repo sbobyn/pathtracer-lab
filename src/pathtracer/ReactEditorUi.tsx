@@ -467,6 +467,24 @@ function RenderSettings({
           }
         />
       )}
+      {bvhStats.triangleCount > 0 && (
+        <SelectField
+          label="Wireframe"
+          value={settings.triangleOverlayMode}
+          options={[
+            { value: "off", label: "Off" },
+            { value: "selected", label: "Selected" },
+            { value: "all", label: "All meshes" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change triangle wireframe overlay", () =>
+              actions.setTriangleOverlayMode(value as typeof settings.triangleOverlayMode)
+            )
+          }
+        />
+      )}
       <SelectField
           label="Resolution"
           value={String(settings.resolutionScale)}
@@ -884,7 +902,7 @@ function ObjectInspectorContent({
       <div className="object-inspector__content">
         <div className="editor-inspector__identity">
           <strong>{selection.name}</strong>
-          <span>{selection.kind === "sphere" ? "Sphere" : "Quad"} · Path traced</span>
+          <span>{selection.kind === "sphere" ? "Sphere" : selection.kind === "triangleMesh" ? "Triangle mesh" : "Quad"} · Path traced</span>
         </div>
         <ObjectNameField
           objectId={selection.objectId!}
@@ -915,7 +933,7 @@ function ObjectInspectorContent({
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
           />
-          {selection.kind === "quad" && (
+          {(selection.kind === "quad" || selection.kind === "triangleMesh") && (
             <VectorField
               label="Rotation"
               value={[selection.rotation.x, selection.rotation.y, selection.rotation.z]}
@@ -996,6 +1014,16 @@ function ObjectInspectorContent({
             }
           />}
         </PersistentDetails>
+        {selection.mesh && (
+          <PersistentDetails className="editor-subpanel" storageKey="object-geometry">
+            <summary>Geometry · Triangle mesh</summary>
+            <dl className="object-inspector__mesh-stats">
+              <div><dt>Triangles</dt><dd>{selection.mesh.triangleCount}</dd></div>
+              <div><dt>Vertices</dt><dd>{selection.mesh.vertexCount}</dd></div>
+              <div><dt>Storage</dt><dd>{selection.mesh.indexed ? "Indexed" : "Non-indexed"}</dd></div>
+            </dl>
+          </PersistentDetails>
+        )}
         <PersistentDetails className="editor-subpanel" storageKey="object-material">
           <summary>Material · {material.kind}</summary>
           <div className="texture-slot">
@@ -1184,12 +1212,12 @@ function ObjectInspectorContent({
           <button type="button" onClick={() => actions.frameSelectedObject()}>
             Frame
           </button>
-          <button type="button" onClick={() => actions.duplicateSelectedObject()}>
+          {selection.kind !== "triangleMesh" && <button type="button" onClick={() => actions.duplicateSelectedObject()}>
             Duplicate
-          </button>
-          <button type="button" onClick={() => actions.removeSelectedObject()}>
+          </button>}
+          {selection.kind !== "triangleMesh" && <button type="button" onClick={() => actions.removeSelectedObject()}>
             Remove
-          </button>
+          </button>}
         </div>
       </div>
   );

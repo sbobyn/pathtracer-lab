@@ -3,6 +3,7 @@ export type TransformMode = "translate" | "rotate" | "scale";
 export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
+export type TriangleOverlayMode = "off" | "selected" | "all";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Unknown";
 
 export interface PtSceneObjectState {
@@ -56,6 +57,7 @@ export interface PtSettings {
   maxRayDepth: number;
   integratorMode: IntegratorMode;
   triangleTraversalMode: TriangleTraversalMode;
+  triangleOverlayMode: TriangleOverlayMode;
   resolutionScale: number;
   accumulationFormat: AccumulationFormat;
   maxAccumulationFrames: number;
@@ -72,13 +74,18 @@ export interface PtSelectionState {
   name: string | null;
   sphereIndex: number | null;
   quadIndex: number | null;
-  kind: "sphere" | "quad" | "pointLight" | "directionalLight" | "spotLight" | null;
+  kind: "sphere" | "quad" | "triangleMesh" | "pointLight" | "directionalLight" | "spotLight" | null;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number };
   radius: number | null;
   width: number | null;
   height: number | null;
   uvMapping: "spherical" | "box" | null;
+  mesh: {
+    triangleCount: number;
+    vertexCount: number;
+    indexed: boolean;
+  } | null;
   material: PtSelectionMaterialState | null;
   light: {
     type: "point" | "directional" | "spot";
@@ -124,6 +131,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   maxRayDepth: 10,
   integratorMode: "bsdf",
   triangleTraversalMode: "bvh",
+  triangleOverlayMode: "off",
   resolutionScale: 1.0,
   accumulationFormat: "rgba32f",
   maxAccumulationFrames: 0,
@@ -151,6 +159,7 @@ export function createDefaultPtState(): PtState {
       width: null,
       height: null,
       uvMapping: null,
+      mesh: null,
       material: null,
       light: null,
     },

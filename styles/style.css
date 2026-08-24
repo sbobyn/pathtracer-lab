@@ -765,6 +765,37 @@ body {
   margin: 0;
 }
 
+.object-inspector__mesh-stats {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.object-inspector__mesh-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.object-inspector__mesh-stats dt,
+.object-inspector__mesh-stats dd {
+  margin: 0;
+}
+
+.object-inspector__mesh-stats dt {
+  font-weight: 500;
+}
+
+.object-inspector__mesh-stats dd {
+  color: #e4e4e7;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
 .editor-subpanel > .eui-field-row + .eui-field-row,
 .procedural-texture-controls > .eui-field-row + .eui-field-row {
   margin-top: 4px;
