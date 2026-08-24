@@ -47,10 +47,14 @@ export default interface PtUniforms {
   uBackgroundColorTop: { value: THREE.Color };
   uBackgroundColorBottom: { value: THREE.Color };
   uEnvironmentMap: { value: THREE.Texture };
+  uEnvironmentConditionalCdf: { value: THREE.Texture };
+  uEnvironmentMarginalCdf: { value: THREE.Texture };
+  uEnvironmentDistributionSize: { value: THREE.Vector2 };
   uEnvironmentEnabled: { value: boolean };
   uEnvironmentBackgroundVisible: { value: boolean };
   uEnvironmentLightingEnabled: { value: boolean };
   uEnvironmentRotation: { value: number };
   uEnvironmentIntensity: { value: number };
+  uEnvironmentLightingIntensity: { value: number };
   uEnableDoF: { value: boolean };
 }

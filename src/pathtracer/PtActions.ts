@@ -328,11 +328,18 @@ export default class PtActions {
 
   public setEnvironmentIntensity(value: number) {
     this.renderer.ptScene.scene.backgroundIntensity = value;
-    this.renderer.ptScene.scene.environmentIntensity = value;
     this.renderer.settings.environmentIntensity = value;
     this.renderer.uniforms.uEnvironmentIntensity.value = value;
-    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment intensity changed");
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment background intensity changed");
     this.updateSetting("environmentIntensity", value);
+  }
+
+  public setEnvironmentLightingIntensity(value: number) {
+    this.renderer.ptScene.scene.environmentIntensity = value;
+    this.renderer.settings.environmentLightingIntensity = value;
+    this.renderer.uniforms.uEnvironmentLightingIntensity.value = value;
+    this.renderer.invalidate(PtInvalidationLevel.Settings, "environment lighting intensity changed");
+    this.updateSetting("environmentLightingIntensity", value);
   }
 
   public setEnvironmentBackgroundVisible(value: boolean) {
@@ -1698,6 +1705,9 @@ export default class PtActions {
     }
     if (current.environmentIntensity !== settings.environmentIntensity) {
       this.setEnvironmentIntensity(settings.environmentIntensity);
+    }
+    if (current.environmentLightingIntensity !== settings.environmentLightingIntensity) {
+      this.setEnvironmentLightingIntensity(settings.environmentLightingIntensity);
     }
     if (current.environmentBackgroundVisible !== settings.environmentBackgroundVisible) {
       this.setEnvironmentBackgroundVisible(settings.environmentBackgroundVisible);

@@ -29,6 +29,7 @@ The path tracer currently supports:
 - authorable emissive quad and sphere lights with intensity and sidedness controls
 - authorable point, directional/sun, and spot lights with editor transforms and gizmos
 - selectable BSDF-only, explicit direct-light, and multiple-importance-sampling integrators
+- solid-angle-correct HDR importance sampling with independent background and lighting intensity
 - Cornell-box and black-background emissive-lighting study presets
 - depth of field / defocus blur
 - progressive ping-pong accumulation with selectable 8-bit, 16-bit float, and 32-bit float storage
@@ -61,15 +62,16 @@ modules under `src/pathtracer/shaders/`.
 The Render panel exposes three estimators so their convergence can be compared
 on the same authored scene:
 
-- **BSDF only** discovers emissive geometry through ordinary path scattering.
+- **BSDF only** discovers emissive geometry and environment lighting through ordinary path scattering.
 - **Direct light** also selects an emissive sphere or quad and samples a point on
-  its surface, then traces a shadow ray to it.
+  its surface, or importance-samples an HDR environment, then traces a shadow ray.
 - **MIS** combines both strategies with the power heuristic so paths found well
   by either strategy contribute without being counted twice.
 
-Light surfaces are sampled uniformly by area. Their area probability density is
+Geometry light surfaces are sampled uniformly by area. Their area probability density is
 converted to solid angle at the shaded point before evaluating the Lambertian
-BRDF. This initial implementation applies explicit sampling to diffuse bounces;
+BRDF. HDR environments use a luminance-weighted row/column distribution that
+accounts for equirectangular texel solid angle. This implementation applies explicit sampling to diffuse bounces;
 specular metal and dielectric paths continue through ordinary scattering.
 
 Analytic lights use explicit radiometric contracts in the path tracer. Point
@@ -143,7 +145,6 @@ Known baseline limitations:
 - `Part1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
-- Environment-map sampling currently uses ordinary ray misses; importance sampling is not implemented yet, so small bright HDR features can converge slowly.
 - Static triangle meshes are currently preset-authored and read-only; glTF import and general mesh authoring are not implemented yet.
 - A WebGL-capable browser is required. There is no WebGPU backend yet.
 
@@ -151,7 +152,7 @@ Known baseline limitations:
 
 Broad future directions include:
 
-- improve environment-light sampling and analytic light types
+- extend analytic light types and advanced light controls
 - extend the completed triangle/BVH foundation to scoped static glTF scene loading
 - glTF mesh rendering built on the triangle, BVH, material, and texture systems
 - extend the authoritative scene/compiler and React editor workflows to new primitives and lights

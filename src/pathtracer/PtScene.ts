@@ -11,6 +11,11 @@ import {
   type PtAnalyticLightNode,
 } from "./PtAnalyticLight";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
+import {
+  buildEnvironmentImportanceDistribution,
+  disposeEnvironmentImportanceDistribution,
+  type EnvironmentImportanceDistribution,
+} from "./EnvironmentImportanceDistribution";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
@@ -64,6 +69,7 @@ export default class PtScene {
   environmentSource = "";
   environmentLabel = "Gradient";
   environmentTexture: THREE.Texture | null = null;
+  environmentDistribution: EnvironmentImportanceDistribution | null = null;
   environmentLoaded: Promise<THREE.Texture> | null = null;
 
   camera: THREE.PerspectiveCamera;
@@ -168,6 +174,10 @@ export default class PtScene {
     this.environmentSource = source;
     this.environmentLabel = label;
     this.environmentTexture = null;
+    if (this.environmentDistribution) {
+      disposeEnvironmentImportanceDistribution(this.environmentDistribution);
+      this.environmentDistribution = null;
+    }
     if (!source) {
       this.environmentLoaded = null;
       return;
@@ -177,6 +187,7 @@ export default class PtScene {
         texture.mapping = THREE.EquirectangularReflectionMapping;
         texture.wrapS = THREE.RepeatWrapping;
         this.environmentTexture = texture;
+        this.environmentDistribution = buildEnvironmentImportanceDistribution(texture);
         this.scene.background = texture;
         this.scene.environment = texture;
         resolve(texture);

@@ -68,6 +68,7 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   }
   settings.environmentRotation = finiteNumber(candidate.environmentRotation, -360, 360) ?? settings.environmentRotation;
   settings.environmentIntensity = finiteNumber(candidate.environmentIntensity, 0, 20) ?? settings.environmentIntensity;
+  settings.environmentLightingIntensity = finiteNumber(candidate.environmentLightingIntensity, 0, 20) ?? settings.environmentLightingIntensity;
   if (typeof candidate.environmentBackgroundVisible === "boolean") settings.environmentBackgroundVisible = candidate.environmentBackgroundVisible;
   if (typeof candidate.environmentLightingEnabled === "boolean") settings.environmentLightingEnabled = candidate.environmentLightingEnabled;
   if (typeof candidate.backgroundColorTop === "string" && colorPattern.test(candidate.backgroundColorTop)) settings.backgroundColorTop = candidate.backgroundColorTop;

@@ -51,12 +51,22 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                 (depth > 0 && uEnvironmentLightingEnabled)
             );
             if (sampleEnvironment) {
-                float longitude = atan(unitDirection.z, unitDirection.x) + radians(uEnvironmentRotation);
-                vec2 environmentUv = vec2(
-                    fract(longitude / (2.0 * PI) + 0.5),
-                    1.0 - acos(clamp(unitDirection.y, -1.0, 1.0)) / PI
+                float environmentWeight = 1.0;
+                if (depth > 0 && previousWasLambert && uIntegratorMode == 1) {
+                    environmentWeight = 0.0;
+                } else if (depth > 0 && previousWasLambert && uIntegratorMode == 2) {
+                    environmentWeight = powerHeuristic(
+                        previousBsdfPdf,
+                        environmentLightPdf(unitDirection)
+                    );
+                }
+                float environmentIntensity = depth == 0
+                    ? uEnvironmentIntensity
+                    : uEnvironmentLightingIntensity;
+                radiance += throughput * environmentWeight * environmentRadiance(
+                    unitDirection,
+                    environmentIntensity
                 );
-                radiance += throughput * texture(uEnvironmentMap, environmentUv).rgb * uEnvironmentIntensity;
             } else if (!uEnvironmentEnabled) {
                 float blend = 0.5 * (unitDirection.y + 1.0);
                 radiance += throughput * mix(uBackgroundColorBottom, uBackgroundColorTop, blend);

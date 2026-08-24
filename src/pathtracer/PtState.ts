@@ -48,6 +48,7 @@ export interface PtSettings {
   environmentLabel: string;
   environmentRotation: number;
   environmentIntensity: number;
+  environmentLightingIntensity: number;
   environmentBackgroundVisible: boolean;
   environmentLightingEnabled: boolean;
   backgroundColorTop: string;
@@ -143,6 +144,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   environmentLabel: "Gradient",
   environmentRotation: 0,
   environmentIntensity: 1,
+  environmentLightingIntensity: 1,
   environmentBackgroundVisible: true,
   environmentLightingEnabled: true,
   backgroundColorTop: "#bcdaff",

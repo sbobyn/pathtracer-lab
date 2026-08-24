@@ -78,6 +78,9 @@ export default class PtRenderer {
     1,
     THREE.RGBAFormat
   );
+  private readonly fallbackEnvironmentDistribution = new THREE.DataTexture(
+    new Float32Array([1, 1, 0, 0]), 1, 1, THREE.RGBAFormat, THREE.FloatType
+  );
   private readonly watchedImageTextures = new WeakSet<THREE.Texture>();
   private watchedEnvironmentLoad: Promise<THREE.Texture> | null = null;
 
@@ -128,6 +131,7 @@ export default class PtRenderer {
 
     this.settings = settings;
     this.fallbackImageTexture.needsUpdate = true;
+    this.fallbackEnvironmentDistribution.needsUpdate = true;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
 
     this.setupRenderer();
@@ -578,10 +582,12 @@ export default class PtRenderer {
       this.ptScene.backgroundColorBottom;
     this.uniforms.uEnvironmentMap.value =
       this.ptScene.environmentTexture ?? this.fallbackImageTexture;
+    this.updateEnvironmentDistributionUniforms();
     this.uniforms.uEnvironmentEnabled.value =
       this.settings.environmentMode === "map" && this.ptScene.environmentTexture !== null;
     this.uniforms.uEnvironmentRotation.value = this.settings.environmentRotation;
     this.uniforms.uEnvironmentIntensity.value = this.settings.environmentIntensity;
+    this.uniforms.uEnvironmentLightingIntensity.value = this.settings.environmentLightingIntensity;
     this.uniforms.uEnvironmentBackgroundVisible.value = this.settings.environmentBackgroundVisible;
     this.uniforms.uEnvironmentLightingEnabled.value = this.settings.environmentLightingEnabled;
 
@@ -641,11 +647,21 @@ export default class PtRenderer {
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
       uEnvironmentMap: { value: this.ptScene.environmentTexture ?? this.fallbackImageTexture },
+      uEnvironmentConditionalCdf: {
+        value: this.ptScene.environmentDistribution?.conditional ?? this.fallbackEnvironmentDistribution,
+      },
+      uEnvironmentMarginalCdf: {
+        value: this.ptScene.environmentDistribution?.marginal ?? this.fallbackEnvironmentDistribution,
+      },
+      uEnvironmentDistributionSize: {
+        value: this.ptScene.environmentDistribution?.size.clone() ?? new THREE.Vector2(1, 1),
+      },
       uEnvironmentEnabled: { value: this.settings.environmentMode === "map" && this.ptScene.environmentTexture !== null },
       uEnvironmentBackgroundVisible: { value: this.settings.environmentBackgroundVisible },
       uEnvironmentLightingEnabled: { value: this.settings.environmentLightingEnabled },
       uEnvironmentRotation: { value: this.settings.environmentRotation },
       uEnvironmentIntensity: { value: this.settings.environmentIntensity },
+      uEnvironmentLightingIntensity: { value: this.settings.environmentLightingIntensity },
       uEnableDoF: { value: this.settings.enableDepthOfField },
     };
     return uniforms;
@@ -770,6 +786,7 @@ export default class PtRenderer {
       if (this.ptScene.environmentLoaded !== loaded) return;
       this.uniforms.uEnvironmentMap.value =
         this.ptScene.environmentTexture ?? this.fallbackImageTexture;
+      this.updateEnvironmentDistributionUniforms();
       this.uniforms.uEnvironmentEnabled.value = this.settings.environmentMode === "map";
       this.ptScene.scene.background = this.settings.environmentBackgroundVisible
         ? this.ptScene.environmentTexture
@@ -779,6 +796,17 @@ export default class PtRenderer {
         : null;
       this.invalidate(PtInvalidationLevel.Settings, "environment map loaded");
     }).catch((error) => console.error("Failed to load environment map", error));
+  }
+
+  private updateEnvironmentDistributionUniforms() {
+    const distribution = this.ptScene.environmentDistribution;
+    this.uniforms.uEnvironmentConditionalCdf.value =
+      distribution?.conditional ?? this.fallbackEnvironmentDistribution;
+    this.uniforms.uEnvironmentMarginalCdf.value =
+      distribution?.marginal ?? this.fallbackEnvironmentDistribution;
+    this.uniforms.uEnvironmentDistributionSize.value.copy(
+      distribution?.size ?? new THREE.Vector2(1, 1)
+    );
   }
 
   private initializeComposerPasses() {
