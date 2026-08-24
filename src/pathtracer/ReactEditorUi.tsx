@@ -390,6 +390,25 @@ function RenderSettings({
   const bvhStats = actions.getTriangleBvhStats();
   const bvhProbeStats = actions.getTriangleBvhProbeStats();
   const [showBvhVisualizationHelp, setShowBvhVisualizationHelp] = useState(false);
+  const [bvhTraversalPlaying, setBvhTraversalPlaying] = useState(false);
+  const [bvhTraversalSpeed, setBvhTraversalSpeed] = useState(450);
+  const traversal = state.bvhTraversal;
+  const traversalEvent = traversal.events[traversal.step] ?? null;
+  const visibleTraversalEvents = traversal.events.slice(0, Math.max(0, traversal.step + 1));
+  const visibleNodeTests = visibleTraversalEvents.filter((event) => event.kind === "node").length;
+  const visibleTriangleTests = visibleTraversalEvents.filter((event) => event.kind === "triangle").length;
+  useEffect(() => {
+    if (!bvhTraversalPlaying) return;
+    if (traversal.step >= traversal.events.length - 1) {
+      setBvhTraversalPlaying(false);
+      return;
+    }
+    const timer = window.setInterval(
+      () => actions.setBvhTraversalStep(traversal.step + 1),
+      bvhTraversalSpeed
+    );
+    return () => window.clearInterval(timer);
+  }, [actions, bvhTraversalPlaying, bvhTraversalSpeed, traversal.events.length, traversal.step]);
   return (
       <div className="render-panel__content">
       <CheckboxField
@@ -590,6 +609,77 @@ function RenderSettings({
             disabled={!settings.bvhOverlayEnabled}
             setValue={(value) => actions.setBvhOverlayDepth(value)}
           />
+          <div className="render-panel__traversal">
+            <div className="render-panel__traversal-heading">
+              <strong>Selected-ray traversal</strong>
+              <span>CPU diagnostic</span>
+            </div>
+            <p>
+              Records one camera ray through the production flattened BVH. It
+              mirrors the reference algorithm; it is not a readback of a live GPU pixel.
+            </p>
+            <div className="render-panel__traversal-actions">
+              <button
+                type="button"
+                data-active={traversal.armed}
+                onClick={() => traversal.armed
+                  ? actions.cancelBvhTraversalInspection()
+                  : actions.armBvhTraversalInspection()}
+              >
+                {traversal.armed ? "Click viewport…" : "Pick ray"}
+              </button>
+              {traversal.events.length > 0 && (
+                <button type="button" onClick={() => {
+                  setBvhTraversalPlaying(false);
+                  actions.cancelBvhTraversalInspection();
+                }}>Clear</button>
+              )}
+            </div>
+            {traversal.events.length > 0 && (
+              <>
+                <div className="render-panel__traversal-actions">
+                  <button type="button" disabled={traversal.step <= 0} onClick={() => actions.setBvhTraversalStep(traversal.step - 1)}>←</button>
+                  <button type="button" onClick={() => setBvhTraversalPlaying((playing) => !playing)}>
+                    {bvhTraversalPlaying ? "Pause" : "Play"}
+                  </button>
+                  <button type="button" disabled={traversal.step >= traversal.events.length - 1} onClick={() => actions.setBvhTraversalStep(traversal.step + 1)}>→</button>
+                  <select
+                    className="render-panel__traversal-speed"
+                    aria-label="Traversal playback speed"
+                    value={bvhTraversalSpeed}
+                    onChange={(event) => setBvhTraversalSpeed(Number(event.currentTarget.value))}
+                  >
+                    <option value={900}>Slow</option>
+                    <option value={450}>Normal</option>
+                    <option value={180}>Fast</option>
+                  </select>
+                </div>
+                <input
+                  className="render-panel__traversal-range"
+                  type="range"
+                  aria-label="BVH traversal step"
+                  min={0}
+                  max={Math.max(0, traversal.events.length - 1)}
+                  value={Math.max(0, traversal.step)}
+                  onChange={(event) => {
+                    setBvhTraversalPlaying(false);
+                    actions.setBvhTraversalStep(Number(event.currentTarget.value));
+                  }}
+                />
+                <dl className="render-panel__traversal-stats">
+                  <div><dt>Step</dt><dd>{traversal.step + 1} / {traversal.events.length}</dd></div>
+                  <div><dt>Node / triangle tests</dt><dd>{visibleNodeTests} / {visibleTriangleTests}</dd></div>
+                  <div><dt>Current</dt><dd>{traversalEvent?.kind === "node"
+                    ? `Node ${traversalEvent.nodeIndex}: ${traversalEvent.hit ? (traversalEvent.leaf ? "leaf" : "entered") : "rejected"}`
+                    : traversalEvent
+                      ? `Triangle ${traversalEvent.triangleIndex}: ${traversalEvent.closest ? "new closest" : "miss"}`
+                      : "—"}</dd></div>
+                  <div><dt>Final hit</dt><dd>{traversal.result?.triangleIndex === -1 ? "Miss" : `Triangle ${traversal.result?.triangleIndex}`}</dd></div>
+                  <div><dt>Brute-force check</dt><dd>{traversal.result?.agreesWithBruteForce ? "Agrees" : "Mismatch"}</dd></div>
+                </dl>
+              </>
+            )}
+          </div>
         </PersistentDetails>
       )}
       </fieldset>

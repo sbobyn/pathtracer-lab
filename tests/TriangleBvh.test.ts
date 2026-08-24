@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import type { GpuTriangle } from "../src/pathtracer/GpuScene.ts";
-import { buildTriangleBvh, describeTriangleBvh, hitAabb, hitTriangleDistance, measureTriangleBvh, traverseTriangleBvh } from "../src/pathtracer/TriangleBvh.ts";
+import { buildTriangleBvh, describeTriangleBvh, hitAabb, hitTriangleDistance, measureTriangleBvh, traceTriangleBvhTraversal, traverseTriangleBvh } from "../src/pathtracer/TriangleBvh.ts";
 
 function triangleAt(x: number, y = 0, z = 0): GpuTriangle {
   const normal = new THREE.Vector3(0, 0, 1);
@@ -94,4 +94,22 @@ test("hierarchy descriptions reconstruct the flattened production layout", () =>
     }
   }
   assert.deepEqual(describeTriangleBvh(buildTriangleBvh([])), []);
+});
+
+test("traversal traces preserve reference order and final hit", () => {
+  const triangles = Array.from({ length: 8 }, (_, index) => triangleAt(index * 2));
+  const bvh = buildTriangleBvh(triangles, 1);
+  const ray = {
+    origin: new THREE.Vector3(0.2, 0.2, 2),
+    direction: new THREE.Vector3(0, 0, -1),
+  };
+  const trace = traceTriangleBvhTraversal(bvh, triangles, ray);
+  const reference = traverseTriangleBvh(bvh, triangles, ray);
+
+  assert.deepEqual(trace.result, reference);
+  assert.equal(trace.events[0]?.kind, "node");
+  assert.equal(trace.events.filter((event) => event.kind === "node").length, reference.nodeTests);
+  assert.equal(trace.events.filter((event) => event.kind === "triangle").length, reference.triangleTests);
+  assert.ok(trace.events.some((event) => event.kind === "node" && !event.hit));
+  assert.ok(trace.events.some((event) => event.kind === "triangle" && event.closest));
 });

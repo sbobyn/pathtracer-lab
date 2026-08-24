@@ -108,6 +108,24 @@ export interface PtHistoryState {
   redoLabel: string | null;
 }
 
+export interface PtBvhTraversalState {
+  armed: boolean;
+  step: number;
+  rayOrigin: [number, number, number] | null;
+  rayDirection: [number, number, number] | null;
+  events: Array<
+    | { kind: "node"; nodeIndex: number; hit: boolean; leaf: boolean }
+    | { kind: "triangle"; nodeIndex: number; triangleIndex: number; distance: number | null; closest: boolean }
+  >;
+  result: {
+    triangleIndex: number;
+    distance: number | null;
+    nodeTests: number;
+    triangleTests: number;
+    agreesWithBruteForce: boolean;
+  } | null;
+}
+
 /** Serializable application state shared by UI adapters and application actions. */
 export interface PtState {
   sceneKey: string;
@@ -115,6 +133,7 @@ export interface PtState {
   settings: PtSettings;
   selection: PtSelectionState;
   history: PtHistoryState;
+  bvhTraversal: PtBvhTraversalState;
 }
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
@@ -172,6 +191,14 @@ export function createDefaultPtState(): PtState {
       canRedo: false,
       undoLabel: null,
       redoLabel: null,
+    },
+    bvhTraversal: {
+      armed: false,
+      step: -1,
+      rayOrigin: null,
+      rayDirection: null,
+      events: [],
+      result: null,
     },
   };
 }

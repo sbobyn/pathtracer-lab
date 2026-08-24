@@ -95,6 +95,19 @@ export default class PtActions {
     this.renderer.transformControls.mode = this.store.getState().settings.transformMode;
     this.renderer.transformControls.space =
       this.store.getState().settings.transformSpace === "global" ? "world" : "local";
+    this.renderer.onBvhTraversalInvalidated(() => {
+      this.store.update((state) => ({
+        ...state,
+        bvhTraversal: {
+          armed: false,
+          step: -1,
+          rayOrigin: null,
+          rayDirection: null,
+          events: [],
+          result: null,
+        },
+      }));
+    });
     this.configureTransformControls();
     this.publishSceneObjects();
   }
@@ -109,6 +122,44 @@ export default class PtActions {
 
   public getTriangleBvhProbeStats() {
     return this.renderer.getTriangleBvhProbeStats();
+  }
+
+  public armBvhTraversalInspection() {
+    this.store.update((state) => ({
+      ...state,
+      bvhTraversal: { ...state.bvhTraversal, armed: true },
+    }));
+  }
+
+  public cancelBvhTraversalInspection() {
+    this.renderer.setBvhTraversalVisualization(null);
+    this.store.update((state) => ({
+      ...state,
+      bvhTraversal: {
+        armed: false,
+        step: -1,
+        rayOrigin: null,
+        rayDirection: null,
+        events: [],
+        result: null,
+      },
+    }));
+  }
+
+  public inspectBvhTraversalAtNdc(x: number, y: number) {
+    const traversal = this.renderer.inspectBvhTraversal(new THREE.Vector2(x, y));
+    this.store.update((state) => ({ ...state, bvhTraversal: traversal }));
+  }
+
+  public setBvhTraversalStep(step: number) {
+    const current = this.store.getState().bvhTraversal;
+    if (current.events.length === 0) return;
+    const next = {
+      ...current,
+      step: Math.max(0, Math.min(Math.round(step), current.events.length - 1)),
+    };
+    this.renderer.setBvhTraversalVisualization(next);
+    this.store.update((state) => ({ ...state, bvhTraversal: next }));
   }
 
   public subscribe(listener: PtStateListener) {
@@ -162,6 +213,7 @@ export default class PtActions {
     // scene are intentionally discarded rather than replayed into a new one.
     this.history.clear();
     this.selectedObject = null;
+    this.renderer.setBvhTraversalVisualization(null);
     this.renderer.transformControls.detach();
     this.renderer.outlinePass.selectedObjects = [];
     this.renderer.setScene(scene, false);
@@ -191,6 +243,14 @@ export default class PtActions {
       },
       selection: this.emptySelection(),
       sceneObjects: this.createSceneObjectState(sceneKey),
+      bvhTraversal: {
+        armed: false,
+        step: -1,
+        rayOrigin: null,
+        rayDirection: null,
+        events: [],
+        result: null,
+      },
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
     this.publishHistory();

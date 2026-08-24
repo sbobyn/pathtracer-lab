@@ -10,7 +10,7 @@ import { syncAnalyticLightPreview } from "./PtAnalyticLight";
 import { builtinEnvironments } from "./BuiltinEnvironments";
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
-  if (sceneKey === "PackedTrianglesStudy") return 0.125;
+  if (sceneKey === "PackedTrianglesStudy") return 0.5;
   return sceneKey === "CornellBox" ? 0.5 : fallback;
 }
 

@@ -51,6 +51,10 @@ export default class PtApp {
     if (gesture.moved || this.ui.contains(event.target as Node)) return;
     this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    if (this.actions.getState().bvhTraversal.armed) {
+      this.actions.inspectBvhTraversalAtNdc(this.mouse.x, this.mouse.y);
+      return;
+    }
     this.selectAtPointer();
   };
 
