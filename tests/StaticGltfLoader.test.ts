@@ -19,6 +19,34 @@ test("static glTF extraction bakes nested world transforms", () => {
   assert.deepEqual([positions.getX(0), positions.getY(0), positions.getZ(0)], [5, 2, 0]);
 });
 
+test("static glTF extraction preserves indexed attributes across multiple meshes", () => {
+  const root = new THREE.Group();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    0, 0, 0, 1, 0, 0, 0, 1, 0,
+  ], 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute([
+    0, 0, 1, 0, 0, 1, 0, 0, 1,
+  ], 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute([
+    0, 0, 1, 0, 0, 1,
+  ], 2));
+  geometry.setIndex([0, 1, 2]);
+  const first = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  first.name = "first";
+  const second = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  second.name = "second";
+  second.position.x = 3;
+  root.add(first, second);
+
+  const primitives = extractStaticGltfPrimitives(root);
+  assert.equal(primitives.length, 2);
+  assert.equal(primitives[0]!.geometry.index!.count, 3);
+  assert.equal(primitives[0]!.geometry.getAttribute("normal").count, 3);
+  assert.equal(primitives[0]!.geometry.getAttribute("uv").count, 3);
+  assert.equal(primitives[1]!.geometry.getAttribute("position").getX(0), 3);
+});
+
 test("static glTF extraction rejects unsupported content explicitly", () => {
   const empty = new THREE.Group();
   assert.throws(() => extractStaticGltfPrimitives(empty), /no triangle mesh/);

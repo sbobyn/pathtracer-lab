@@ -11,7 +11,7 @@ import { builtinEnvironments } from "./BuiltinEnvironments";
 import boxGltfUrl from "../assets/gltf/box/Box.glb?url";
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
-  if (sceneKey === "PackedTrianglesStudy") return 0.5;
+  if (sceneKey === "PackedTrianglesStudy" || sceneKey === "GlTFSuzanneStudy") return 0.5;
   return sceneKey === "CornellBox" ? 0.5 : fallback;
 }
 
@@ -35,6 +35,35 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     camera.fov = 42;
     const scene = new PtScene([], materials, camera, [floor]);
     void scene.loadStaticGltf(boxGltfUrl, 0, "Khronos glTF Box");
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    const environment = builtinEnvironments.find(
+      (candidate) => candidate.id === "studio-small-03"
+    );
+    if (environment) scene.setEnvironmentMap(environment.source, environment.label);
+    return scene;
+  },
+  GlTFSuzanneStudy: () => {
+    const materials = [
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xb8c4d3)),
+      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x182b3c, 0xc79552, 10)),
+    ];
+    const floor = new PtQuad(
+      new THREE.Vector3(-4, -1.01, 4),
+      new THREE.Vector3(8, 0, 0),
+      new THREE.Vector3(0, 0, -8),
+      1
+    );
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(3.8, 2.3, 4.5),
+      lookAt: new THREE.Vector3(0, 0, 0),
+      far: 10000,
+    });
+    camera.fov = 40;
+    const scene = new PtScene([], materials, camera, [floor]);
+    const source = `${import.meta.env.BASE_URL}models/suzanne/Suzanne.gltf`;
+    void scene.loadStaticGltf(source, 0, "Khronos glTF Suzanne");
     scene.backgroundColorTop.set(0x000000);
     scene.backgroundColorBottom.set(0x000000);
     scene.scene.background = scene.backgroundColorTop;
