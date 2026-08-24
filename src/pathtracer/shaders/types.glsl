@@ -2,9 +2,10 @@ struct Camera { vec3 position; vec3 forward; vec3 up; vec3 right; float halfWidt
 struct Ray { vec3 origin; vec3 direction; };
 struct Sphere { vec3 position; float radius; int materialId; int uvMapping; };
 struct Quad { vec3 q; vec3 u; vec3 v; vec3 normal; int materialId; };
+struct Triangle { vec3 a; vec3 b; vec3 c; vec3 normalA; vec3 normalB; vec3 normalC; vec2 uvA; vec2 uvB; vec2 uvC; int materialId; };
 struct Light { int kind; int primitiveType; int primitiveIndex; int materialId; float area; bool emissionTwoSided; vec3 position; vec3 direction; vec3 color; float intensity; float angularDiameter; float innerConeCos; float outerConeCos; };
-struct World { Sphere spheres[MAX_SPHERES]; Quad quads[MAX_QUADS]; };
+struct World { Sphere spheres[MAX_SPHERES]; Quad quads[MAX_QUADS]; Triangle triangles[MAX_TRIANGLES]; };
 struct Material { int type; int textureId; float fuzz; float ior; float emissionStrength; bool emissionTwoSided; };
 struct Texture { int type; vec3 colorA; vec3 colorB; float scale; float turbulence; int imageId; };
-struct Hit { float t; vec3 position; vec3 normal; vec2 uv; bool frontFace; int materialId; int primitiveType; int primitiveId; };
+struct Hit { float t; vec3 position; vec3 normal; vec3 geometricNormal; vec3 shadingNormal; vec3 barycentrics; vec2 uv; bool frontFace; int materialId; int primitiveType; int primitiveId; };
 struct Interval { float min; float max; };

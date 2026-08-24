@@ -7,7 +7,7 @@ export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "
 export interface PtSceneObjectState {
   id: string;
   label: string;
-  kind: "scene" | "camera" | "light" | "group" | "sphere" | "quad";
+  kind: "scene" | "camera" | "light" | "group" | "sphere" | "quad" | "triangleMesh";
   parentId: string | null;
   depth: number;
   sphereIndex: number | null;

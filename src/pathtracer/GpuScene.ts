@@ -16,6 +16,19 @@ export interface GpuQuad {
   materialId: number;
 }
 
+export interface GpuTriangle {
+  a: THREE.Vector3;
+  b: THREE.Vector3;
+  c: THREE.Vector3;
+  normalA: THREE.Vector3;
+  normalB: THREE.Vector3;
+  normalC: THREE.Vector3;
+  uvA: THREE.Vector2;
+  uvB: THREE.Vector2;
+  uvC: THREE.Vector2;
+  materialId: number;
+}
+
 export enum GpuTextureType {
   Constant = 0,
   Checker = 1,
@@ -60,6 +73,7 @@ export interface GpuLight {
 export default class GpuScene {
   public spheres: GpuSphere[];
   public quads: GpuQuad[];
+  public triangles: GpuTriangle[];
   public materials: GpuMaterial[];
   public textures: GpuTexture[];
   public imageTextures: THREE.Texture[];
@@ -69,6 +83,7 @@ export default class GpuScene {
   constructor(
     spheres: GpuSphere[],
     quads: GpuQuad[],
+    triangles: GpuTriangle[],
     materials: GpuMaterial[],
     textures: GpuTexture[],
     imageTextures: THREE.Texture[],
@@ -76,6 +91,7 @@ export default class GpuScene {
   ) {
     this.spheres = spheres;
     this.quads = quads;
+    this.triangles = triangles;
     this.materials = materials;
     this.textures = textures;
     this.imageTextures = imageTextures;
@@ -90,6 +106,11 @@ export default class GpuScene {
   public updateQuads(quads: GpuQuad[]) {
     this.assertUsable();
     this.quads = quads;
+  }
+
+  public updateTriangles(triangles: GpuTriangle[]) {
+    this.assertUsable();
+    this.triangles = triangles;
   }
 
   public updateMaterials(
@@ -113,6 +134,7 @@ export default class GpuScene {
     this.disposed = true;
     this.spheres = [];
     this.quads = [];
+    this.triangles = [];
     this.materials = [];
     this.textures = [];
     this.imageTextures = [];

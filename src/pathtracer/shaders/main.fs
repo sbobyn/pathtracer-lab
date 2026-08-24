@@ -4,6 +4,9 @@
 #ifndef MAX_QUADS
 #define MAX_QUADS 1
 #endif
+#ifndef MAX_TRIANGLES
+#define MAX_TRIANGLES 1
+#endif
 #ifndef MAX_LIGHTS
 #define MAX_LIGHTS 1
 #endif
@@ -33,6 +36,7 @@ uniform Camera uCamera;
 uniform World uWorld;
 uniform int uSphereCount;
 uniform int uQuadCount;
+uniform int uTriangleCount;
 uniform Light uLights[MAX_LIGHTS];
 uniform int uLightCount;
 uniform int uIntegratorMode;

@@ -293,12 +293,14 @@ export default class PtRenderer {
   private setupShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
+    const triangleCapacity = this.triangleUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
       fragmentShader: `#define MAX_SPHERES ${capacity}
        #define MAX_QUADS ${quadCapacity}
+       #define MAX_TRIANGLES ${triangleCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`,
       uniforms: this.uniforms,
@@ -312,10 +314,12 @@ export default class PtRenderer {
   private updateShaderCanvas() {
     const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
+    const triangleCapacity = this.triangleUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas
       .setShader(`#define MAX_SPHERES ${capacity}
        #define MAX_QUADS ${quadCapacity}
+       #define MAX_TRIANGLES ${triangleCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`);
   }
@@ -330,6 +334,10 @@ export default class PtRenderer {
 
   private quadUniformCapacity() {
     return Math.max(1, this.gpuScene.quads.length);
+  }
+
+  private triangleUniformCapacity() {
+    return Math.max(1, this.gpuScene.triangles.length);
   }
 
   private lightUniformCapacity() {
@@ -432,10 +440,12 @@ export default class PtRenderer {
         value: {
           spheres: this.uniformSphereValues(),
           quads: this.uniformQuadValues(),
+          triangles: this.uniformTriangleValues(),
         },
       },
       uSphereCount: { value: this.gpuScene.spheres.length },
       uQuadCount: { value: this.gpuScene.quads.length },
+      uTriangleCount: { value: this.gpuScene.triangles.length },
       uLights: { value: this.uniformLightValues() },
       uLightCount: { value: this.gpuScene.lights.length },
       uIntegratorMode: { value: integratorModeValue(this.settings.integratorMode) },
@@ -465,8 +475,10 @@ export default class PtRenderer {
   private updateSceneUniforms() {
     this.uniforms.uWorld.value.spheres = this.uniformSphereValues();
     this.uniforms.uWorld.value.quads = this.uniformQuadValues();
+    this.uniforms.uWorld.value.triangles = this.uniformTriangleValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
     this.uniforms.uQuadCount.value = this.gpuScene.quads.length;
+    this.uniforms.uTriangleCount.value = this.gpuScene.triangles.length;
     this.uniforms.uLights.value = this.uniformLightValues();
     this.uniforms.uLightCount.value = this.gpuScene.lights.length;
     this.uniforms.uMaterials.value = this.uniformMaterialValues();
@@ -501,6 +513,15 @@ export default class PtRenderer {
       materialId: 0,
     };
     return Array.from({ length: capacity }, (_, index) => this.gpuScene.quads[index] ?? padding);
+  }
+
+  private uniformTriangleValues() {
+    const padding = {
+      a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(),
+      normalA: new THREE.Vector3(0, 1, 0), normalB: new THREE.Vector3(0, 1, 0), normalC: new THREE.Vector3(0, 1, 0),
+      uvA: new THREE.Vector2(), uvB: new THREE.Vector2(), uvC: new THREE.Vector2(), materialId: 0,
+    };
+    return Array.from({ length: this.triangleUniformCapacity() }, (_, index) => this.gpuScene.triangles[index] ?? padding);
   }
 
   private uniformMaterialValues() {

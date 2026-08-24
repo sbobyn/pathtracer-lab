@@ -5,6 +5,8 @@ bool intervalSurrounds(Interval interval, float value) { return interval.min < v
 void setFaceNormal(Ray ray, vec3 outwardNormal, inout Hit hit) {
     hit.frontFace = dot(ray.direction, outwardNormal) < 0.0;
     hit.normal = hit.frontFace ? outwardNormal : -outwardNormal;
+    hit.geometricNormal = hit.normal;
+    hit.shadingNormal = hit.normal;
 }
 
 vec2 sphereUv(vec3 outwardNormal) {
@@ -43,6 +45,7 @@ bool hitSphere(Sphere sphere, Ray ray, Interval rayInterval, out Hit hit) {
     hit.position = rayAt(ray, hit.t);
     vec3 outwardNormal = (hit.position - sphere.position) / sphere.radius;
     hit.uv = sphere.uvMapping == 1 ? boxUv(outwardNormal) : sphereUv(outwardNormal);
+    hit.barycentrics = vec3(0.0);
     setFaceNormal(ray, outwardNormal, hit);
     return true;
 }
@@ -65,7 +68,39 @@ bool hitQuad(Quad quad, Ray ray, Interval rayInterval, out Hit hit) {
     hit.t = t;
     hit.position = rayAt(ray, t);
     hit.uv = vec2(alpha, beta);
+    hit.barycentrics = vec3(1.0 - alpha - beta, alpha, beta);
     setFaceNormal(ray, quad.normal, hit);
+    return true;
+}
+
+bool hitTriangle(Triangle triangle, Ray ray, Interval rayInterval, out Hit hit) {
+    vec3 edgeAB = triangle.b - triangle.a;
+    vec3 edgeAC = triangle.c - triangle.a;
+    vec3 p = cross(ray.direction, edgeAC);
+    float determinant = dot(edgeAB, p);
+    if (abs(determinant) < 1e-8) return false;
+    float inverseDeterminant = 1.0 / determinant;
+    vec3 fromA = ray.origin - triangle.a;
+    float baryB = dot(fromA, p) * inverseDeterminant;
+    if (baryB < 0.0 || baryB > 1.0) return false;
+    vec3 q = cross(fromA, edgeAB);
+    float baryC = dot(ray.direction, q) * inverseDeterminant;
+    if (baryC < 0.0 || baryB + baryC > 1.0) return false;
+    float t = dot(edgeAC, q) * inverseDeterminant;
+    if (!intervalSurrounds(rayInterval, t)) return false;
+
+    vec3 barycentrics = vec3(1.0 - baryB - baryC, baryB, baryC);
+    vec3 geometricNormal = normalize(cross(edgeAB, edgeAC));
+    vec3 shadingNormal = normalize(barycentrics.x * triangle.normalA + barycentrics.y * triangle.normalB + barycentrics.z * triangle.normalC);
+    if (dot(shadingNormal, geometricNormal) < 0.0) shadingNormal = -shadingNormal;
+    hit.t = t;
+    hit.position = rayAt(ray, t);
+    hit.barycentrics = barycentrics;
+    hit.uv = barycentrics.x * triangle.uvA + barycentrics.y * triangle.uvB + barycentrics.z * triangle.uvC;
+    hit.frontFace = dot(ray.direction, geometricNormal) < 0.0;
+    hit.geometricNormal = hit.frontFace ? geometricNormal : -geometricNormal;
+    hit.shadingNormal = hit.frontFace ? shadingNormal : -shadingNormal;
+    hit.normal = hit.shadingNormal;
     return true;
 }
 
@@ -94,6 +129,18 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             hit = candidate;
             hit.materialId = quad.materialId;
             hit.primitiveType = 1;
+            hit.primitiveId = i;
+        }
+    }
+    for (int i = 0; i < MAX_TRIANGLES; i++) {
+        if (i >= uTriangleCount) break;
+        Triangle triangle = world.triangles[i];
+        if (hitTriangle(triangle, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+            hitAnything = true;
+            closestSoFar = candidate.t;
+            hit = candidate;
+            hit.materialId = triangle.materialId;
+            hit.primitiveType = 2;
             hit.primitiveId = i;
         }
     }

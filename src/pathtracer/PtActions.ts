@@ -1397,7 +1397,21 @@ export default class PtActions {
         capability: `${light.userData.pathTracer.lightType} light`,
         lightEnabled: light.userData.pathTracer.enabled,
       }));
-    return [...fixedObjects, ...analyticLights, ...spheres, ...quads];
+    const triangleMeshes: PtState["sceneObjects"] = this.renderer.ptScene
+      .getTriangleMeshes()
+      .map((mesh) => ({
+        id: mesh.uuid,
+        label: mesh.userData.pathTracer.objectName,
+        kind: "triangleMesh" as const,
+        parentId: "group:traceables",
+        depth: 2,
+        sphereIndex: null,
+        quadIndex: null,
+        selectable: false,
+        traceable: true,
+        capability: `${mesh.geometry.index ? "indexed " : ""}${Math.floor((mesh.geometry.index?.count ?? mesh.geometry.getAttribute("position").count) / 3)}-triangle mesh`,
+      }));
+    return [...fixedObjects, ...analyticLights, ...spheres, ...quads, ...triangleMeshes];
   }
 
   private publishSceneObjects() {

@@ -44,6 +44,10 @@ export type PtQuadMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
   };
 };
 
+export type PtTriangleMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
+  userData: { pathTracer: { objectName: string; primitiveType: "triangleMesh" } };
+};
+
 export type PtTraceableMesh = PtSphereMesh | PtQuadMesh;
 export type PtEditableObject = PtTraceableMesh | PtAnalyticLightNode;
 
@@ -51,6 +55,7 @@ export default class PtScene {
   scene: THREE.Scene;
   intersectGroup: THREE.Group;
   analyticLightGroup: THREE.Group;
+  triangleMeshGroup: THREE.Group;
   private readonly previewMaterials = new Map<number, PtPreviewMaterial>();
   private readonly sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
   dirLight: THREE.DirectionalLight;
@@ -86,6 +91,8 @@ export default class PtScene {
 
     this.intersectGroup = new THREE.Group();
     this.analyticLightGroup = new THREE.Group();
+    this.triangleMeshGroup = new THREE.Group();
+    this.triangleMeshGroup.name = "Static triangle meshes";
     this.analyticLightGroup.name = "Analytic lights";
 
     materials.forEach((material, materialId) => {
@@ -142,6 +149,7 @@ export default class PtScene {
     this.intersectGroup.updateMatrixWorld();
     this.scene.add(this.intersectGroup);
     this.scene.add(this.analyticLightGroup);
+    this.scene.add(this.triangleMeshGroup);
   }
 
   public getSphereMeshes(): PtSphereMesh[] {
@@ -186,6 +194,22 @@ export default class PtScene {
 
   public getAnalyticLightNodes(): PtAnalyticLightNode[] {
     return this.analyticLightGroup.children.filter(isPtAnalyticLightNode);
+  }
+
+  public getTriangleMeshes(): PtTriangleMesh[] {
+    return this.triangleMeshGroup.children.filter(isPtTriangleMesh);
+  }
+
+  public addTriangleMesh(
+    geometry: THREE.BufferGeometry,
+    materialId: number,
+    objectName: string
+  ): PtTriangleMesh {
+    const mesh = new THREE.Mesh(geometry, this.getMaterial(materialId)) as PtTriangleMesh;
+    mesh.userData.pathTracer = { objectName, primitiveType: "triangleMesh" };
+    this.triangleMeshGroup.add(mesh);
+    this.triangleMeshGroup.updateMatrixWorld(true);
+    return mesh;
   }
 
   public createPointLightNode(position: THREE.Vector3, objectName: string) {
@@ -357,6 +381,10 @@ export function isPtSphereMesh(object: THREE.Object3D): object is PtSphereMesh {
 
 export function isPtQuadMesh(object: THREE.Object3D): object is PtQuadMesh {
   return object instanceof THREE.Mesh && object.userData.pathTracer?.primitiveType === "quad";
+}
+
+export function isPtTriangleMesh(object: THREE.Object3D): object is PtTriangleMesh {
+  return object instanceof THREE.Mesh && object.userData.pathTracer?.primitiveType === "triangleMesh";
 }
 
 export function sphereRadius(mesh: PtSphereMesh): number {

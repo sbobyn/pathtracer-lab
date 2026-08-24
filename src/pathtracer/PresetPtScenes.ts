@@ -333,6 +333,43 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return scene;
   },
 
+  TriangleStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x183a5a, 0xf0b35a, 5)),
+      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xe7edf5), 0.08),
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x686868)),
+    ];
+    const floor = new PtQuad(
+      new THREE.Vector3(-5, -0.75, 3),
+      new THREE.Vector3(10, 0, 0),
+      new THREE.Vector3(0, 0, -10),
+      2
+    );
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 1.55, 5.2),
+      lookAt: new THREE.Vector3(0, 0.15, -0.65),
+      far: 10000,
+    });
+    camera.fov = 43;
+    const scene = new PtScene([], materials, camera, [floor]);
+    const checkerMesh = scene.addTriangleMesh(createIndexedPyramidGeometry(), 0, "Indexed checker pyramid");
+    checkerMesh.position.set(-1.15, -0.74, -0.7);
+    checkerMesh.rotation.y = -0.35;
+    const metalMesh = scene.addTriangleMesh(createIndexedPyramidGeometry(), 1, "Indexed metal pyramid");
+    metalMesh.position.set(1.15, -0.74, -0.7);
+    metalMesh.rotation.y = 0.45;
+    metalMesh.scale.setScalar(1.08);
+    scene.triangleMeshGroup.updateMatrixWorld(true);
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    const environment = builtinEnvironments.find(
+      (candidate) => candidate.id === "relax-inn-seaview-suite"
+    );
+    if (environment) scene.setEnvironmentMap(environment.source, environment.label);
+    return scene;
+  },
+
   CornellBox: () => {
     const materials: PtMaterial[] = [
       new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.73, 0.73, 0.73)),
@@ -373,6 +410,30 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return scene;
   },
 };
+
+function createIndexedPyramidGeometry() {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    -0.8, 0, -0.8,
+     0.8, 0, -0.8,
+     0.8, 0,  0.8,
+    -0.8, 0,  0.8,
+     0, 1.7, 0,
+  ], 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute([
+    0, 0,
+    1, 0,
+    1, 1,
+    0, 1,
+    0.5, 0.5,
+  ], 2));
+  geometry.setIndex([
+    0, 2, 1, 0, 3, 2,
+    0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4,
+  ]);
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
 function orientNegativeZToward(
   object: THREE.Object3D,

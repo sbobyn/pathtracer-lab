@@ -5,6 +5,7 @@ import GpuScene, {
   type GpuLight,
   type GpuQuad,
   type GpuSphere,
+  type GpuTriangle,
   type GpuTexture,
 } from "./GpuScene";
 import PtMaterial from "./PtMaterial";
@@ -22,6 +23,7 @@ export default class SceneCompiler {
     return new GpuScene(
       this.compileSpheres(scene),
       this.compileQuads(scene),
+      this.compileTriangles(scene),
       materials,
       textures,
       imageTextures,
@@ -39,6 +41,7 @@ export default class SceneCompiler {
     if (level >= PtInvalidationLevel.Geometry) {
       gpuScene.updateSpheres(this.compileSpheres(scene));
       gpuScene.updateQuads(this.compileQuads(scene));
+      gpuScene.updateTriangles(this.compileTriangles(scene));
       if (level === PtInvalidationLevel.Scene) {
         const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
         gpuScene.updateMaterials(materials, textures, imageTextures);
@@ -70,6 +73,39 @@ export default class SceneCompiler {
         materialId: getMaterialMetadata(mesh.material).materialId,
       };
     });
+  }
+
+  private compileTriangles(scene: PtScene): GpuTriangle[] {
+    const triangles: GpuTriangle[] = [];
+    scene.getTriangleMeshes().forEach((mesh) => {
+      mesh.updateWorldMatrix(true, false);
+      const positions = mesh.geometry.getAttribute("position");
+      const normals = mesh.geometry.getAttribute("normal");
+      const uvs = mesh.geometry.getAttribute("uv");
+      const index = mesh.geometry.index;
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      const materialId = getMaterialMetadata(mesh.material).materialId;
+      const vertexIndex = (offset: number) => index ? index.getX(offset) : offset;
+      for (let offset = 0; offset < (index?.count ?? positions.count); offset += 3) {
+        const ids = [vertexIndex(offset), vertexIndex(offset + 1), vertexIndex(offset + 2)];
+        const readVector3 = (attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, id: number) =>
+          new THREE.Vector3(attribute.getX(id), attribute.getY(id), attribute.getZ(id));
+        const vertices = ids.map((id) => readVector3(positions, id).applyMatrix4(mesh.matrixWorld));
+        const geometricNormal = new THREE.Vector3().crossVectors(
+          vertices[1]!.clone().sub(vertices[0]), vertices[2]!.clone().sub(vertices[0])
+        ).normalize();
+        const vertexNormal = (id: number) => normals
+          ? readVector3(normals, id).applyNormalMatrix(normalMatrix)
+          : geometricNormal.clone();
+        const vertexUv = (id: number) => uvs ? new THREE.Vector2(uvs.getX(id), uvs.getY(id)) : new THREE.Vector2();
+        triangles.push({
+          a: vertices[0]!, b: vertices[1]!, c: vertices[2]!,
+          normalA: vertexNormal(ids[0]!), normalB: vertexNormal(ids[1]!), normalC: vertexNormal(ids[2]!),
+          uvA: vertexUv(ids[0]!), uvB: vertexUv(ids[1]!), uvC: vertexUv(ids[2]!), materialId,
+        });
+      }
+    });
+    return triangles;
   }
 
   private compileMaterialResources(scene: PtScene): {
