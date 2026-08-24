@@ -7,6 +7,7 @@ import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCame
 import { checkerTexture, imageTexture, perlinTexture } from "./PtTexture";
 import textureStudyImage from "../assets/texture-study.svg?url";
 import { syncAnalyticLightPreview } from "./PtAnalyticLight";
+import { builtinEnvironments } from "./BuiltinEnvironments";
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   return sceneKey === "CornellBox" ? 0.5 : fallback;
@@ -288,6 +289,47 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     scene.insertAnalyticLightNode(point);
     scene.insertAnalyticLightNode(spot);
     scene.insertAnalyticLightNode(sun);
+    return scene;
+  },
+
+  EnvironmentStudy: () => {
+    const materials: PtMaterial[] = [
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x777777)),
+      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xf2f2f2), 0),
+      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xc9d3df), 0.32),
+      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xb85f3c)),
+    ];
+    const spheres = [
+      // A mirror, a rough conductor, and a diffuse reference make environment
+      // orientation, reflections, roughness, and illumination easy to compare.
+      new PtSphere(new THREE.Vector3(-1.45, 0.2, -0.5), 0.7, 1),
+      new PtSphere(new THREE.Vector3(0, 0.2, -0.85), 0.7, 2),
+      new PtSphere(new THREE.Vector3(1.45, 0.2, -0.5), 0.7, 3),
+    ];
+    const quads = [
+      new PtQuad(
+        new THREE.Vector3(-5, -0.5, 3),
+        new THREE.Vector3(10, 0, 0),
+        new THREE.Vector3(0, 0, -10),
+        0
+      ),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 1.55, 5.4),
+      lookAt: new THREE.Vector3(0, 0.2, -0.65),
+      far: 10000,
+    });
+    camera.fov = 45;
+    const scene = new PtScene(spheres, materials, camera, quads);
+    // HDR decoding is asynchronous. A black fallback avoids flashing the
+    // default blue/white gradient before the environment becomes available.
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    const environment = builtinEnvironments.find(
+      (candidate) => candidate.id === "relax-inn-seaview-suite"
+    );
+    if (environment) scene.setEnvironmentMap(environment.source, environment.label);
     return scene;
   },
 

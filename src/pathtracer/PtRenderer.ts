@@ -57,6 +57,7 @@ export default class PtRenderer {
     THREE.RGBAFormat
   );
   private readonly watchedImageTextures = new WeakSet<THREE.Texture>();
+  private watchedEnvironmentLoad: Promise<THREE.Texture> | null = null;
 
   private cameraForward!: THREE.Vector3;
   private cameraUp!: THREE.Vector3;
@@ -113,6 +114,7 @@ export default class PtRenderer {
     this.uniforms = this.createUniforms();
     this.setupShaderCanvas();
     this.watchImageTextures(this.gpuScene);
+    this.watchEnvironmentTexture();
 
     // Setup Post Processing / Composer Passes
     const renderTarget = new THREE.WebGLRenderTarget(
@@ -150,6 +152,7 @@ export default class PtRenderer {
     this.ptScene = ptScene;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
     this.watchImageTextures(this.gpuScene);
+    this.watchEnvironmentTexture();
     this.camera = ptScene.camera;
     this.reset();
     if (invalidate) {
@@ -395,6 +398,14 @@ export default class PtRenderer {
     this.uniforms.uBackgroundColorTop.value = this.ptScene.backgroundColorTop;
     this.uniforms.uBackgroundColorBottom.value =
       this.ptScene.backgroundColorBottom;
+    this.uniforms.uEnvironmentMap.value =
+      this.ptScene.environmentTexture ?? this.fallbackImageTexture;
+    this.uniforms.uEnvironmentEnabled.value =
+      this.settings.environmentMode === "map" && this.ptScene.environmentTexture !== null;
+    this.uniforms.uEnvironmentRotation.value = this.settings.environmentRotation;
+    this.uniforms.uEnvironmentIntensity.value = this.settings.environmentIntensity;
+    this.uniforms.uEnvironmentBackgroundVisible.value = this.settings.environmentBackgroundVisible;
+    this.uniforms.uEnvironmentLightingEnabled.value = this.settings.environmentLightingEnabled;
 
     this.uniforms.uEnableDoF.value = this.settings.enableDepthOfField;
   }
@@ -440,6 +451,12 @@ export default class PtRenderer {
       uImageTexture3: { value: this.gpuScene.imageTextures[3] ?? this.fallbackImageTexture },
       uBackgroundColorTop: { value: this.ptScene.backgroundColorTop },
       uBackgroundColorBottom: { value: this.ptScene.backgroundColorBottom },
+      uEnvironmentMap: { value: this.ptScene.environmentTexture ?? this.fallbackImageTexture },
+      uEnvironmentEnabled: { value: this.settings.environmentMode === "map" && this.ptScene.environmentTexture !== null },
+      uEnvironmentBackgroundVisible: { value: this.settings.environmentBackgroundVisible },
+      uEnvironmentLightingEnabled: { value: this.settings.environmentLightingEnabled },
+      uEnvironmentRotation: { value: this.settings.environmentRotation },
+      uEnvironmentIntensity: { value: this.settings.environmentIntensity },
       uEnableDoF: { value: this.settings.enableDepthOfField },
     };
     return uniforms;
@@ -539,6 +556,31 @@ export default class PtRenderer {
         this.invalidate(PtInvalidationLevel.Material, "image texture loaded");
       });
     }
+  }
+
+  public setEnvironmentMap(source: string, label: string) {
+    this.ptScene.setEnvironmentMap(source, label);
+    this.watchEnvironmentTexture();
+    this.invalidate(PtInvalidationLevel.Settings, "environment source changed");
+  }
+
+  private watchEnvironmentTexture() {
+    const loaded = this.ptScene.environmentLoaded;
+    if (!loaded || loaded === this.watchedEnvironmentLoad) return;
+    this.watchedEnvironmentLoad = loaded;
+    loaded.then(() => {
+      if (this.ptScene.environmentLoaded !== loaded) return;
+      this.uniforms.uEnvironmentMap.value =
+        this.ptScene.environmentTexture ?? this.fallbackImageTexture;
+      this.uniforms.uEnvironmentEnabled.value = this.settings.environmentMode === "map";
+      this.ptScene.scene.background = this.settings.environmentBackgroundVisible
+        ? this.ptScene.environmentTexture
+        : null;
+      this.ptScene.scene.environment = this.settings.environmentLightingEnabled
+        ? this.ptScene.environmentTexture
+        : null;
+      this.invalidate(PtInvalidationLevel.Settings, "environment map loaded");
+    }).catch((error) => console.error("Failed to load environment map", error));
   }
 
   private initializeComposerPasses() {

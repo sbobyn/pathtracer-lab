@@ -46,8 +46,21 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
             throughput *= sampleTexture(material.textureId, hit);
         } else {
             vec3 unitDirection = normalize(ray.direction);
-            float blend = 0.5 * (unitDirection.y + 1.0);
-            radiance += throughput * mix(uBackgroundColorBottom, uBackgroundColorTop, blend);
+            bool sampleEnvironment = uEnvironmentEnabled && (
+                (depth == 0 && uEnvironmentBackgroundVisible) ||
+                (depth > 0 && uEnvironmentLightingEnabled)
+            );
+            if (sampleEnvironment) {
+                float longitude = atan(unitDirection.z, unitDirection.x) + radians(uEnvironmentRotation);
+                vec2 environmentUv = vec2(
+                    fract(longitude / (2.0 * PI) + 0.5),
+                    1.0 - acos(clamp(unitDirection.y, -1.0, 1.0)) / PI
+                );
+                radiance += throughput * texture2D(uEnvironmentMap, environmentUv).rgb * uEnvironmentIntensity;
+            } else if (!uEnvironmentEnabled) {
+                float blend = 0.5 * (unitDirection.y + 1.0);
+                radiance += throughput * mix(uBackgroundColorBottom, uBackgroundColorTop, blend);
+            }
             break;
         }
     }

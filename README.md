@@ -125,6 +125,7 @@ The baseline has been manually verified in a Chromium browser on macOS with Thre
 - `TextureStudy` exercises image, checker, and Perlin textures plus sphere UV mapping.
 - `QuadStudy` exercises bounded quad intersection, quad UVs, and mixed sphere/quad closest-hit behavior.
 - `EmissiveStudy` exercises authored quad/sphere emitters against a procedural floor and reflective/diffuse objects on a black environment.
+- `EnvironmentStudy` exercises image-based lighting and camera-visible HDR backgrounds with diffuse, rough-metal, and mirror materials.
 - orbit controls, object selection, object lifecycle commands, transforms, material editing, resolution scale, accumulation controls, and depth-of-field controls respond without browser warnings or errors.
 - unit tests, random-seed verification, TypeScript checking, and the production Vite build pass.
 
@@ -133,14 +134,15 @@ Known baseline limitations:
 - `Part1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
-- Environment-map lighting, triangles, BVH traversal, and mesh rendering are not implemented yet.
+- Environment-map sampling currently uses ordinary ray misses; importance sampling is not implemented yet, so small bright HDR features can converge slowly.
+- Triangles, BVH traversal, and mesh rendering are not implemented yet.
 - A WebGL-capable browser is required. There is no WebGPU backend yet.
 
 ## Roadmap
 
 Broad future directions include:
 
-- add environment lighting and analytic light types
+- improve environment-light sampling and analytic light types
 - original triangle intersection and mesh data paths
 - BVH construction, traversal, and visualization
 - glTF mesh rendering built on the triangle, BVH, material, and texture systems

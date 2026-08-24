@@ -10,6 +10,7 @@ import {
   isPtAnalyticLightNode,
   type PtAnalyticLightNode,
 } from "./PtAnalyticLight";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
@@ -55,6 +56,10 @@ export default class PtScene {
   dirLight: THREE.DirectionalLight;
   backgroundColorTop: THREE.Color;
   backgroundColorBottom: THREE.Color;
+  environmentSource = "";
+  environmentLabel = "Gradient";
+  environmentTexture: THREE.Texture | null = null;
+  environmentLoaded: Promise<THREE.Texture> | null = null;
 
   camera: THREE.PerspectiveCamera;
 
@@ -149,6 +154,26 @@ export default class PtScene {
         a.userData.pathTracer.primitiveIndex -
         b.userData.pathTracer.primitiveIndex
     );
+  }
+
+  public setEnvironmentMap(source: string, label: string) {
+    this.environmentSource = source;
+    this.environmentLabel = label;
+    this.environmentTexture = null;
+    if (!source) {
+      this.environmentLoaded = null;
+      return;
+    }
+    this.environmentLoaded = new Promise((resolve, reject) => {
+      new RGBELoader().load(source, (texture) => {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        texture.wrapS = THREE.RepeatWrapping;
+        this.environmentTexture = texture;
+        this.scene.background = texture;
+        this.scene.environment = texture;
+        resolve(texture);
+      }, undefined, reject);
+    });
   }
 
   public getQuadMeshes(): PtQuadMesh[] {
