@@ -24,6 +24,17 @@ export interface TriangleBvh {
   stats: TriangleBvhStats;
 }
 
+export interface TriangleBvhNodeInfo {
+  index: number;
+  parentIndex: number | null;
+  depth: number;
+  leaf: boolean;
+  leftChild: number | null;
+  rightChild: number | null;
+  firstTriangleOffset: number | null;
+  triangleCount: number;
+}
+
 export interface BvhRay {
   origin: THREE.Vector3;
   direction: THREE.Vector3;
@@ -34,6 +45,22 @@ export interface BvhTraversalResult {
   distance: number;
   nodeTests: number;
   triangleTests: number;
+}
+
+export type BvhTraversalTraceEvent =
+  | { kind: "node"; nodeIndex: number; hit: boolean; leaf: boolean }
+  | {
+      kind: "triangle";
+      nodeIndex: number;
+      triangleIndex: number;
+      distance: number | null;
+      closest: boolean;
+    };
+
+export interface BvhTraversalTrace {
+  ray: BvhRay;
+  events: BvhTraversalTraceEvent[];
+  result: BvhTraversalResult;
 }
 
 export interface BvhProbeStats {
@@ -107,6 +134,46 @@ export function buildTriangleBvh(
   };
 }
 
+/** Reconstructs hierarchy metadata from the exact depth-first GPU layout. */
+export function describeTriangleBvh(bvh: TriangleBvh): TriangleBvhNodeInfo[] {
+  if (bvh.nodes.length === 0) return [];
+  const descriptions: TriangleBvhNodeInfo[] = new Array(bvh.nodes.length);
+  const visited = new Set<number>();
+  const stack = [{ index: 0, parentIndex: null as number | null, depth: 0 }];
+  while (stack.length > 0) {
+    const entry = stack.pop()!;
+    if (entry.index < 0 || entry.index >= bvh.nodes.length) {
+      throw new Error(`Malformed BVH: node ${entry.index} does not exist`);
+    }
+    if (visited.has(entry.index)) throw new Error(`Malformed BVH: node ${entry.index} is referenced more than once`);
+    visited.add(entry.index);
+    const node = bvh.nodes[entry.index]!;
+    const leaf = node.triangleCount > 0;
+    const leftChild = leaf ? null : entry.index + 1;
+    const rightChild = leaf ? null : node.payload;
+    descriptions[entry.index] = {
+      index: entry.index,
+      parentIndex: entry.parentIndex,
+      depth: entry.depth,
+      leaf,
+      leftChild,
+      rightChild,
+      firstTriangleOffset: leaf ? node.payload : null,
+      triangleCount: node.triangleCount,
+    };
+    if (!leaf) {
+      stack.push(
+        { index: rightChild!, parentIndex: entry.index, depth: entry.depth + 1 },
+        { index: leftChild!, parentIndex: entry.index, depth: entry.depth + 1 }
+      );
+    }
+  }
+  if (visited.size !== bvh.nodes.length) {
+    throw new Error(`Malformed BVH: ${bvh.nodes.length - visited.size} unreachable node(s)`);
+  }
+  return descriptions;
+}
+
 /** Robust slab test, including rays parallel to one or more box faces. */
 export function hitAabb(
   ray: BvhRay,
@@ -169,6 +236,49 @@ export function traverseTriangleBvh(
     stack.push(node.payload, nodeIndex + 1);
   }
   return result;
+}
+
+/** Records the CPU reference traversal without changing its production order. */
+export function traceTriangleBvhTraversal(
+  bvh: TriangleBvh,
+  triangles: readonly GpuTriangle[],
+  ray: BvhRay,
+  minDistance = 1e-4,
+  maxDistance = Number.POSITIVE_INFINITY
+): BvhTraversalTrace {
+  const result: BvhTraversalResult = {
+    triangleIndex: -1, distance: maxDistance, nodeTests: 0, triangleTests: 0,
+  };
+  const events: BvhTraversalTraceEvent[] = [];
+  if (bvh.nodes.length === 0) return { ray, events, result };
+  const stack = [0];
+  while (stack.length > 0) {
+    const nodeIndex = stack.pop()!;
+    const node = bvh.nodes[nodeIndex];
+    if (!node) throw new Error(`Malformed BVH: node ${nodeIndex} does not exist`);
+    result.nodeTests += 1;
+    const nodeHit = hitAabb(ray, node.boundsMin, node.boundsMax, minDistance, result.distance);
+    events.push({ kind: "node", nodeIndex, hit: nodeHit, leaf: node.triangleCount > 0 });
+    if (!nodeHit) continue;
+    if (node.triangleCount > 0) {
+      for (let offset = 0; offset < node.triangleCount; offset += 1) {
+        const triangleIndex = bvh.triangleIndices[node.payload + offset];
+        const triangle = triangleIndex === undefined ? undefined : triangles[triangleIndex];
+        if (!triangle) throw new Error(`Malformed BVH: triangle reference ${node.payload + offset} does not exist`);
+        result.triangleTests += 1;
+        const distance = hitTriangleDistance(triangle, ray, minDistance, result.distance);
+        const closest = distance !== null;
+        events.push({ kind: "triangle", nodeIndex, triangleIndex, distance, closest });
+        if (distance !== null) {
+          result.triangleIndex = triangleIndex;
+          result.distance = distance;
+        }
+      }
+      continue;
+    }
+    stack.push(node.payload, nodeIndex + 1);
+  }
+  return { ray, events, result };
 }
 
 /**

@@ -3,6 +3,7 @@ export type TransformMode = "translate" | "rotate" | "scale";
 export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
+export type TriangleOverlayMode = "off" | "selected" | "all";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Unknown";
 
 export interface PtSceneObjectState {
@@ -56,6 +57,9 @@ export interface PtSettings {
   maxRayDepth: number;
   integratorMode: IntegratorMode;
   triangleTraversalMode: TriangleTraversalMode;
+  triangleOverlayMode: TriangleOverlayMode;
+  bvhOverlayEnabled: boolean;
+  bvhOverlayDepth: number;
   resolutionScale: number;
   accumulationFormat: AccumulationFormat;
   maxAccumulationFrames: number;
@@ -72,13 +76,18 @@ export interface PtSelectionState {
   name: string | null;
   sphereIndex: number | null;
   quadIndex: number | null;
-  kind: "sphere" | "quad" | "pointLight" | "directionalLight" | "spotLight" | null;
+  kind: "sphere" | "quad" | "triangleMesh" | "pointLight" | "directionalLight" | "spotLight" | null;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number };
   radius: number | null;
   width: number | null;
   height: number | null;
   uvMapping: "spherical" | "box" | null;
+  mesh: {
+    triangleCount: number;
+    vertexCount: number;
+    indexed: boolean;
+  } | null;
   material: PtSelectionMaterialState | null;
   light: {
     type: "point" | "directional" | "spot";
@@ -99,6 +108,24 @@ export interface PtHistoryState {
   redoLabel: string | null;
 }
 
+export interface PtBvhTraversalState {
+  armed: boolean;
+  step: number;
+  rayOrigin: [number, number, number] | null;
+  rayDirection: [number, number, number] | null;
+  events: Array<
+    | { kind: "node"; nodeIndex: number; hit: boolean; leaf: boolean }
+    | { kind: "triangle"; nodeIndex: number; triangleIndex: number; distance: number | null; closest: boolean }
+  >;
+  result: {
+    triangleIndex: number;
+    distance: number | null;
+    nodeTests: number;
+    triangleTests: number;
+    agreesWithBruteForce: boolean;
+  } | null;
+}
+
 /** Serializable application state shared by UI adapters and application actions. */
 export interface PtState {
   sceneKey: string;
@@ -106,6 +133,7 @@ export interface PtState {
   settings: PtSettings;
   selection: PtSelectionState;
   history: PtHistoryState;
+  bvhTraversal: PtBvhTraversalState;
 }
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
@@ -124,6 +152,9 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   maxRayDepth: 10,
   integratorMode: "bsdf",
   triangleTraversalMode: "bvh",
+  triangleOverlayMode: "off",
+  bvhOverlayEnabled: false,
+  bvhOverlayDepth: 0,
   resolutionScale: 1.0,
   accumulationFormat: "rgba32f",
   maxAccumulationFrames: 0,
@@ -151,6 +182,7 @@ export function createDefaultPtState(): PtState {
       width: null,
       height: null,
       uvMapping: null,
+      mesh: null,
       material: null,
       light: null,
     },
@@ -159,6 +191,14 @@ export function createDefaultPtState(): PtState {
       canRedo: false,
       undoLabel: null,
       redoLabel: null,
+    },
+    bvhTraversal: {
+      armed: false,
+      step: -1,
+      rayOrigin: null,
+      rayDirection: null,
+      events: [],
+      result: null,
     },
   };
 }

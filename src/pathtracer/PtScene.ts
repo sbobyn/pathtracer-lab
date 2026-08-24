@@ -45,10 +45,10 @@ export type PtQuadMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
 };
 
 export type PtTriangleMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
-  userData: { pathTracer: { objectName: string; primitiveType: "triangleMesh" } };
+  userData: { pathTracer: { objectId: string; objectName: string; primitiveType: "triangleMesh" } };
 };
 
-export type PtTraceableMesh = PtSphereMesh | PtQuadMesh;
+export type PtTraceableMesh = PtSphereMesh | PtQuadMesh | PtTriangleMesh;
 export type PtEditableObject = PtTraceableMesh | PtAnalyticLightNode;
 
 export default class PtScene {
@@ -206,7 +206,7 @@ export default class PtScene {
     objectName: string
   ): PtTriangleMesh {
     const mesh = new THREE.Mesh(geometry, this.getMaterial(materialId)) as PtTriangleMesh;
-    mesh.userData.pathTracer = { objectName, primitiveType: "triangleMesh" };
+    mesh.userData.pathTracer = { objectId: THREE.MathUtils.generateUUID(), objectName, primitiveType: "triangleMesh" };
     this.triangleMeshGroup.add(mesh);
     this.triangleMeshGroup.updateMatrixWorld(true);
     return mesh;

@@ -389,6 +389,26 @@ function RenderSettings({
   const { settings } = state;
   const bvhStats = actions.getTriangleBvhStats();
   const bvhProbeStats = actions.getTriangleBvhProbeStats();
+  const [showBvhVisualizationHelp, setShowBvhVisualizationHelp] = useState(false);
+  const [bvhTraversalPlaying, setBvhTraversalPlaying] = useState(false);
+  const [bvhTraversalSpeed, setBvhTraversalSpeed] = useState(450);
+  const traversal = state.bvhTraversal;
+  const traversalEvent = traversal.events[traversal.step] ?? null;
+  const visibleTraversalEvents = traversal.events.slice(0, Math.max(0, traversal.step + 1));
+  const visibleNodeTests = visibleTraversalEvents.filter((event) => event.kind === "node").length;
+  const visibleTriangleTests = visibleTraversalEvents.filter((event) => event.kind === "triangle").length;
+  useEffect(() => {
+    if (!bvhTraversalPlaying) return;
+    if (traversal.step >= traversal.events.length - 1) {
+      setBvhTraversalPlaying(false);
+      return;
+    }
+    const timer = window.setInterval(
+      () => actions.setBvhTraversalStep(traversal.step + 1),
+      bvhTraversalSpeed
+    );
+    return () => window.clearInterval(timer);
+  }, [actions, bvhTraversalPlaying, bvhTraversalSpeed, traversal.events.length, traversal.step]);
   return (
       <div className="render-panel__content">
       <CheckboxField
@@ -452,17 +472,18 @@ function RenderSettings({
       />
       {bvhStats.triangleCount > 0 && (
         <SelectField
-          label="Triangles"
-          value={settings.triangleTraversalMode}
+          label="Wireframe"
+          value={settings.triangleOverlayMode}
           options={[
-            { value: "bvh", label: "BVH" },
-            { value: "bruteForce", label: "Brute force" },
+            { value: "off", label: "Off" },
+            { value: "selected", label: "Selected" },
+            { value: "all", label: "All meshes" },
           ]}
           density="compact"
           layout="horizontal"
           onChange={(value) =>
-            commitSetting(actions, "Change triangle traversal", () =>
-              actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
+            commitSetting(actions, "Change triangle wireframe overlay", () =>
+              actions.setTriangleOverlayMode(value as typeof settings.triangleOverlayMode)
             )
           }
         />
@@ -514,6 +535,153 @@ function RenderSettings({
           integer
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
+      {bvhStats.triangleCount > 0 && (
+        <SelectField
+          label="Triangles"
+          value={settings.triangleTraversalMode}
+          options={[
+            { value: "bvh", label: "BVH" },
+            { value: "bruteForce", label: "Brute force" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change triangle traversal", () =>
+              actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
+            )
+          }
+        />
+      )}
+      {bvhStats.nodeCount > 0 && (
+        <PersistentDetails
+          className="editor-subpanel render-panel__bvh-visualization"
+          storageKey="bvh-visualization"
+        >
+          <summary>BVH visualization</summary>
+          <div className="render-panel__bvh-help-row">
+            <span>About this overlay</span>
+            <button
+              type="button"
+              className="editor-help-button"
+              aria-label="Explain BVH visualization"
+              aria-expanded={showBvhVisualizationHelp}
+              title="Explain BVH visualization"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setShowBvhVisualizationHelp((visible) => !visible);
+              }}
+            >
+              ?
+            </button>
+          </div>
+          {showBvhVisualizationHelp && (
+            <p className="render-panel__bvh-help">
+              Shows the bounding boxes used to organize triangles. Depth 0 is the
+              root; higher values reveal progressively smaller child boxes. These
+              controls affect only the debug overlay—not the BVH build, ray
+              traversal, or accumulated image.
+            </p>
+          )}
+          <CheckboxField
+            label="Show bounds"
+            checked={settings.bvhOverlayEnabled}
+            density="compact"
+            layout="horizontal"
+            onChange={(checked) =>
+              commitSetting(actions, "Toggle BVH bounds", () =>
+                actions.setBvhOverlayEnabled(checked)
+              )
+            }
+          />
+          <SettingsNumberField
+            actions={actions}
+            label="Visible depth"
+            historyLabel="Change visible BVH depth"
+            value={Math.min(settings.bvhOverlayDepth, bvhStats.maxDepth)}
+            min={0}
+            max={bvhStats.maxDepth}
+            step={1}
+            precisionStep={1}
+            snapInterval={1}
+            sensitivity={0.5}
+            integer
+            disabled={!settings.bvhOverlayEnabled}
+            setValue={(value) => actions.setBvhOverlayDepth(value)}
+          />
+          <div className="render-panel__traversal">
+            <div className="render-panel__traversal-heading">
+              <strong>Selected-ray traversal</strong>
+              <span>CPU diagnostic</span>
+            </div>
+            <p>
+              Records one camera ray through the production flattened BVH. It
+              mirrors the reference algorithm; it is not a readback of a live GPU pixel.
+            </p>
+            <div className="render-panel__traversal-actions">
+              <button
+                type="button"
+                data-active={traversal.armed}
+                onClick={() => traversal.armed
+                  ? actions.cancelBvhTraversalInspection()
+                  : actions.armBvhTraversalInspection()}
+              >
+                {traversal.armed ? "Click viewport…" : "Pick ray"}
+              </button>
+              {traversal.events.length > 0 && (
+                <button type="button" onClick={() => {
+                  setBvhTraversalPlaying(false);
+                  actions.cancelBvhTraversalInspection();
+                }}>Clear</button>
+              )}
+            </div>
+            {traversal.events.length > 0 && (
+              <>
+                <div className="render-panel__traversal-actions">
+                  <button type="button" disabled={traversal.step <= 0} onClick={() => actions.setBvhTraversalStep(traversal.step - 1)}>←</button>
+                  <button type="button" onClick={() => setBvhTraversalPlaying((playing) => !playing)}>
+                    {bvhTraversalPlaying ? "Pause" : "Play"}
+                  </button>
+                  <button type="button" disabled={traversal.step >= traversal.events.length - 1} onClick={() => actions.setBvhTraversalStep(traversal.step + 1)}>→</button>
+                  <select
+                    className="render-panel__traversal-speed"
+                    aria-label="Traversal playback speed"
+                    value={bvhTraversalSpeed}
+                    onChange={(event) => setBvhTraversalSpeed(Number(event.currentTarget.value))}
+                  >
+                    <option value={900}>Slow</option>
+                    <option value={450}>Normal</option>
+                    <option value={180}>Fast</option>
+                  </select>
+                </div>
+                <input
+                  className="render-panel__traversal-range"
+                  type="range"
+                  aria-label="BVH traversal step"
+                  min={0}
+                  max={Math.max(0, traversal.events.length - 1)}
+                  value={Math.max(0, traversal.step)}
+                  onChange={(event) => {
+                    setBvhTraversalPlaying(false);
+                    actions.setBvhTraversalStep(Number(event.currentTarget.value));
+                  }}
+                />
+                <dl className="render-panel__traversal-stats">
+                  <div><dt>Step</dt><dd>{traversal.step + 1} / {traversal.events.length}</dd></div>
+                  <div><dt>Node / triangle tests</dt><dd>{visibleNodeTests} / {visibleTriangleTests}</dd></div>
+                  <div><dt>Current</dt><dd>{traversalEvent?.kind === "node"
+                    ? `Node ${traversalEvent.nodeIndex}: ${traversalEvent.hit ? (traversalEvent.leaf ? "leaf" : "entered") : "rejected"}`
+                    : traversalEvent
+                      ? `Triangle ${traversalEvent.triangleIndex}: ${traversalEvent.closest ? "new closest" : "miss"}`
+                      : "—"}</dd></div>
+                  <div><dt>Final hit</dt><dd>{traversal.result?.triangleIndex === -1 ? "Miss" : `Triangle ${traversal.result?.triangleIndex}`}</dd></div>
+                  <div><dt>Brute-force check</dt><dd>{traversal.result?.agreesWithBruteForce ? "Agrees" : "Mismatch"}</dd></div>
+                </dl>
+              </>
+            )}
+          </div>
+        </PersistentDetails>
+      )}
       </fieldset>
       {bvhStats.triangleCount > 0 && (
         <dl className="render-panel__bvh-stats" aria-label="Triangle BVH statistics">
@@ -884,7 +1052,7 @@ function ObjectInspectorContent({
       <div className="object-inspector__content">
         <div className="editor-inspector__identity">
           <strong>{selection.name}</strong>
-          <span>{selection.kind === "sphere" ? "Sphere" : "Quad"} · Path traced</span>
+          <span>{selection.kind === "sphere" ? "Sphere" : selection.kind === "triangleMesh" ? "Triangle mesh" : "Quad"} · Path traced</span>
         </div>
         <ObjectNameField
           objectId={selection.objectId!}
@@ -915,7 +1083,7 @@ function ObjectInspectorContent({
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
           />
-          {selection.kind === "quad" && (
+          {(selection.kind === "quad" || selection.kind === "triangleMesh") && (
             <VectorField
               label="Rotation"
               value={[selection.rotation.x, selection.rotation.y, selection.rotation.z]}
@@ -996,6 +1164,16 @@ function ObjectInspectorContent({
             }
           />}
         </PersistentDetails>
+        {selection.mesh && (
+          <PersistentDetails className="editor-subpanel" storageKey="object-geometry">
+            <summary>Geometry · Triangle mesh</summary>
+            <dl className="object-inspector__mesh-stats">
+              <div><dt>Triangles</dt><dd>{selection.mesh.triangleCount}</dd></div>
+              <div><dt>Vertices</dt><dd>{selection.mesh.vertexCount}</dd></div>
+              <div><dt>Storage</dt><dd>{selection.mesh.indexed ? "Indexed" : "Non-indexed"}</dd></div>
+            </dl>
+          </PersistentDetails>
+        )}
         <PersistentDetails className="editor-subpanel" storageKey="object-material">
           <summary>Material · {material.kind}</summary>
           <div className="texture-slot">
@@ -1184,12 +1362,12 @@ function ObjectInspectorContent({
           <button type="button" onClick={() => actions.frameSelectedObject()}>
             Frame
           </button>
-          <button type="button" onClick={() => actions.duplicateSelectedObject()}>
+          {selection.kind !== "triangleMesh" && <button type="button" onClick={() => actions.duplicateSelectedObject()}>
             Duplicate
-          </button>
-          <button type="button" onClick={() => actions.removeSelectedObject()}>
+          </button>}
+          {selection.kind !== "triangleMesh" && <button type="button" onClick={() => actions.removeSelectedObject()}>
             Remove
-          </button>
+          </button>}
         </div>
       </div>
   );

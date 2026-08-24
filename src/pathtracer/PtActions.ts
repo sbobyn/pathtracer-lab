@@ -5,9 +5,11 @@ import {
   getMaterialMetadata,
   isPtQuadMesh,
   isPtSphereMesh,
+  isPtTriangleMesh,
   sphereRadius,
   type PtEditableObject,
-  type PtTraceableMesh,
+  type PtQuadMesh,
+  type PtSphereMesh,
 } from "./PtScene";
 import {
   isPtAnalyticLightNode,
@@ -93,6 +95,19 @@ export default class PtActions {
     this.renderer.transformControls.mode = this.store.getState().settings.transformMode;
     this.renderer.transformControls.space =
       this.store.getState().settings.transformSpace === "global" ? "world" : "local";
+    this.renderer.onBvhTraversalInvalidated(() => {
+      this.store.update((state) => ({
+        ...state,
+        bvhTraversal: {
+          armed: false,
+          step: -1,
+          rayOrigin: null,
+          rayDirection: null,
+          events: [],
+          result: null,
+        },
+      }));
+    });
     this.configureTransformControls();
     this.publishSceneObjects();
   }
@@ -107,6 +122,44 @@ export default class PtActions {
 
   public getTriangleBvhProbeStats() {
     return this.renderer.getTriangleBvhProbeStats();
+  }
+
+  public armBvhTraversalInspection() {
+    this.store.update((state) => ({
+      ...state,
+      bvhTraversal: { ...state.bvhTraversal, armed: true },
+    }));
+  }
+
+  public cancelBvhTraversalInspection() {
+    this.renderer.setBvhTraversalVisualization(null);
+    this.store.update((state) => ({
+      ...state,
+      bvhTraversal: {
+        armed: false,
+        step: -1,
+        rayOrigin: null,
+        rayDirection: null,
+        events: [],
+        result: null,
+      },
+    }));
+  }
+
+  public inspectBvhTraversalAtNdc(x: number, y: number) {
+    const traversal = this.renderer.inspectBvhTraversal(new THREE.Vector2(x, y));
+    this.store.update((state) => ({ ...state, bvhTraversal: traversal }));
+  }
+
+  public setBvhTraversalStep(step: number) {
+    const current = this.store.getState().bvhTraversal;
+    if (current.events.length === 0) return;
+    const next = {
+      ...current,
+      step: Math.max(0, Math.min(Math.round(step), current.events.length - 1)),
+    };
+    this.renderer.setBvhTraversalVisualization(next);
+    this.store.update((state) => ({ ...state, bvhTraversal: next }));
   }
 
   public subscribe(listener: PtStateListener) {
@@ -160,6 +213,7 @@ export default class PtActions {
     // scene are intentionally discarded rather than replayed into a new one.
     this.history.clear();
     this.selectedObject = null;
+    this.renderer.setBvhTraversalVisualization(null);
     this.renderer.transformControls.detach();
     this.renderer.outlinePass.selectedObjects = [];
     this.renderer.setScene(scene, false);
@@ -189,6 +243,14 @@ export default class PtActions {
       },
       selection: this.emptySelection(),
       sceneObjects: this.createSceneObjectState(sceneKey),
+      bvhTraversal: {
+        armed: false,
+        step: -1,
+        rayOrigin: null,
+        rayDirection: null,
+        events: [],
+        result: null,
+      },
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
     this.publishHistory();
@@ -318,6 +380,21 @@ export default class PtActions {
     this.updateSetting("triangleTraversalMode", mode);
   }
 
+  public setTriangleOverlayMode(mode: PtSettings["triangleOverlayMode"]) {
+    this.renderer.setTriangleOverlayMode(mode);
+    this.updateSetting("triangleOverlayMode", mode);
+  }
+
+  public setBvhOverlayEnabled(enabled: boolean) {
+    this.renderer.setBvhOverlayEnabled(enabled);
+    this.updateSetting("bvhOverlayEnabled", enabled);
+  }
+
+  public setBvhOverlayDepth(depth: number) {
+    this.renderer.setBvhOverlayDepth(depth);
+    this.updateSetting("bvhOverlayDepth", depth);
+  }
+
   public setResolutionScale(scale: number) {
     this.renderer.setResolutionScale(scale);
     this.updateSetting("resolutionScale", scale);
@@ -402,6 +479,9 @@ export default class PtActions {
     this.commitMaterialEdit();
     this.commitSelectedLightEdit();
     this.selectedObject = object;
+    this.renderer.setSelectedTriangleMesh(object && isPtTriangleMesh(object)
+      ? object.userData.pathTracer.objectId
+      : null);
     if (!object) {
       this.renderer.outlinePass.selectedObjects = [];
       this.renderer.transformControls.detach();
@@ -449,6 +529,7 @@ export default class PtActions {
       ...scene.getSphereMeshes(),
       ...scene.getQuadMeshes(),
       ...scene.getAnalyticLightNodes(),
+      ...scene.getTriangleMeshes(),
     ].find((candidate) => candidate.userData.pathTracer.objectId === objectId);
     this.selectObject(object ?? null);
   }
@@ -633,7 +714,7 @@ export default class PtActions {
     return this.insertNewObject(object, "emissive quad light added");
   }
 
-  private insertNewObject(object: PtTraceableMesh, reason: string) {
+  private insertNewObject(object: PtSphereMesh | PtQuadMesh, reason: string) {
     const scene = this.renderer.ptScene;
     const index = scene.intersectGroup.children.length;
     const insert = () => {
@@ -689,7 +770,7 @@ export default class PtActions {
 
   public removeSelectedObject() {
     const object = this.selectedObject;
-    if (!object) return false;
+    if (!object || isPtTriangleMesh(object)) return false;
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
@@ -727,11 +808,11 @@ export default class PtActions {
 
   public duplicateSelectedObject() {
     const source = this.selectedObject;
-    if (!source) return false;
+    if (!source || isPtTriangleMesh(source)) return false;
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
-    const object = source.clone() as PtEditableObject;
+    const object = source.clone() as PtSphereMesh | PtQuadMesh | import("./PtAnalyticLight").PtAnalyticLightNode;
     object.userData.pathTracer = isPtSphereMesh(source)
       ? {
           objectId: THREE.MathUtils.generateUUID(),
@@ -1207,7 +1288,7 @@ export default class PtActions {
           height: null,
           uvMapping: null,
           material: null,
-          light: {
+        light: {
             type: metadata.lightType,
             enabled: metadata.enabled,
             color: `#${metadata.color.getHexString()}`,
@@ -1215,12 +1296,14 @@ export default class PtActions {
             angularDiameter: metadata.angularDiameter,
             innerConeAngle: metadata.innerConeAngle,
             outerConeAngle: metadata.outerConeAngle,
-          },
         },
+        mesh: null,
+      },
       }));
       return;
     }
     const sphere = isPtSphereMesh(selectedObject);
+    const triangleMesh = isPtTriangleMesh(selectedObject);
     const sphereIndex = sphere ? selectedObject.userData.pathTracer.primitiveIndex : null;
     const quadIndex = isPtQuadMesh(selectedObject) ? selectedObject.userData.pathTracer.primitiveIndex : null;
     const { x, y, z } = selectedObject.position;
@@ -1238,7 +1321,7 @@ export default class PtActions {
         name: selectedObject.userData.pathTracer.objectName,
         sphereIndex,
         quadIndex,
-        kind: sphere ? "sphere" : "quad",
+        kind: sphere ? "sphere" : triangleMesh ? "triangleMesh" : "quad",
         position: { x, y, z },
         rotation: {
           x: THREE.MathUtils.radToDeg(rotation.x),
@@ -1251,6 +1334,11 @@ export default class PtActions {
         uvMapping: sphere
           ? selectedObject.userData.pathTracer.uvMapping === 1 ? "box" : "spherical"
           : null,
+        mesh: triangleMesh ? {
+          triangleCount: Math.floor((selectedObject.geometry.index?.count ?? selectedObject.geometry.getAttribute("position").count) / 3),
+          vertexCount: selectedObject.geometry.getAttribute("position").count,
+          indexed: selectedObject.geometry.index !== null,
+        } : null,
         material: {
           id: materialId,
           kind: materialKinds[materialType] ?? "Unknown",
@@ -1413,14 +1501,14 @@ export default class PtActions {
     const triangleMeshes: PtState["sceneObjects"] = this.renderer.ptScene
       .getTriangleMeshes()
       .map((mesh) => ({
-        id: mesh.uuid,
+        id: mesh.userData.pathTracer.objectId,
         label: mesh.userData.pathTracer.objectName,
         kind: "triangleMesh" as const,
         parentId: "group:traceables",
         depth: 2,
         sphereIndex: null,
         quadIndex: null,
-        selectable: false,
+        selectable: true,
         traceable: true,
         capability: `${mesh.geometry.index ? "indexed " : ""}${Math.floor((mesh.geometry.index?.count ?? mesh.geometry.getAttribute("position").count) / 3)}-triangle mesh`,
       }));
@@ -1630,6 +1718,15 @@ export default class PtActions {
     if (current.triangleTraversalMode !== settings.triangleTraversalMode) {
       this.setTriangleTraversalMode(settings.triangleTraversalMode);
     }
+    if (current.triangleOverlayMode !== settings.triangleOverlayMode) {
+      this.setTriangleOverlayMode(settings.triangleOverlayMode);
+    }
+    if (current.bvhOverlayEnabled !== settings.bvhOverlayEnabled) {
+      this.setBvhOverlayEnabled(settings.bvhOverlayEnabled);
+    }
+    if (current.bvhOverlayDepth !== settings.bvhOverlayDepth) {
+      this.setBvhOverlayDepth(settings.bvhOverlayDepth);
+    }
     if (current.resolutionScale !== settings.resolutionScale) {
       this.setResolutionScale(settings.resolutionScale);
     }
@@ -1675,6 +1772,7 @@ export default class PtActions {
       width: null,
       height: null,
       uvMapping: null,
+      mesh: null,
       material: null,
       light: null,
     };

@@ -9,9 +9,14 @@ import {
   ShaderPass,
   TransformControls,
   OrbitControls,
+  Line2,
+  LineGeometry,
+  LineMaterial,
+  LineSegments2,
+  LineSegmentsGeometry,
 } from "three/examples/jsm/Addons.js";
 import PtScene, { type PtEditableObject } from "./PtScene";
-import type { PtSettings } from "./PtState";
+import type { PtBvhTraversalState, PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
 import {
   PtInvalidationLevel,
@@ -22,7 +27,7 @@ import SceneCompiler from "./SceneCompiler";
 import { packTriangleTexture, type PackedTriangleTexture } from "./PackedTriangleTexture";
 import { packMaterialTexture, packTextureTexture, type PackedDataTexture } from "./PackedMaterialTextures";
 import { packTriangleBvh, type PackedTriangleBvh } from "./PackedTriangleBvh";
-import { measureTriangleBvh, type TriangleBvhStats } from "./TriangleBvh";
+import { describeTriangleBvh, hitTriangleDistance, measureTriangleBvh, traceTriangleBvhTraversal, type TriangleBvhStats } from "./TriangleBvh";
 
 function integratorModeValue(mode: PtSettings["integratorMode"]): number {
   if (mode === "direct") return 1;
@@ -49,6 +54,15 @@ export default class PtRenderer {
 
   private gizmo!: THREE.Object3D;
   private gizmoScene!: THREE.Scene;
+  private readonly debugOverlayScene = new THREE.Scene();
+  private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
+  private readonly bvhHelpers: Array<{ helper: LineSegments2; depth: number }> = [];
+  private bvhTraversalState: PtBvhTraversalState | null = null;
+  private bvhTraversalInvalidated: (() => void) | null = null;
+  private bvhTraversalRay: Line2 | null = null;
+  private bvhTraversalTriangle: LineSegments2 | null = null;
+  private bvhTraversalHit: LineSegments2 | null = null;
+  private selectedTriangleMeshId: string | null = null;
 
   public settings: PtSettings;
   public uniforms: PtUniforms;
@@ -140,6 +154,8 @@ export default class PtRenderer {
     this.initializeComposerPasses();
 
     this.setupGizmo();
+    this.setupTriangleWireframes();
+    this.setupBvhHelpers();
 
     // Set Render Loop
 
@@ -226,6 +242,26 @@ export default class PtRenderer {
     this.invalidate(PtInvalidationLevel.Settings, "triangle traversal mode changed");
   }
 
+  public setTriangleOverlayMode(mode: PtSettings["triangleOverlayMode"]) {
+    this.settings.triangleOverlayMode = mode;
+    this.updateTriangleWireframeVisibility();
+  }
+
+  public setSelectedTriangleMesh(objectId: string | null) {
+    this.selectedTriangleMeshId = objectId;
+    this.updateTriangleWireframeVisibility();
+  }
+
+  public setBvhOverlayEnabled(enabled: boolean) {
+    this.settings.bvhOverlayEnabled = enabled;
+    this.updateBvhHelperVisibility();
+  }
+
+  public setBvhOverlayDepth(depth: number) {
+    this.settings.bvhOverlayDepth = depth;
+    this.updateBvhHelperVisibility();
+  }
+
   public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
     this.settings.enableDepthOfField = enabled;
     this.uniforms.uEnableDoF.value = enabled;
@@ -285,6 +321,10 @@ export default class PtRenderer {
   }
 
   public invalidate(level: PtInvalidationLevel, reason: string) {
+    if (level >= PtInvalidationLevel.Geometry && this.bvhTraversalState) {
+      this.setBvhTraversalVisualization(null);
+      this.bvhTraversalInvalidated?.();
+    }
     if (level >= PtInvalidationLevel.Material) {
       this.sceneCompiler.update(this.gpuScene, this.ptScene, level);
       if (level >= PtInvalidationLevel.Geometry) this.updatePackedTriangleTexture();
@@ -317,6 +357,106 @@ export default class PtRenderer {
     return measureTriangleBvh(this.gpuScene.triangleBvh, this.gpuScene.triangles);
   }
 
+  public onBvhTraversalInvalidated(listener: (() => void) | null) {
+    this.bvhTraversalInvalidated = listener;
+  }
+
+  public inspectBvhTraversal(ndc: THREE.Vector2): PtBvhTraversalState {
+    this.camera.updateMatrixWorld();
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.camera);
+    const ray = {
+      origin: raycaster.ray.origin.clone(),
+      direction: raycaster.ray.direction.clone().normalize(),
+    };
+    const trace = traceTriangleBvhTraversal(this.gpuScene.triangleBvh, this.gpuScene.triangles, ray);
+    const bruteForce = this.gpuScene.triangles.reduce(
+      (closest, triangle, triangleIndex) => {
+        const distance = hitTriangleDistance(triangle, ray, 1e-4, closest.distance);
+        return distance === null ? closest : { triangleIndex, distance };
+      },
+      { triangleIndex: -1, distance: Number.POSITIVE_INFINITY }
+    );
+    const state: PtBvhTraversalState = {
+      armed: false,
+      step: trace.events.length > 0 ? 0 : -1,
+      rayOrigin: ray.origin.toArray(),
+      rayDirection: ray.direction.toArray(),
+      events: trace.events,
+      result: {
+        triangleIndex: trace.result.triangleIndex,
+        distance: Number.isFinite(trace.result.distance) ? trace.result.distance : null,
+        nodeTests: trace.result.nodeTests,
+        triangleTests: trace.result.triangleTests,
+        agreesWithBruteForce:
+          trace.result.triangleIndex === bruteForce.triangleIndex &&
+          (trace.result.triangleIndex < 0 || Math.abs(trace.result.distance - bruteForce.distance) < 1e-7),
+      },
+    };
+    this.setBvhTraversalVisualization(state);
+    return state;
+  }
+
+  public setBvhTraversalVisualization(state: PtBvhTraversalState | null) {
+    this.bvhTraversalState = state;
+    this.bvhTraversalRay = this.disposeDebugLine(this.bvhTraversalRay);
+    this.bvhTraversalTriangle = this.disposeDebugLine(this.bvhTraversalTriangle);
+    this.bvhTraversalHit = this.disposeDebugLine(this.bvhTraversalHit);
+    if (state?.rayOrigin && state.rayDirection) {
+      const origin = new THREE.Vector3(...state.rayOrigin);
+      const direction = new THREE.Vector3(...state.rayDirection);
+      const root = this.gpuScene.triangleBvh.nodes[0];
+      const fallbackLength = root
+        ? origin.distanceTo(root.boundsMin.clone().add(root.boundsMax).multiplyScalar(0.5)) +
+          root.boundsMax.clone().sub(root.boundsMin).length()
+        : 10;
+      const length = state.result?.distance ?? fallbackLength;
+      const end = origin.clone().addScaledVector(direction, length);
+      const geometry = new LineGeometry();
+      geometry.setPositions([...origin.toArray(), ...end.toArray()]);
+      const material = new LineMaterial({ color: 0xf8fafc, linewidth: 3, depthTest: false, depthWrite: false });
+      this.bvhTraversalRay = new Line2(geometry, material);
+      this.bvhTraversalRay.computeLineDistances();
+      this.debugOverlayScene.add(this.bvhTraversalRay);
+
+      const currentEvent = state.events[state.step];
+      if (currentEvent?.kind === "triangle") {
+        this.bvhTraversalTriangle = this.createTriangleDebugLine(
+          currentEvent.triangleIndex,
+          currentEvent.closest ? 0xfacc15 : 0xfb7185
+        );
+      }
+      if (state.result && state.result.triangleIndex >= 0) {
+        this.bvhTraversalHit = this.createTriangleDebugLine(state.result.triangleIndex, 0x4ade80, 3);
+      }
+    }
+    this.updateBvhHelperVisibility();
+  }
+
+  private createTriangleDebugLine(triangleIndex: number, color: number, linewidth = 3) {
+    const triangle = this.gpuScene.triangles[triangleIndex];
+    if (!triangle) return null;
+    const geometry = new LineSegmentsGeometry();
+    geometry.setPositions([
+      ...triangle.a.toArray(), ...triangle.b.toArray(),
+      ...triangle.b.toArray(), ...triangle.c.toArray(),
+      ...triangle.c.toArray(), ...triangle.a.toArray(),
+    ]);
+    const material = new LineMaterial({ color, linewidth, depthTest: false, depthWrite: false });
+    const line = new LineSegments2(geometry, material);
+    line.computeLineDistances();
+    this.debugOverlayScene.add(line);
+    return line;
+  }
+
+  private disposeDebugLine<T extends Line2 | LineSegments2>(line: T | null): null {
+    if (!line) return null;
+    line.geometry.dispose();
+    (line.material as THREE.Material).dispose();
+    this.debugOverlayScene.remove(line);
+    return null;
+  }
+
   private reset() {
     this.setupControls();
     this.setupCamera();
@@ -327,6 +467,8 @@ export default class PtRenderer {
     this.updateComposerScene();
 
     this.setupGizmo();
+    this.setupTriangleWireframes();
+    this.setupBvhHelpers();
   }
 
   private setupShaderCanvas() {
@@ -691,6 +833,110 @@ export default class PtRenderer {
     this.gizmoScene.add(this.gizmo);
   }
 
+  private setupTriangleWireframes() {
+    for (const wireframe of this.triangleWireframes.values()) {
+      wireframe.geometry.dispose();
+      (wireframe.material as THREE.Material).dispose();
+      this.debugOverlayScene.remove(wireframe);
+    }
+    this.triangleWireframes.clear();
+    for (const mesh of this.ptScene.getTriangleMeshes()) {
+      const wireframe = new THREE.LineSegments(
+        new THREE.WireframeGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({
+          color: 0x9bdcff,
+          transparent: true,
+          opacity: 0.9,
+          depthTest: false,
+          depthWrite: false,
+        })
+      );
+      wireframe.matrixAutoUpdate = false;
+      wireframe.visible = false;
+      wireframe.userData.sourceMesh = mesh;
+      this.debugOverlayScene.add(wireframe);
+      this.triangleWireframes.set(mesh.userData.pathTracer.objectId, wireframe);
+    }
+    this.updateTriangleWireframeVisibility();
+  }
+
+  private updateTriangleWireframeVisibility() {
+    for (const [objectId, wireframe] of this.triangleWireframes) {
+      wireframe.visible = this.settings.triangleOverlayMode === "all" ||
+        (this.settings.triangleOverlayMode === "selected" && objectId === this.selectedTriangleMeshId);
+    }
+  }
+
+  private syncTriangleWireframes() {
+    for (const wireframe of this.triangleWireframes.values()) {
+      const mesh = wireframe.userData.sourceMesh as THREE.Object3D;
+      mesh.updateWorldMatrix(true, false);
+      wireframe.matrix.copy(mesh.matrixWorld);
+    }
+  }
+
+  private setupBvhHelpers() {
+    for (const { helper } of this.bvhHelpers) {
+      helper.geometry.dispose();
+      (helper.material as THREE.Material).dispose();
+      this.debugOverlayScene.remove(helper);
+    }
+    this.bvhHelpers.length = 0;
+    const descriptions = describeTriangleBvh(this.gpuScene.triangleBvh);
+    for (const description of descriptions) {
+      const node = this.gpuScene.triangleBvh.nodes[description.index]!;
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(this.boxEdgePositions(node.boundsMin, node.boundsMax));
+      const material = new LineMaterial({
+        color: description.leaf ? 0x9bea78 : 0x63b3ed,
+        linewidth: description.leaf ? 2.5 : 2,
+      });
+      material.transparent = true;
+      material.opacity = description.leaf ? 0.85 : 0.55;
+      material.depthTest = false;
+      material.depthWrite = false;
+      const helper = new LineSegments2(geometry, material);
+      helper.computeLineDistances();
+      helper.visible = false;
+      helper.userData.bvhNodeIndex = description.index;
+      helper.userData.bvhNode = description;
+      this.debugOverlayScene.add(helper);
+      this.bvhHelpers.push({ helper, depth: description.depth });
+    }
+    this.updateBvhHelperVisibility();
+  }
+
+  private boxEdgePositions(min: THREE.Vector3, max: THREE.Vector3) {
+    const corners = [
+      new THREE.Vector3(min.x, min.y, min.z), new THREE.Vector3(max.x, min.y, min.z),
+      new THREE.Vector3(max.x, max.y, min.z), new THREE.Vector3(min.x, max.y, min.z),
+      new THREE.Vector3(min.x, min.y, max.z), new THREE.Vector3(max.x, min.y, max.z),
+      new THREE.Vector3(max.x, max.y, max.z), new THREE.Vector3(min.x, max.y, max.z),
+    ];
+    const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    return edges.flatMap(([a, b]) => [...corners[a]!.toArray(), ...corners[b]!.toArray()]);
+  }
+
+  private updateBvhHelperVisibility() {
+    const inspection = this.bvhTraversalState;
+    const visibleEvents = inspection
+      ? inspection.events.slice(0, Math.max(0, inspection.step + 1))
+      : [];
+    const nodeEvents = visibleEvents.filter((event) => event.kind === "node");
+    const currentEvent = visibleEvents.at(-1);
+    for (const entry of this.bvhHelpers) {
+      const nodeIndex = entry.helper.userData.bvhNodeIndex as number;
+      const event = [...nodeEvents].reverse().find((candidate) => candidate.nodeIndex === nodeIndex);
+      const material = entry.helper.material as LineMaterial;
+      const description = entry.helper.userData.bvhNode as ReturnType<typeof describeTriangleBvh>[number];
+      if (event) material.color.set(event.hit ? 0xfbbf24 : 0xf87171);
+      else material.color.set(description.leaf ? 0x9bea78 : 0x63b3ed);
+      if (currentEvent && currentEvent.nodeIndex === nodeIndex) material.color.set(0xffffff);
+      entry.helper.visible = Boolean(event) ||
+        (this.settings.bvhOverlayEnabled && entry.depth <= this.settings.bvhOverlayDepth);
+    }
+  }
+
   private readonly renderLoop = () => {
     this.renderer.clear();
 
@@ -714,6 +960,10 @@ export default class PtRenderer {
     this.transformControls.update(this.clock.getDelta());
 
     this.composer.render();
+    this.syncTriangleWireframes();
+    this.renderer.clearDepth();
+    this.renderer.render(this.debugOverlayScene, this.camera);
+    this.renderer.clearDepth();
     this.renderer.render(this.gizmoScene, this.camera);
 
   };
@@ -738,6 +988,7 @@ export default class PtRenderer {
   }
 
   public dispose() {
+    this.bvhTraversalInvalidated = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.handleResize);
 
@@ -762,6 +1013,19 @@ export default class PtRenderer {
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
     this.fallbackImageTexture.dispose();
+    for (const wireframe of this.triangleWireframes.values()) {
+      wireframe.geometry.dispose();
+      (wireframe.material as THREE.Material).dispose();
+    }
+    this.triangleWireframes.clear();
+    for (const { helper } of this.bvhHelpers) {
+      helper.geometry.dispose();
+      (helper.material as THREE.Material).dispose();
+    }
+    this.bvhHelpers.length = 0;
+    this.bvhTraversalRay = this.disposeDebugLine(this.bvhTraversalRay);
+    this.bvhTraversalTriangle = this.disposeDebugLine(this.bvhTraversalTriangle);
+    this.bvhTraversalHit = this.disposeDebugLine(this.bvhTraversalHit);
     this.disposePostProcessing();
     this.renderer.dispose();
   }
