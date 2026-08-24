@@ -16,14 +16,17 @@ import PtScene, {
   sphereRadius,
   type PtPreviewMaterial,
 } from "./PtScene";
+import { buildTriangleBvh } from "./TriangleBvh";
 
 export default class SceneCompiler {
   public compile(scene: PtScene): GpuScene {
     const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
+    const triangles = this.compileTriangles(scene);
     return new GpuScene(
       this.compileSpheres(scene),
       this.compileQuads(scene),
-      this.compileTriangles(scene),
+      triangles,
+      buildTriangleBvh(triangles),
       materials,
       textures,
       imageTextures,
@@ -41,7 +44,8 @@ export default class SceneCompiler {
     if (level >= PtInvalidationLevel.Geometry) {
       gpuScene.updateSpheres(this.compileSpheres(scene));
       gpuScene.updateQuads(this.compileQuads(scene));
-      gpuScene.updateTriangles(this.compileTriangles(scene));
+      const triangles = this.compileTriangles(scene);
+      gpuScene.updateTriangles(triangles, buildTriangleBvh(triangles));
       if (level === PtInvalidationLevel.Scene) {
         const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
         gpuScene.updateMaterials(materials, textures, imageTextures);

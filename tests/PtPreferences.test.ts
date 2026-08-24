@@ -28,6 +28,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
       fov: 60,
       resolutionScale: 0.5,
       integratorMode: "mis",
+      triangleTraversalMode: "bruteForce",
       transformMode: "rotate",
       transformSpace: "local",
     },
@@ -38,6 +39,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
   assert.equal(state.settings.fov, 60);
   assert.equal(state.settings.resolutionScale, 0.5);
   assert.equal(state.settings.integratorMode, "mis");
+  assert.equal(state.settings.triangleTraversalMode, "bruteForce");
   assert.equal(state.settings.transformMode, "rotate");
   assert.equal(state.settings.transformSpace, "local");
   assert.equal(state.settings.maxRayDepth, 10);
@@ -53,6 +55,7 @@ test("invalid, obsolete, and out-of-range data falls back safely", () => {
       numSamples: "many",
       fov: 999,
       integratorMode: "roulette",
+      triangleTraversalMode: "octree",
       backgroundColorTop: "blue",
     },
   });
@@ -61,6 +64,7 @@ test("invalid, obsolete, and out-of-range data falls back safely", () => {
   assert.equal(state.settings.numSamples, defaults.settings.numSamples);
   assert.equal(state.settings.fov, 120);
   assert.equal(state.settings.integratorMode, defaults.settings.integratorMode);
+  assert.equal(state.settings.triangleTraversalMode, defaults.settings.triangleTraversalMode);
   assert.equal(state.settings.backgroundColorTop, defaults.settings.backgroundColorTop);
 
   storage.value = JSON.stringify({ version: 999, sceneKey: "Part1Final" });

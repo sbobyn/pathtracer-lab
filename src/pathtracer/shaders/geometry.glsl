@@ -104,6 +104,101 @@ bool hitTriangle(Triangle triangle, Ray ray, Interval rayInterval, out Hit hit) 
     return true;
 }
 
+bool hitAabb(vec3 boundsMin, vec3 boundsMax, Ray ray, Interval interval) {
+    for (int axis = 0; axis < 3; axis++) {
+        float origin = ray.origin[axis];
+        float direction = ray.direction[axis];
+        if (abs(direction) < 1e-12) {
+            if (origin < boundsMin[axis] || origin > boundsMax[axis]) return false;
+            continue;
+        }
+        float inverseDirection = 1.0 / direction;
+        float nearDistance = (boundsMin[axis] - origin) * inverseDirection;
+        float farDistance = (boundsMax[axis] - origin) * inverseDirection;
+        if (nearDistance > farDistance) {
+            float swapDistance = nearDistance;
+            nearDistance = farDistance;
+            farDistance = swapDistance;
+        }
+        interval.min = max(interval.min, nearDistance);
+        interval.max = min(interval.max, farDistance);
+        if (interval.max < interval.min) return false;
+    }
+    return true;
+}
+
+bool hitTrianglesBruteForce(Ray ray, Interval rayInterval, inout Hit hit, inout float closestSoFar) {
+    Hit candidate;
+    bool hitAnything = false;
+    for (int i = 0; i < uTriangleCount; i++) {
+        Triangle triangle = readTriangle(i);
+        if (hitTriangle(triangle, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+            hitAnything = true;
+            closestSoFar = candidate.t;
+            hit = candidate;
+            hit.materialId = triangle.materialId;
+            hit.primitiveType = 2;
+            hit.primitiveId = i;
+        }
+    }
+    return hitAnything;
+}
+
+const int BVH_STACK_SIZE = 64;
+
+bool hitTrianglesBvh(Ray ray, Interval rayInterval, inout Hit hit, inout float closestSoFar) {
+    if (uBvhNodeCount == 0) return false;
+    int stack[BVH_STACK_SIZE];
+    int stackSize = 1;
+    stack[0] = 0;
+    bool hitAnything = false;
+    bool invalidTraversal = false;
+    Hit candidate;
+    while (stackSize > 0) {
+        int nodeIndex = stack[--stackSize];
+        if (nodeIndex < 0 || nodeIndex >= uBvhNodeCount) {
+            invalidTraversal = true;
+            break;
+        }
+        vec3 boundsMin;
+        vec3 boundsMax;
+        int payload;
+        int triangleCount;
+        readBvhNode(nodeIndex, boundsMin, boundsMax, payload, triangleCount);
+        if (!hitAabb(boundsMin, boundsMax, ray, Interval(rayInterval.min, closestSoFar))) continue;
+        if (triangleCount > 0) {
+            for (int offset = 0; offset < triangleCount; offset++) {
+                int triangleIndex = readBvhTriangleIndex(payload + offset);
+                if (triangleIndex < 0 || triangleIndex >= uTriangleCount) {
+                    invalidTraversal = true;
+                    break;
+                }
+                Triangle triangle = readTriangle(triangleIndex);
+                if (hitTriangle(triangle, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+                    hitAnything = true;
+                    closestSoFar = candidate.t;
+                    hit = candidate;
+                    hit.materialId = triangle.materialId;
+                    hit.primitiveType = 2;
+                    hit.primitiveId = triangleIndex;
+                }
+            }
+            if (invalidTraversal) break;
+            continue;
+        }
+        if (stackSize + 2 > BVH_STACK_SIZE) {
+            invalidTraversal = true;
+            break;
+        }
+        stack[stackSize++] = payload;
+        stack[stackSize++] = nodeIndex + 1;
+    }
+    // Correctness is more important than silently dropping geometry if a future
+    // hierarchy exceeds the fixed shader stack or contains malformed indices.
+    if (invalidTraversal) return hitTrianglesBruteForce(ray, rayInterval, hit, closestSoFar) || hitAnything;
+    return hitAnything;
+}
+
 bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
     Hit candidate;
     bool hitAnything = false;
@@ -132,16 +227,9 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             hit.primitiveId = i;
         }
     }
-    for (int i = 0; i < uTriangleCount; i++) {
-        Triangle triangle = readTriangle(i);
-        if (hitTriangle(triangle, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
-            hitAnything = true;
-            closestSoFar = candidate.t;
-            hit = candidate;
-            hit.materialId = triangle.materialId;
-            hit.primitiveType = 2;
-            hit.primitiveId = i;
-        }
-    }
+    bool hitTriangles = uTriangleTraversalMode == 1
+        ? hitTrianglesBvh(ray, rayInterval, hit, closestSoFar)
+        : hitTrianglesBruteForce(ray, rayInterval, hit, closestSoFar);
+    hitAnything = hitTriangles || hitAnything;
     return hitAnything;
 }
