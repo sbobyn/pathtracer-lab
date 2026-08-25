@@ -1680,7 +1680,7 @@ export default class PtActions {
     if (texture.type === PtTextureType.Constant) return [texture.type, texture.color.getHex()];
     if (texture.type === PtTextureType.Checker) return [texture.type, texture.colorA.getHex(), texture.colorB.getHex(), texture.scale];
     if (texture.type === PtTextureType.Perlin) return [texture.type, texture.colorA.getHex(), texture.colorB.getHex(), texture.scale, texture.turbulence];
-    return [texture.type, texture.source];
+    return [texture.type, texture.source, texture.tint.getHex()];
   }
 
   private applySettings(settings: PtSettings) {

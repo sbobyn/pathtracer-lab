@@ -158,7 +158,7 @@ export default class SceneCompiler {
       imageTextures.push(previewMaterial.map);
       return {
         type: GpuTextureType.Image,
-        colorA: new THREE.Color(1, 0, 1),
+        colorA: texture.tint.clone(),
         colorB: new THREE.Color(),
         scale: 1,
         turbulence: 0,

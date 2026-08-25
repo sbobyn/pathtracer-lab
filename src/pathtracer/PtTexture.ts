@@ -15,7 +15,12 @@ export type PtTexture =
       colorB: THREE.Color;
       scale: number;
     }
-  | { type: PtTextureType.Image; source: string }
+  | {
+      type: PtTextureType.Image;
+      source: string;
+      tint: THREE.Color;
+      runtimeTexture?: THREE.Texture;
+    }
   | {
       type: PtTextureType.Perlin;
       colorA: THREE.Color;
@@ -41,8 +46,12 @@ export function checkerTexture(
   };
 }
 
-export function imageTexture(source: string): PtTexture {
-  return { type: PtTextureType.Image, source };
+export function imageTexture(
+  source: string,
+  tint: THREE.ColorRepresentation = 0xffffff,
+  runtimeTexture?: THREE.Texture
+): PtTexture {
+  return { type: PtTextureType.Image, source, tint: new THREE.Color(tint), runtimeTexture };
 }
 
 export function perlinTexture(
@@ -62,12 +71,12 @@ export function cloneTexture(texture: PtTexture): PtTexture {
   if (texture.type === PtTextureType.Perlin) {
     return perlinTexture(texture.colorA, texture.colorB, texture.scale, texture.turbulence);
   }
-  return imageTexture(texture.source);
+  return imageTexture(texture.source, texture.tint, texture.runtimeTexture);
 }
 
 export function texturePreviewColor(texture: PtTexture) {
   if (texture.type === PtTextureType.Constant) return texture.color;
   if (texture.type === PtTextureType.Checker) return texture.colorA;
   if (texture.type === PtTextureType.Perlin) return texture.colorA;
-  return new THREE.Color(0xffffff);
+  return texture.tint;
 }

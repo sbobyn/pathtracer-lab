@@ -17,6 +17,7 @@ import {
   type EnvironmentImportanceDistribution,
 } from "./EnvironmentImportanceDistribution";
 import { loadStaticGltf } from "./StaticGltfLoader";
+import { translateStaticGltfMaterial } from "./GltfMaterialTranslator";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
@@ -229,10 +230,21 @@ export default class PtScene {
   public loadStaticGltf(source: string, fallbackMaterialId: number, label: string) {
     this.staticAssetError = null;
     this.staticAssetsLoaded = loadStaticGltf(source).then((primitives) => {
+      const materialIds = new Map<string, number>();
       primitives.forEach((primitive, index) => {
+        let materialId = materialIds.get(primitive.material.uuid);
+        if (materialId === undefined) {
+          try {
+            materialId = this.addMaterial(translateStaticGltfMaterial(primitive.material));
+          } catch (error) {
+            console.warn(`Using fallback material for ${primitive.name}`, error);
+            materialId = fallbackMaterialId;
+          }
+          materialIds.set(primitive.material.uuid, materialId);
+        }
         this.addTriangleMesh(
           primitive.geometry,
-          fallbackMaterialId,
+          materialId,
           primitives.length === 1 ? label : `${label} · ${primitive.name || index + 1}`
         );
       });
@@ -521,6 +533,12 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
 
 function createPreviewTexture(texture: PtTexture): THREE.Texture | null {
   if (texture.type === PtTextureType.Image) {
+    if (texture.runtimeTexture) {
+      const map = texture.runtimeTexture.clone();
+      map.needsUpdate = true;
+      map.userData.pathTracerLoaded = Promise.resolve();
+      return map;
+    }
     let markLoaded!: () => void;
     const loaded = new Promise<void>((resolve) => { markLoaded = resolve; });
     const map = new THREE.TextureLoader().load(texture.source, markLoaded);

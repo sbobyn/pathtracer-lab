@@ -13,4 +13,6 @@ The HDR files above were downloaded from Poly Haven as built-in studio, outdoor,
 
 `static/models/suzanne/` contains the official Khronos glTF Sample Assets Suzanne model by UX3D/Norbert Nopper under CC0. The separate glTF, buffer, and image files intentionally preserve their published relative layout; the original license is included in that directory. The STE-194 geometry study uses a local fallback material, while its included PBR textures are reserved for the later material-loading work.
 
+`static/models/damaged-helmet/` contains the official Khronos glTF Sample Assets Damaged Helmet by Leonard Teo under its included CC BY 4.0 / CC BY-NC 4.0 license notice. The binary glTF is kept intact as a richer material and mesh study, with its original license beside it. Base-color data is supported by the current checkpoint; combined scattering/emission, packed metallic-roughness, normal, and occlusion maps remain visible comparison targets for the subsequent material-system slices.
+
 `static/models/simple-meshes/` contains the official Khronos glTF Sample Assets Simple Meshes model under CC0. Its two nodes reference the same indexed triangle mesh, providing a compact integration check that node transforms and shared mesh data are flattened correctly. The original license is included in that directory.
