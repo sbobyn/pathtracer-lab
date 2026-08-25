@@ -2,7 +2,7 @@ import * as THREE from "three";
 import PtScene from "./PtScene";
 import PtSphere from "./PtSphere";
 import PtQuad from "./PtQuad";
-import PtMaterial, { PtMaterialType } from "./PtMaterial";
+import PtMaterial from "./PtMaterial";
 import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCamera";
 import { checkerTexture, imageTexture, perlinTexture } from "./PtTexture";
 import textureStudyImage from "../assets/texture-study.svg?url";
@@ -22,8 +22,8 @@ export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
 export const PresetPtScenes: { [key: string]: () => PtScene } = {
   GlTFBoxStudy: () => {
     const materials = [
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xc8d1dc)),
-      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x26384a, 0xd4a75f, 8)),
+      PtMaterial.legacyLambert(new THREE.Color(0xc8d1dc)),
+      PtMaterial.legacyLambert(checkerTexture(0x26384a, 0xd4a75f, 8)),
     ];
     const floor = new PtQuad(
       new THREE.Vector3(-4, -1.01, 4),
@@ -50,8 +50,8 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
   },
   GlTFSuzanneStudy: () => {
     const materials = [
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xb8c4d3)),
-      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x182b3c, 0xc79552, 10)),
+      PtMaterial.legacyLambert(new THREE.Color(0xb8c4d3)),
+      PtMaterial.legacyLambert(checkerTexture(0x182b3c, 0xc79552, 10)),
     ];
     const floor = new PtQuad(
       new THREE.Vector3(-4, -1.01, 4),
@@ -79,7 +79,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
   },
   DamagedHelmetStudy: () => {
     const materials = [
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x777777)),
+      PtMaterial.legacyLambert(new THREE.Color(0x777777)),
     ];
     const camera = createFullScreenPerspectiveCamera({
       position: new THREE.Vector3(0, 0, 3.2),
@@ -101,7 +101,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
   },
   GlTFSimpleMeshesStudy: () => {
     const materials = [
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xe2a84d)),
+      PtMaterial.legacyLambert(new THREE.Color(0xe2a84d)),
     ];
     const camera = createFullScreenPerspectiveCamera({
       position: new THREE.Vector3(1, 0.5, 3),
@@ -129,10 +129,10 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       new PtSphere(new THREE.Vector3(1.2, 0, 0), 0.5, 3), // Right
     ];
     const materials: PtMaterial[] = [
-      new PtMaterial(0, new THREE.Color(0.8, 0.8, 0)), // Ground - Lambert
-      new PtMaterial(0, new THREE.Color(0.1, 0.2, 0.5)), // Center - Lambert
-      new PtMaterial(2, new THREE.Color(1, 1, 1), 0, 1 / 1.33), // Left - Dielectric
-      new PtMaterial(1, new THREE.Color(0.8, 0.6, 0.2), 0.1), // Right - Metal
+      PtMaterial.legacyLambert(new THREE.Color(0.8, 0.8, 0)), // Ground - Lambert
+      PtMaterial.legacyLambert(new THREE.Color(0.1, 0.2, 0.5)), // Center - Lambert
+      PtMaterial.legacyDielectric(1 / 1.33), // Left - Dielectric
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0.8, 0.6, 0.2), 0.1), // Right - Metal
     ];
 
     const camera = createFullScreenPerspectiveCamera({
@@ -149,7 +149,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       new PtSphere(new THREE.Vector3(0, -1000, 0), 1000, 0), // Ground
     ];
     const materials: PtMaterial[] = [
-      new PtMaterial(0, new THREE.Color(0.5, 0.5, 0.5)), // Ground - Lambert
+      PtMaterial.legacyLambert(new THREE.Color(0.5, 0.5, 0.5)), // Ground - Lambert
     ];
 
     for (let a = -2; a <= 2; a++) {
@@ -173,7 +173,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
               Math.random() * Math.random(),
               Math.random() * Math.random()
             );
-            materials.push(new PtMaterial(0, albedo));
+            materials.push(PtMaterial.legacyLambert(albedo));
             spheres.push(new PtSphere(center, 0.2, materials.length - 1));
           } else if (chooseMat < 0.95) {
             // Metal
@@ -183,28 +183,28 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
               0.5 * (1 + Math.random())
             );
             const fuzz = 0.5 * Math.random();
-            materials.push(new PtMaterial(1, albedo, fuzz));
+            materials.push(PtMaterial.legacyFuzzyMetal(albedo, fuzz));
             spheres.push(new PtSphere(center, 0.2, materials.length - 1));
           } else {
             // Glass
-            materials.push(new PtMaterial(2, new THREE.Color(1, 1, 1), 0, 1.5));
+            materials.push(PtMaterial.legacyDielectric(1.5));
             spheres.push(new PtSphere(center, 0.2, materials.length - 1));
           }
         }
       }
     }
 
-    materials.push(new PtMaterial(0, new THREE.Color(0.4, 0.2, 0.1))); // Center - Lambert
+    materials.push(PtMaterial.legacyLambert(new THREE.Color(0.4, 0.2, 0.1))); // Center - Lambert
     spheres.push(
       new PtSphere(new THREE.Vector3(-4, 1, 0), 1.0, materials.length - 1)
     );
 
-    materials.push(new PtMaterial(2, new THREE.Color(1, 1, 1), 0, 1.5)); // Left - Dielectric
+    materials.push(PtMaterial.legacyDielectric(1.5)); // Left - Dielectric
     spheres.push(
       new PtSphere(new THREE.Vector3(0, 1, 0), 1.0, materials.length - 1)
     );
 
-    materials.push(new PtMaterial(1, new THREE.Color(0.7, 0.6, 0.5), 0.0)); // Right - Metal
+    materials.push(PtMaterial.legacyFuzzyMetal(new THREE.Color(0.7, 0.6, 0.5), 0.0)); // Right - Metal
     spheres.push(
       new PtSphere(new THREE.Vector3(4, 1, 0), 1.0, materials.length - 1)
     );
@@ -221,11 +221,11 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   TextureStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(0, checkerTexture(0x183a1d, 0xb7d66b, 16)),
-      new PtMaterial(0, checkerTexture(0xf4ead5, 0xb84b3e, 12)),
-      new PtMaterial(1, new THREE.Color(0xc8cbd2), 0),
-      new PtMaterial(0, perlinTexture(0x101820, 0xe8dcc4, 4, 10)),
-      new PtMaterial(0, imageTexture(textureStudyImage)),
+      PtMaterial.legacyLambert(checkerTexture(0x183a1d, 0xb7d66b, 16)),
+      PtMaterial.legacyLambert(checkerTexture(0xf4ead5, 0xb84b3e, 12)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xc8cbd2), 0),
+      PtMaterial.legacyLambert(perlinTexture(0x101820, 0xe8dcc4, 4, 10)),
+      PtMaterial.legacyLambert(imageTexture(textureStudyImage)),
     ];
     const spheres: PtSphere[] = [
       new PtSphere(new THREE.Vector3(0, -100.5, 0), 100, 0),
@@ -245,10 +245,10 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   QuadStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(0, checkerTexture(0x23324a, 0xd7e3f4, 12)),
-      new PtMaterial(0, imageTexture(textureStudyImage)),
-      new PtMaterial(0, perlinTexture(0x6f263d, 0xf0c987, 5, 8)),
-      new PtMaterial(1, new THREE.Color(0xd8dbe2), 0),
+      PtMaterial.legacyLambert(checkerTexture(0x23324a, 0xd7e3f4, 12)),
+      PtMaterial.legacyLambert(imageTexture(textureStudyImage)),
+      PtMaterial.legacyLambert(perlinTexture(0x6f263d, 0xf0c987, 5, 8)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xd8dbe2), 0),
     ];
     const spheres = [
       new PtSphere(new THREE.Vector3(-1.45, 0, 0.1), 0.5, 3),
@@ -287,12 +287,9 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   EmissiveStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(
-        PtMaterialType.Lambert,
-        perlinTexture(0x111722, 0x8b7451, 2.5, 7)
-      ),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.72, 0.18, 0.08)),
-      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xd8e2ee), 0),
+      PtMaterial.legacyLambert(perlinTexture(0x111722, 0x8b7451, 2.5, 7)),
+      PtMaterial.legacyLambert(new THREE.Color(0.72, 0.18, 0.08)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xd8e2ee), 0),
       PtMaterial.emissive(new THREE.Color(1, 0.64, 0.28), 14),
       PtMaterial.emissive(new THREE.Color(0.2, 0.48, 1), 9, true),
     ];
@@ -331,13 +328,10 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   AnalyticLightsStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(
-        PtMaterialType.Lambert,
-        checkerTexture(0x10131a, 0x343d4f, 3.5)
-      ),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xeeeeee)),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x7187a8)),
-      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xd8dde8), 0.08),
+      PtMaterial.legacyLambert(checkerTexture(0x10131a, 0x343d4f, 3.5)),
+      PtMaterial.legacyLambert(new THREE.Color(0xeeeeee)),
+      PtMaterial.legacyLambert(new THREE.Color(0x7187a8)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xd8dde8), 0.08),
     ];
     const spheres = [
       new PtSphere(new THREE.Vector3(-1.65, 0.1, -0.65), 0.6, 1),
@@ -401,10 +395,10 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   EnvironmentStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x777777)),
-      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xf2f2f2), 0),
-      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xc9d3df), 0.32),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0xb85f3c)),
+      PtMaterial.legacyLambert(new THREE.Color(0x777777)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xf2f2f2), 0),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xc9d3df), 0.32),
+      PtMaterial.legacyLambert(new THREE.Color(0xb85f3c)),
     ];
     const spheres = [
       // A mirror, a rough conductor, and a diffuse reference make environment
@@ -442,9 +436,9 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   TriangleStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x183a5a, 0xf0b35a, 5)),
-      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xe7edf5), 0.08),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0x686868)),
+      PtMaterial.legacyLambert(checkerTexture(0x183a5a, 0xf0b35a, 5)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xe7edf5), 0.08),
+      PtMaterial.legacyLambert(new THREE.Color(0x686868)),
     ];
     const floor = new PtQuad(
       new THREE.Vector3(-5, -0.75, 3),
@@ -479,8 +473,8 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   PackedTrianglesStudy: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(PtMaterialType.Lambert, checkerTexture(0x172a3a, 0xd89b4a, 18)),
-      new PtMaterial(PtMaterialType.Metal, new THREE.Color(0xe8edf4), 0.04),
+      PtMaterial.legacyLambert(checkerTexture(0x172a3a, 0xd89b4a, 18)),
+      PtMaterial.legacyFuzzyMetal(new THREE.Color(0xe8edf4), 0.04),
     ];
     const spheres = [new PtSphere(new THREE.Vector3(0, 0.25, -0.8), 0.65, 1)];
     const camera = createFullScreenPerspectiveCamera({
@@ -505,9 +499,9 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 
   CornellBox: () => {
     const materials: PtMaterial[] = [
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.73, 0.73, 0.73)),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.65, 0.05, 0.05)),
-      new PtMaterial(PtMaterialType.Lambert, new THREE.Color(0.12, 0.45, 0.15)),
+      PtMaterial.legacyLambert(new THREE.Color(0.73, 0.73, 0.73)),
+      PtMaterial.legacyLambert(new THREE.Color(0.65, 0.05, 0.05)),
+      PtMaterial.legacyLambert(new THREE.Color(0.12, 0.45, 0.15)),
       PtMaterial.emissive(new THREE.Color(1, 0.88, 0.68), 12),
     ];
     const quads = [

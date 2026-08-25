@@ -2,7 +2,7 @@ import * as THREE from "three";
 import PtSphere from "./PtSphere";
 import PtQuad from "./PtQuad";
 import PtMaterial, { PtMaterialType } from "./PtMaterial";
-import { PtTextureType, type PtTexture } from "./PtTexture";
+import { PtTextureType, texturePreviewColor, type PtTexture } from "./PtTexture";
 import {
   createPointLightNode,
   createDirectionalLightNode,
@@ -399,6 +399,11 @@ export default class PtScene {
     material.map = createPreviewTexture(texture);
     material.color.copy(texture.type === PtTextureType.Constant ? texture.color : new THREE.Color(0xffffff));
     metadata.texture = texture;
+    const input = metadata.materialDefinition.model === PtMaterialType.Emissive
+      ? metadata.materialDefinition.emission.color
+      : metadata.materialDefinition.baseColor;
+    input.texture = texture;
+    input.factor.set(0xffffff);
     material.needsUpdate = true;
   }
 
@@ -440,20 +445,26 @@ function createPreviewMaterial(
 ): PtPreviewMaterial {
   let previewMaterial: PtPreviewMaterial;
   const previewMap = createPreviewTexture(material.texture);
+  const previewInput = material.definition.model === PtMaterialType.Emissive
+    ? material.definition.emission.color
+    : material.definition.baseColor;
+  const previewColor = previewMap
+    ? previewInput.factor
+    : texturePreviewColor(previewInput.texture).clone().multiply(previewInput.factor);
   if (material.type === 0) {
     previewMaterial = new THREE.MeshLambertMaterial({
-      color: material.albedo,
+      color: previewColor,
       map: previewMap,
     });
   } else if (material.type === 1) {
     previewMaterial = new THREE.MeshStandardMaterial({
-      color: material.albedo,
+      color: previewColor,
       map: previewMap,
       roughness: material.fuzz,
     });
   } else if (material.type === 2) {
     previewMaterial = new THREE.MeshPhysicalMaterial({
-      color: material.albedo,
+      color: previewColor,
       map: previewMap,
       metalness: 0,
       roughness: 0,
@@ -464,7 +475,7 @@ function createPreviewMaterial(
     });
   } else if (material.type === PtMaterialType.Emissive) {
     previewMaterial = new THREE.MeshBasicMaterial({
-      color: material.albedo,
+      color: previewColor,
       map: previewMap,
     });
   } else {

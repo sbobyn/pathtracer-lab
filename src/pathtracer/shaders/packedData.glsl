@@ -1,5 +1,5 @@
 const int TRIANGLE_TEXELS = 8;
-const int MATERIAL_TEXELS = 2;
+const int MATERIAL_TEXELS = 4;
 const int TEXTURE_TEXELS = 3;
 
 vec4 readPackedTexel(sampler2D dataTexture, vec2 dataSize, int linearIndex) {
@@ -15,10 +15,12 @@ vec4 readTriangleTexel(int triangleIndex, int texelOffset) {
 Material readMaterial(int materialIndex) {
     int base = materialIndex * MATERIAL_TEXELS;
     vec4 surface = readPackedTexel(uMaterialData, uMaterialDataSize, base);
-    vec4 transport = readPackedTexel(uMaterialData, uMaterialDataSize, base + 1);
+    vec4 baseColor = readPackedTexel(uMaterialData, uMaterialDataSize, base + 1);
+    vec4 emission = readPackedTexel(uMaterialData, uMaterialDataSize, base + 2);
+    vec4 flags = readPackedTexel(uMaterialData, uMaterialDataSize, base + 3);
     return Material(
         int(round(surface.x)), int(round(surface.y)), int(round(surface.z)),
-        surface.w, transport.x, transport.y, transport.z > 0.5
+        baseColor.rgb, emission.rgb, surface.w, baseColor.w, emission.w, flags.x > 0.5
     );
 }
 

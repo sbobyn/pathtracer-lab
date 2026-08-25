@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import * as THREE from "three";
+import { compileGpuMaterial } from "../src/pathtracer/MaterialCompiler.ts";
+import PtMaterial, { PtMaterialModel } from "../src/pathtracer/PtMaterial.ts";
+import { checkerTexture } from "../src/pathtracer/PtTexture.ts";
+
+test("material compilation preserves authored semantics without preview-material state", () => {
+  const material = new PtMaterial({
+    model: PtMaterialModel.LegacyLambert,
+    baseColor: {
+      factor: new THREE.Color(0.5, 0.25, 1),
+      texture: checkerTexture(0x112233, 0xaabbcc, 8),
+    },
+    roughness: 0.2,
+    ior: 1.4,
+    emissionColor: {
+      factor: new THREE.Color(1, 0.5, 0.25),
+      texture: checkerTexture(0xffffff, 0x000000, 2),
+    },
+    emissionStrength: 3,
+    emissionTwoSided: true,
+  });
+
+  const compiled = compileGpuMaterial(material.definition, 7, 9);
+
+  assert.equal(compiled.model, PtMaterialModel.LegacyLambert);
+  assert.equal(compiled.baseColorTextureId, 7);
+  assert.equal(compiled.emissionTextureId, 9);
+  assert.deepEqual(compiled.baseColorFactor.toArray(), [0.5, 0.25, 1]);
+  assert.deepEqual(compiled.emissionFactor.toArray(), [1, 0.5, 0.25]);
+  assert.equal(compiled.roughness, 0.2);
+  assert.equal(compiled.ior, 1.4);
+  assert.equal(compiled.emissionStrength, 3);
+  assert.equal(compiled.emissionTwoSided, true);
+});

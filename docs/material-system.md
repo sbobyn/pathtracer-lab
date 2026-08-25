@@ -50,6 +50,18 @@ changes. Imported ambient-occlusion maps will remain optional compatibility
 data because multiplying baked occlusion into path transport can double-darken
 visibility already discovered by rays.
 
+`evaluateSurface()` resolves material factors and textures once at a hit into
+base color, emission, and a shading normal. BSDF code consumes that evaluated
+surface rather than reaching back into texture storage. A future normal map can
+therefore modify `Surface.shadingNormal` while intersection and visibility keep
+using the geometric normal.
+
+Color factors and color textures enter the renderer in linear working space.
+Three.js marks image color maps as sRGB so texture sampling performs the decode;
+procedural and constant colors are stored as linear values. Future scalar data
+such as roughness, metallic, occlusion, and normal maps must remain non-color
+data and must not receive an sRGB transform.
+
 ## BSDF contract
 
 The shader boundary exposes matching operations for:

@@ -29,6 +29,8 @@ export interface PtColorInput {
   texture: PtTexture;
 }
 
+export type PtColorSource = THREE.Color | PtTexture | PtColorInput;
+
 export interface PtMaterialDefinition {
   model: PtMaterialModel;
   baseColor: PtColorInput;
@@ -43,10 +45,10 @@ export interface PtMaterialDefinition {
 
 export interface PtMaterialOptions {
   model: PtMaterialModel;
-  baseColor?: THREE.Color | PtTexture;
+  baseColor?: PtColorSource;
   roughness?: number;
   ior?: number;
-  emissionColor?: THREE.Color | PtTexture;
+  emissionColor?: PtColorSource;
   emissionStrength?: number;
   emissionTwoSided?: boolean;
 }
@@ -54,11 +56,11 @@ export interface PtMaterialOptions {
 export default class PtMaterial {
   public readonly definition: PtMaterialDefinition;
 
-  public static legacyLambert(baseColor: THREE.Color | PtTexture) {
+  public static legacyLambert(baseColor: PtColorSource) {
     return new PtMaterial({ model: PtMaterialModel.LegacyLambert, baseColor });
   }
 
-  public static legacyFuzzyMetal(baseColor: THREE.Color | PtTexture, roughness = 0) {
+  public static legacyFuzzyMetal(baseColor: PtColorSource, roughness = 0) {
     return new PtMaterial({
       model: PtMaterialModel.LegacyFuzzyMetal,
       baseColor,
@@ -68,7 +70,7 @@ export default class PtMaterial {
 
   public static legacyDielectric(
     ior: number,
-    baseColor: THREE.Color | PtTexture = new THREE.Color(1, 1, 1)
+    baseColor: PtColorSource = new THREE.Color(1, 1, 1)
   ) {
     return new PtMaterial({
       model: PtMaterialModel.LegacyDielectric,
@@ -78,7 +80,7 @@ export default class PtMaterial {
   }
 
   public static emissive(
-    colorOrTexture: THREE.Color | PtTexture,
+    colorOrTexture: PtColorSource,
     strength: number,
     twoSided = false
   ) {
@@ -144,7 +146,10 @@ export default class PtMaterial {
   }
 
   public get albedo(): THREE.Color {
-    return texturePreviewColor(this.texture).clone();
+    const input = this.definition.model === PtMaterialModel.NoBsdf
+      ? this.definition.emission.color
+      : this.definition.baseColor;
+    return texturePreviewColor(input.texture).clone().multiply(input.factor);
   }
 
   public get fuzz(): number {
@@ -164,12 +169,13 @@ export default class PtMaterial {
   }
 }
 
-function colorInput(colorOrTexture: THREE.Color | PtTexture): PtColorInput {
-  const texture = colorOrTexture instanceof THREE.Color
-    ? constantTexture(colorOrTexture)
-    : colorOrTexture;
+function colorInput(source: PtColorSource): PtColorInput {
+  if ("factor" in source && "texture" in source) {
+    return { factor: source.factor.clone(), texture: source.texture };
+  }
+  const texture = source instanceof THREE.Color ? constantTexture(source) : source;
   return {
-    factor: texturePreviewColor(texture).clone(),
+    factor: new THREE.Color(1, 1, 1),
     texture,
   };
 }

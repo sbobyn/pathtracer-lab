@@ -175,7 +175,7 @@ float environmentLightPdf(vec3 direction) {
     return environmentPdf(direction) / float(strategyCount);
 }
 
-vec3 estimateDirectBsdf(World world, Hit hit, Material material, vec3 throughput, vec2 seed) {
+vec3 estimateDirectBsdf(World world, Hit hit, Material material, Surface surface, vec3 throughput, vec2 seed) {
     LightSample light = sampleLight(world, hit.position, seed);
     if (!light.valid) return vec3(0.0);
 
@@ -196,12 +196,12 @@ vec3 estimateDirectBsdf(World world, Hit hit, Material material, vec3 throughput
         lightHit.uv = light.uv;
         lightHit.frontFace = true;
         lightHit.materialId = light.materialId;
-        lightRadiance = lightMaterial.emissionStrength *
-            sampleTexture(lightMaterial.emissionTextureId, lightHit);
+        Surface lightSurface = evaluateSurface(lightMaterial, lightHit);
+        lightRadiance = lightMaterial.emissionStrength * lightSurface.emission;
     }
-    vec3 bsdf = evaluateBsdf(material, hit, light.direction);
+    vec3 bsdf = evaluateBsdf(material, surface, light.direction);
     float weight = uIntegratorMode == 2 && !light.delta
-        ? powerHeuristic(light.pdf, bsdfPdf(material, hit, light.direction))
+        ? powerHeuristic(light.pdf, bsdfPdf(material, surface, light.direction))
         : 1.0;
     return throughput * lightRadiance * bsdf *
         surfaceCosine * weight / light.pdf;

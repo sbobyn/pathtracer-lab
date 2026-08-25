@@ -30,6 +30,35 @@ test("emission is authored independently from the no-BSDF surface model", () => 
   assert.equal(light.texture, light.definition.emission.color.texture);
 });
 
+test("a scattering material can author independent emission", () => {
+  const material = new PtMaterial({
+    model: PtMaterialModel.LegacyLambert,
+    baseColor: new THREE.Color(0.25, 0.5, 0.75),
+    emissionColor: new THREE.Color(1, 0.25, 0),
+    emissionStrength: 3,
+  });
+
+  assert.equal(material.definition.model, PtMaterialModel.LegacyLambert);
+  assert.equal(material.definition.emission.strength, 3);
+  assert.deepEqual(
+    material.definition.emission.color.texture.type === PtTextureType.Constant
+      ? material.definition.emission.color.texture.color.toArray()
+      : [],
+    [1, 0.25, 0]
+  );
+});
+
+test("color factors remain independent from texture inputs", () => {
+  const texture = checkerTexture(0x112233, 0xaabbcc, 8);
+  const material = PtMaterial.legacyLambert({
+    factor: new THREE.Color(0.5, 0.25, 1),
+    texture,
+  });
+
+  assert.equal(material.definition.baseColor.texture, texture);
+  assert.deepEqual(material.definition.baseColor.factor.toArray(), [0.5, 0.25, 1]);
+});
+
 test("the positional constructor remains a temporary legacy adapter", () => {
   const material = new PtMaterial(
     PtMaterialType.Metal,

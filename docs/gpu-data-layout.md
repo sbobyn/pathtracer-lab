@@ -21,18 +21,23 @@ Each triangle occupies eight RGBA texels:
 
 ## Materials
 
-Each material occupies two RGBA texels:
+Each material occupies four RGBA texels:
 
 | Offset | R | G | B | A |
 | --- | --- | --- | --- | --- |
 | 0 | material model | base-color texture ID | emission texture ID | roughness |
-| 1 | index of refraction | emission strength | two-sided emission flag | unused |
+| 1 | base-color factor r | base-color factor g | base-color factor b | index of refraction |
+| 2 | emission factor r | emission factor g | emission factor b | emission strength |
+| 3 | two-sided emission flag | unused | unused | unused |
 
 This is a WebGL storage layout, not the authored material model. `GpuMaterial`
 defines the renderer-level meaning of these fields; a future WebGPU backend may
 encode the same semantics in storage buffers rather than reproduce this texture
-layout. Base color and emission have independent texture references so visible
-emission is not coupled to the surface scattering color.
+layout. Base color and emission have independent factors and texture references,
+so imported factor-times-texture inputs remain intact and visible emission is
+not coupled to the surface scattering color. The deliberately roomy record
+keeps evolving material semantics readable; compact packing can be reconsidered
+only when measurements show it matters.
 
 ## Texture descriptors
 

@@ -50,6 +50,8 @@ export interface GpuMaterial {
   model: PtMaterial["type"];
   baseColorTextureId: number;
   emissionTextureId: number;
+  baseColorFactor: THREE.Color;
+  emissionFactor: THREE.Color;
   roughness: number;
   ior: number;
   emissionStrength: number;

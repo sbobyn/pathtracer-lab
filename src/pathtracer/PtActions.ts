@@ -36,7 +36,7 @@ import {
   PtTextureType,
   type PtTexture,
 } from "./PtTexture";
-import PtMaterial from "./PtMaterial";
+import PtMaterial, { PtMaterialType } from "./PtMaterial";
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
@@ -1107,7 +1107,18 @@ export default class PtActions {
 
   public setMaterialColor(materialId: number, color: THREE.Color) {
     this.beginMaterialEdit(materialId);
-    this.renderer.ptScene.getMaterial(materialId).color.copy(color);
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    material.color.copy(color);
+    const metadata = getMaterialMetadata(material);
+    const input = metadata.materialDefinition.model === PtMaterialType.Emissive
+      ? metadata.materialDefinition.emission.color
+      : metadata.materialDefinition.baseColor;
+    if (input.texture.type === PtTextureType.Constant) {
+      input.texture.color.copy(color);
+      input.factor.set(0xffffff);
+    } else {
+      input.factor.copy(color);
+    }
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} color changed`
@@ -1121,6 +1132,7 @@ export default class PtActions {
     if (material instanceof THREE.MeshStandardMaterial) {
       material.roughness = fuzz;
     }
+    getMaterialMetadata(material).materialDefinition.roughness = fuzz;
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} fuzz changed`
@@ -1132,6 +1144,7 @@ export default class PtActions {
     this.beginMaterialEdit(materialId);
     const material = this.renderer.ptScene.getMaterial(materialId);
     if (material instanceof THREE.MeshPhysicalMaterial) material.ior = ior;
+    getMaterialMetadata(material).materialDefinition.ior = ior;
     this.renderer.invalidate(
       PtInvalidationLevel.Material,
       `material ${materialId} index of refraction changed`
@@ -1143,6 +1156,7 @@ export default class PtActions {
     this.beginMaterialEdit(materialId);
     const metadata = getMaterialMetadata(this.renderer.ptScene.getMaterial(materialId));
     metadata.emissionStrength = strength;
+    metadata.materialDefinition.emission.strength = strength;
     this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} emission changed`);
     this.publishSelection();
   }
@@ -1615,17 +1629,21 @@ export default class PtActions {
     const metadata = getMaterialMetadata(material);
     metadata.emissionStrength = snapshot.emissionStrength;
     metadata.emissionTwoSided = snapshot.emissionTwoSided;
+    metadata.materialDefinition.emission.strength = snapshot.emissionStrength;
+    metadata.materialDefinition.emission.twoSided = snapshot.emissionTwoSided;
     if (
       snapshot.roughness !== undefined &&
       material instanceof THREE.MeshStandardMaterial
     ) {
       material.roughness = snapshot.roughness;
+      metadata.materialDefinition.roughness = snapshot.roughness;
     }
     if (
       snapshot.ior !== undefined &&
       material instanceof THREE.MeshPhysicalMaterial
     ) {
       material.ior = snapshot.ior;
+      metadata.materialDefinition.ior = snapshot.ior;
     }
     if (
       this.selectedObject &&

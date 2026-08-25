@@ -8,7 +8,6 @@ import GpuScene, {
   type GpuTriangle,
   type GpuTexture,
 } from "./GpuScene";
-import PtMaterial from "./PtMaterial";
 import { PtTextureType, type PtTexture } from "./PtTexture";
 import { PtInvalidationLevel } from "./PtInvalidation";
 import PtScene, {
@@ -17,6 +16,7 @@ import PtScene, {
   type PtPreviewMaterial,
 } from "./PtScene";
 import { buildTriangleBvh } from "./TriangleBvh";
+import { compileGpuMaterial } from "./MaterialCompiler";
 
 export default class SceneCompiler {
   public compile(scene: PtScene): GpuScene {
@@ -136,13 +136,10 @@ export default class SceneCompiler {
         material,
         imageTextures
       ));
-      return this.compileMaterial(
-        material,
-        metadata.materialType,
+      return compileGpuMaterial(
+        metadata.materialDefinition,
         baseColorTextureId,
-        emissionTextureId,
-        metadata.emissionStrength,
-        metadata.emissionTwoSided
+        emissionTextureId
       );
     });
     return { materials, textures, imageTextures };
@@ -197,30 +194,12 @@ export default class SceneCompiler {
     };
   }
 
-  private compileMaterial(
-    material: PtPreviewMaterial,
-    materialType: PtMaterial["type"],
-    baseColorTextureId: number,
-    emissionTextureId: number,
-    emissionStrength: number,
-    emissionTwoSided: boolean
-  ): GpuMaterial {
-    return {
-      model: materialType,
-      baseColorTextureId,
-      emissionTextureId,
-      roughness: material instanceof THREE.MeshStandardMaterial ? material.roughness : 0,
-      ior: material instanceof THREE.MeshPhysicalMaterial ? material.ior : 0,
-      emissionStrength,
-      emissionTwoSided,
-    };
-  }
-
   private compileLights(scene: PtScene): GpuLight[] {
     const lights: GpuLight[] = [];
     scene.getSphereMeshes().forEach((mesh) => {
       const metadata = getMaterialMetadata(mesh.material);
-      if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
+      const definition = metadata.materialDefinition;
+      if (definition.emission.strength <= 0) return;
       const radius = sphereRadius(mesh);
       lights.push({
         kind: 0,
@@ -228,7 +207,7 @@ export default class SceneCompiler {
         primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
         materialId: metadata.materialId,
         area: 4 * Math.PI * radius * radius,
-        emissionTwoSided: metadata.emissionTwoSided,
+        emissionTwoSided: definition.emission.twoSided,
         position: new THREE.Vector3(),
         direction: new THREE.Vector3(),
         color: new THREE.Color(),
@@ -240,14 +219,15 @@ export default class SceneCompiler {
     });
     scene.getQuadMeshes().forEach((mesh) => {
       const metadata = getMaterialMetadata(mesh.material);
-      if (metadata.materialType !== 3 || metadata.emissionStrength <= 0) return;
+      const definition = metadata.materialDefinition;
+      if (definition.emission.strength <= 0) return;
       lights.push({
         kind: 1,
         primitiveType: 1,
         primitiveIndex: mesh.userData.pathTracer.primitiveIndex,
         materialId: metadata.materialId,
         area: Math.abs(mesh.scale.x * mesh.scale.y),
-        emissionTwoSided: metadata.emissionTwoSided,
+        emissionTwoSided: definition.emission.twoSided,
         position: new THREE.Vector3(),
         direction: new THREE.Vector3(),
         color: new THREE.Color(),

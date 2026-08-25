@@ -9,7 +9,8 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
         bool didHit = hitWorld(world, ray, Interval(1e-3, 1e4), hit);
         if (didHit) {
             Material material = readMaterial(hit.materialId);
-            vec3 emission = emitted(material, hit);
+            Surface surface = evaluateSurface(material, hit);
+            vec3 emission = emitted(material, surface, hit);
             if (material.emissionStrength > 0.0) {
                 float emissionWeight = 1.0;
                 if (previousWasNonDelta && uIntegratorMode == 1) {
@@ -31,13 +32,14 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                     world,
                     hit,
                     material,
+                    surface,
                     throughput,
                     bounceSeed + vec2(131.0, 197.0)
                 );
             }
 
             previousOrigin = hit.position;
-            BsdfSample bsdfSample = sampleBsdf(ray, hit, material, bounceSeed);
+            BsdfSample bsdfSample = sampleBsdf(ray, hit, material, surface, bounceSeed);
             if (!bsdfSample.valid) break;
             ray.origin = hit.position;
             ray.direction = bsdfSample.direction;

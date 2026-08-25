@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import PtMaterial, { PtMaterialType } from "./PtMaterial";
+import PtMaterial from "./PtMaterial";
 import { imageTexture } from "./PtTexture";
 
 /** Translate the currently supported portion of a core glTF PBR material.
@@ -30,9 +30,9 @@ export function translateStaticGltfMaterial(material: THREE.Material): PtMateria
     ? imageTexture(textureSource(material.map), material.color, material.map)
     : material.color.clone();
   if (material.metalness >= 0.5) {
-    return new PtMaterial(PtMaterialType.Metal, albedo, material.roughness);
+    return PtMaterial.legacyFuzzyMetal(albedo, material.roughness);
   }
-  return new PtMaterial(PtMaterialType.Lambert, albedo);
+  return PtMaterial.legacyLambert(albedo);
 }
 
 function textureSource(texture: THREE.Texture): string {

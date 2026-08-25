@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { GpuMaterial, GpuTexture } from "./GpuScene";
 
-export const MATERIAL_TEXELS = 2;
+export const MATERIAL_TEXELS = 4;
 export const TEXTURE_TEXELS = 3;
 
 export interface PackedDataTexture {
@@ -18,11 +18,18 @@ export function packMaterialTexture(materials: readonly GpuMaterial[], maxTextur
       material.roughness,
     ], base);
     data.set([
+      material.baseColorFactor.r,
+      material.baseColorFactor.g,
+      material.baseColorFactor.b,
       material.ior,
-      material.emissionStrength,
-      material.emissionTwoSided ? 1 : 0,
-      0,
     ], base + 4);
+    data.set([
+      material.emissionFactor.r,
+      material.emissionFactor.g,
+      material.emissionFactor.b,
+      material.emissionStrength,
+    ], base + 8);
+    data.set([material.emissionTwoSided ? 1 : 0, 0, 0, 0], base + 12);
   }, "Material");
 }
 
