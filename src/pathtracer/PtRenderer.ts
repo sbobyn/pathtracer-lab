@@ -813,6 +813,11 @@ export default class PtRenderer {
     loaded.then(() => {
       if (this.ptScene.staticAssetsLoaded !== loaded) return;
       this.invalidate(PtInvalidationLevel.Scene, "static glTF loaded");
+      // Static glTF triangles arrive after the renderer's initial debug helpers
+      // are created. Rebuild the CPU overlays from the newly compiled geometry
+      // and BVH so wireframes and bounds describe the loaded asset.
+      this.setupTriangleWireframes();
+      this.setupBvhHelpers();
       this.staticSceneLoadedListener?.();
     }).catch((error) => console.error("Failed to load static glTF", error));
   }
