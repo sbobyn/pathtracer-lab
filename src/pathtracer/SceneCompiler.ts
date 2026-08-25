@@ -124,12 +124,23 @@ export default class SceneCompiler {
       if (metadata.materialId !== uniformIndex) {
         throw new Error(`Material IDs must be contiguous: ${metadata.materialId}`);
       }
-      const textureId = textures.length;
-      textures.push(this.compileTexture(metadata.texture, material, imageTextures));
+      const baseColorTextureId = textures.length;
+      textures.push(this.compileTexture(
+        metadata.materialDefinition.baseColor.texture,
+        material,
+        imageTextures
+      ));
+      const emissionTextureId = textures.length;
+      textures.push(this.compileTexture(
+        metadata.materialDefinition.emission.color.texture,
+        material,
+        imageTextures
+      ));
       return this.compileMaterial(
         material,
         metadata.materialType,
-        textureId,
+        baseColorTextureId,
+        emissionTextureId,
         metadata.emissionStrength,
         metadata.emissionTwoSided
       );
@@ -153,9 +164,10 @@ export default class SceneCompiler {
       };
     }
     if (texture.type === PtTextureType.Image) {
-      if (!previewMaterial.map) throw new Error("Image texture is not loaded by its preview material");
+      const runtimeTexture = texture.runtimeTexture ?? previewMaterial.map;
+      if (!runtimeTexture) throw new Error("Image texture is not loaded by its preview material");
       const imageId = imageTextures.length;
-      imageTextures.push(previewMaterial.map);
+      imageTextures.push(runtimeTexture);
       return {
         type: GpuTextureType.Image,
         colorA: texture.tint.clone(),
@@ -177,7 +189,7 @@ export default class SceneCompiler {
     }
     return {
       type: GpuTextureType.Constant,
-      colorA: previewMaterial.color.clone(),
+      colorA: texture.color.clone(),
       colorB: new THREE.Color(),
       scale: 1,
       turbulence: 0,
@@ -188,14 +200,16 @@ export default class SceneCompiler {
   private compileMaterial(
     material: PtPreviewMaterial,
     materialType: PtMaterial["type"],
-    textureId: number,
+    baseColorTextureId: number,
+    emissionTextureId: number,
     emissionStrength: number,
     emissionTwoSided: boolean
   ): GpuMaterial {
     return {
-      type: materialType,
-      textureId,
-      fuzz: material instanceof THREE.MeshStandardMaterial ? material.roughness : 0,
+      model: materialType,
+      baseColorTextureId,
+      emissionTextureId,
+      roughness: material instanceof THREE.MeshStandardMaterial ? material.roughness : 0,
       ior: material instanceof THREE.MeshPhysicalMaterial ? material.ior : 0,
       emissionStrength,
       emissionTwoSided,

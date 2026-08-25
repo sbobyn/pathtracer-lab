@@ -36,17 +36,17 @@ vec3 scatterDielectric(Ray incomingRay, Hit hit, vec2 seed) {
 
 vec3 scatter(Ray incomingRay, Hit hit, vec2 seed) {
     Material material = readMaterial(hit.materialId);
-    if (material.type == 0) return scatterLambert(hit, seed);
-    if (material.type == 1) return scatterMetal(incomingRay, hit, seed, material.fuzz);
-    if (material.type == 2) return scatterDielectric(incomingRay, hit, seed);
+    if (material.model == 0) return scatterLambert(hit, seed);
+    if (material.model == 1) return scatterMetal(incomingRay, hit, seed, material.roughness);
+    if (material.model == 2) return scatterDielectric(incomingRay, hit, seed);
     return vec3(0.0);
 }
 
 bool materialScatters(Material material) {
-    return material.type != 3;
+    return material.model != 3;
 }
 
 vec3 emitted(Material material, Hit hit) {
-    if (material.type != 3 || (!material.emissionTwoSided && !hit.frontFace)) return vec3(0.0);
-    return material.emissionStrength * sampleTexture(material.textureId, hit);
+    if (material.emissionStrength <= 0.0 || (!material.emissionTwoSided && !hit.frontFace)) return vec3(0.0);
+    return material.emissionStrength * sampleTexture(material.emissionTextureId, hit);
 }

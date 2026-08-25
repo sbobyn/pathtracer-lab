@@ -10,7 +10,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
         if (didHit) {
             Material material = readMaterial(hit.materialId);
             vec3 emission = emitted(material, hit);
-            if (material.type == 3) {
+            if (material.emissionStrength > 0.0) {
                 float emissionWeight = 1.0;
                 if (previousWasLambert && uIntegratorMode == 1) {
                     emissionWeight = 0.0;
@@ -26,7 +26,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                 17.0 * float(depth) + 11.0,
                 59.0 * float(depth) + 23.0
             );
-            if (material.type == 0 && uIntegratorMode != 0) {
+            if (material.model == 0 && uIntegratorMode != 0) {
                 radiance += estimateDirectLambert(
                     world,
                     hit,
@@ -39,11 +39,11 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
             previousOrigin = hit.position;
             ray.origin = hit.position;
             ray.direction = scatter(ray, hit, bounceSeed);
-            previousWasLambert = material.type == 0;
+            previousWasLambert = material.model == 0;
             previousBsdfPdf = previousWasLambert
                 ? lambertPdf(hit.normal, ray.direction)
                 : 0.0;
-            throughput *= sampleTexture(material.textureId, hit);
+            throughput *= sampleTexture(material.baseColorTextureId, hit);
         } else {
             vec3 unitDirection = normalize(ray.direction);
             bool sampleEnvironment = uEnvironmentEnabled && (

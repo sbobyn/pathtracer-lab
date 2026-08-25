@@ -11,8 +11,18 @@ export interface PackedDataTexture {
 
 export function packMaterialTexture(materials: readonly GpuMaterial[], maxTextureSize: number) {
   return packRecords(materials, MATERIAL_TEXELS, maxTextureSize, (data, base, material) => {
-    data.set([material.type, material.textureId, material.fuzz, material.ior], base);
-    data.set([material.emissionStrength, material.emissionTwoSided ? 1 : 0, 0, 0], base + 4);
+    data.set([
+      material.model,
+      material.baseColorTextureId,
+      material.emissionTextureId,
+      material.roughness,
+    ], base);
+    data.set([
+      material.ior,
+      material.emissionStrength,
+      material.emissionTwoSided ? 1 : 0,
+      0,
+    ], base + 4);
   }, "Material");
 }
 

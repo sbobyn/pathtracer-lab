@@ -47,9 +47,10 @@ export interface GpuTexture {
 }
 
 export interface GpuMaterial {
-  type: PtMaterial["type"];
-  textureId: number;
-  fuzz: number;
+  model: PtMaterial["type"];
+  baseColorTextureId: number;
+  emissionTextureId: number;
+  roughness: number;
   ior: number;
   emissionStrength: number;
   emissionTwoSided: boolean;

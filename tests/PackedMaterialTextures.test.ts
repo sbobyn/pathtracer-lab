@@ -6,11 +6,11 @@ import type { GpuMaterial, GpuTexture } from "../src/pathtracer/GpuScene.ts";
 
 test("material packing follows the documented two-texel layout", () => {
   const material: GpuMaterial = {
-    type: 3, textureId: 4, fuzz: 0.25, ior: 1.5,
+    model: 3, baseColorTextureId: 4, emissionTextureId: 5, roughness: 0.25, ior: 1.5,
     emissionStrength: 7, emissionTwoSided: true,
   };
   const packed = packMaterialTexture([material], 64);
-  assert.deepEqual(Array.from(packed.texture.image.data as Float32Array).slice(0, 8), [3, 4, 0.25, 1.5, 7, 1, 0, 0]);
+  assert.deepEqual(Array.from(packed.texture.image.data as Float32Array).slice(0, 8), [3, 4, 5, 0.25, 1.5, 7, 1, 0]);
   packed.texture.dispose();
 });
 

@@ -14,11 +14,11 @@ vec4 readTriangleTexel(int triangleIndex, int texelOffset) {
 
 Material readMaterial(int materialIndex) {
     int base = materialIndex * MATERIAL_TEXELS;
-    vec4 properties = readPackedTexel(uMaterialData, uMaterialDataSize, base);
-    vec4 emission = readPackedTexel(uMaterialData, uMaterialDataSize, base + 1);
+    vec4 surface = readPackedTexel(uMaterialData, uMaterialDataSize, base);
+    vec4 transport = readPackedTexel(uMaterialData, uMaterialDataSize, base + 1);
     return Material(
-        int(round(properties.x)), int(round(properties.y)),
-        properties.z, properties.w, emission.x, emission.y > 0.5
+        int(round(surface.x)), int(round(surface.y)), int(round(surface.z)),
+        surface.w, transport.x, transport.y, transport.z > 0.5
     );
 }
 

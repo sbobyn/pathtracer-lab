@@ -1655,7 +1655,15 @@ export default class PtActions {
     this.publishHistory();
   }
 
-  private updateProceduralTexture(materialId: number, update: (texture: Extract<PtTexture, { type: PtTextureType.Checker | PtTextureType.Perlin }>) => void) {
+  private updateProceduralTexture(
+    materialId: number,
+    update: (
+      texture: Extract<
+        PtTexture,
+        { type: typeof PtTextureType.Checker | typeof PtTextureType.Perlin }
+      >
+    ) => void
+  ) {
     this.beginMaterialEdit(materialId);
     const metadata = getMaterialMetadata(this.renderer.ptScene.getMaterial(materialId));
     if (metadata.texture.type !== PtTextureType.Checker && metadata.texture.type !== PtTextureType.Perlin) return;

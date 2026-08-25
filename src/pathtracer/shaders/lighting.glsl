@@ -201,9 +201,9 @@ vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 through
         lightHit.frontFace = true;
         lightHit.materialId = light.materialId;
         lightRadiance = lightMaterial.emissionStrength *
-            sampleTexture(lightMaterial.textureId, lightHit);
+            sampleTexture(lightMaterial.emissionTextureId, lightHit);
     }
-    vec3 albedo = sampleTexture(material.textureId, hit);
+    vec3 albedo = sampleTexture(material.baseColorTextureId, hit);
     float weight = uIntegratorMode == 2 && !light.delta
         ? powerHeuristic(light.pdf, lambertPdf(hit.normal, light.direction))
         : 1.0;

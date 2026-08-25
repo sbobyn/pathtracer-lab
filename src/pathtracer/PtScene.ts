@@ -479,6 +479,7 @@ function createPreviewMaterial(
     texture: material.texture,
     emissionStrength: material.emissionStrength,
     emissionTwoSided: material.emissionTwoSided,
+    materialDefinition: material.definition,
   };
   return previewMaterial;
 }
@@ -517,6 +518,7 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
   texture: PtTexture;
   emissionStrength: number;
   emissionTwoSided: boolean;
+  materialDefinition: PtMaterial["definition"];
 } {
   const metadata = material.userData.pathTracer;
   if (
@@ -524,7 +526,8 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
     typeof metadata?.materialType !== "number" ||
     !metadata.texture ||
     typeof metadata.emissionStrength !== "number" ||
-    typeof metadata.emissionTwoSided !== "boolean"
+    typeof metadata.emissionTwoSided !== "boolean" ||
+    !metadata.materialDefinition
   ) {
     throw new TypeError("Material is missing path-tracing metadata");
   }

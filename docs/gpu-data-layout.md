@@ -25,8 +25,14 @@ Each material occupies two RGBA texels:
 
 | Offset | R | G | B | A |
 | --- | --- | --- | --- | --- |
-| 0 | type | texture ID | fuzz | index of refraction |
-| 1 | emission strength | two-sided emission flag | unused | unused |
+| 0 | material model | base-color texture ID | emission texture ID | roughness |
+| 1 | index of refraction | emission strength | two-sided emission flag | unused |
+
+This is a WebGL storage layout, not the authored material model. `GpuMaterial`
+defines the renderer-level meaning of these fields; a future WebGPU backend may
+encode the same semantics in storage buffers rather than reproduce this texture
+layout. Base color and emission have independent texture references so visible
+emission is not coupled to the surface scattering color.
 
 ## Texture descriptors
 

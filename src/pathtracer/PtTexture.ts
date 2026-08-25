@@ -1,28 +1,30 @@
 import * as THREE from "three";
 
-export enum PtTextureType {
-  Constant = 0,
-  Checker = 1,
-  Image = 2,
-  Perlin = 3,
-}
+export const PtTextureType = {
+  Constant: 0,
+  Checker: 1,
+  Image: 2,
+  Perlin: 3,
+} as const;
+
+export type PtTextureType = (typeof PtTextureType)[keyof typeof PtTextureType];
 
 export type PtTexture =
-  | { type: PtTextureType.Constant; color: THREE.Color }
+  | { type: typeof PtTextureType.Constant; color: THREE.Color }
   | {
-      type: PtTextureType.Checker;
+      type: typeof PtTextureType.Checker;
       colorA: THREE.Color;
       colorB: THREE.Color;
       scale: number;
     }
   | {
-      type: PtTextureType.Image;
+      type: typeof PtTextureType.Image;
       source: string;
       tint: THREE.Color;
       runtimeTexture?: THREE.Texture;
     }
   | {
-      type: PtTextureType.Perlin;
+      type: typeof PtTextureType.Perlin;
       colorA: THREE.Color;
       colorB: THREE.Color;
       scale: number;
