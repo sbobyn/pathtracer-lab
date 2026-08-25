@@ -52,7 +52,7 @@ visibility already discovered by rays.
 
 ## BSDF contract
 
-The mature shader boundary will expose matching operations for:
+The shader boundary exposes matching operations for:
 
 - evaluating a BSDF for two directions;
 - sampling a direction and returning its BSDF value;
@@ -61,9 +61,13 @@ The mature shader boundary will expose matching operations for:
 - evaluating emitted radiance independently.
 
 Direct-light sampling and multiple importance sampling require the evaluator,
-sampler, and PDF to describe the same distribution. The current direction-only
-legacy `scatter()` functions remain during migration, then become implementations
-behind that explicit contract.
+sampler, and PDF to describe the same distribution. `sampleBsdf()` returns a
+direction, throughput weight, PDF, validity, and delta classification;
+`evaluateBsdf()` and `bsdfPdf()` provide the matching queries used by explicit
+light sampling. The legacy Lambert, fuzzy-metal, and dielectric algorithms are
+implementations behind this boundary. Lambert currently has matching evaluation
+and PDF support, while the two specular learning models are explicitly marked as
+delta samples until their physically based successors are introduced.
 
 ## Backend boundary
 

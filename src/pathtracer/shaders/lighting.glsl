@@ -22,10 +22,6 @@ float powerHeuristic(float pdfA, float pdfB) {
     return a2 / max(a2 + b2, 1e-12);
 }
 
-float lambertPdf(vec3 normal, vec3 direction) {
-    return max(dot(normal, direction), 0.0) / PI;
-}
-
 vec3 sampleCone(vec3 axis, float cosThetaMax, vec2 seed) {
     float cosTheta = mix(cosThetaMax, 1.0, seed.x);
     float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
@@ -179,7 +175,7 @@ float environmentLightPdf(vec3 direction) {
     return environmentPdf(direction) / float(strategyCount);
 }
 
-vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 throughput, vec2 seed) {
+vec3 estimateDirectBsdf(World world, Hit hit, Material material, vec3 throughput, vec2 seed) {
     LightSample light = sampleLight(world, hit.position, seed);
     if (!light.valid) return vec3(0.0);
 
@@ -203,10 +199,10 @@ vec3 estimateDirectLambert(World world, Hit hit, Material material, vec3 through
         lightRadiance = lightMaterial.emissionStrength *
             sampleTexture(lightMaterial.emissionTextureId, lightHit);
     }
-    vec3 albedo = sampleTexture(material.baseColorTextureId, hit);
+    vec3 bsdf = evaluateBsdf(material, hit, light.direction);
     float weight = uIntegratorMode == 2 && !light.delta
-        ? powerHeuristic(light.pdf, lambertPdf(hit.normal, light.direction))
+        ? powerHeuristic(light.pdf, bsdfPdf(material, hit, light.direction))
         : 1.0;
-    return throughput * lightRadiance * (albedo / PI) *
+    return throughput * lightRadiance * bsdf *
         surfaceCosine * weight / light.pdf;
 }

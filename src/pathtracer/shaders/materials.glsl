@@ -34,12 +34,47 @@ vec3 scatterDielectric(Ray incomingRay, Hit hit, vec2 seed) {
         : refract(unitDirection, hit.normal, ratio);
 }
 
-vec3 scatter(Ray incomingRay, Hit hit, vec2 seed) {
-    Material material = readMaterial(hit.materialId);
-    if (material.model == 0) return scatterLambert(hit, seed);
-    if (material.model == 1) return scatterMetal(incomingRay, hit, seed, material.roughness);
-    if (material.model == 2) return scatterDielectric(incomingRay, hit, seed);
-    return vec3(0.0);
+float bsdfPdf(Material material, Hit hit, vec3 outgoingDirection) {
+    if (material.model != 0) return 0.0;
+    return max(dot(hit.normal, outgoingDirection), 0.0) / PI;
+}
+
+vec3 evaluateBsdf(Material material, Hit hit, vec3 outgoingDirection) {
+    if (material.model != 0) return vec3(0.0);
+    if (dot(hit.normal, outgoingDirection) <= 0.0) return vec3(0.0);
+    return sampleTexture(material.baseColorTextureId, hit) / PI;
+}
+
+BsdfSample sampleBsdf(Ray incomingRay, Hit hit, Material material, vec2 seed) {
+    BsdfSample result;
+    result.direction = vec3(0.0);
+    result.weight = vec3(0.0);
+    result.pdf = 0.0;
+    result.delta = false;
+    result.valid = false;
+
+    if (material.model == 0) {
+        result.direction = scatterLambert(hit, seed);
+        result.pdf = bsdfPdf(material, hit, result.direction);
+        result.weight = sampleTexture(material.baseColorTextureId, hit);
+        result.valid = result.pdf > 0.0;
+        return result;
+    }
+    if (material.model == 1) {
+        result.direction = scatterMetal(incomingRay, hit, seed, material.roughness);
+        result.weight = sampleTexture(material.baseColorTextureId, hit);
+        result.delta = true;
+        result.valid = true;
+        return result;
+    }
+    if (material.model == 2) {
+        result.direction = scatterDielectric(incomingRay, hit, seed);
+        result.weight = sampleTexture(material.baseColorTextureId, hit);
+        result.delta = true;
+        result.valid = true;
+        return result;
+    }
+    return result;
 }
 
 bool materialScatters(Material material) {

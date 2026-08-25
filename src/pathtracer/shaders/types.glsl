@@ -6,6 +6,7 @@ struct Triangle { vec3 a; vec3 b; vec3 c; vec3 normalA; vec3 normalB; vec3 norma
 struct Light { int kind; int primitiveType; int primitiveIndex; int materialId; float area; bool emissionTwoSided; vec3 position; vec3 direction; vec3 color; float intensity; float angularDiameter; float innerConeCos; float outerConeCos; };
 struct World { Sphere spheres[MAX_SPHERES]; Quad quads[MAX_QUADS]; };
 struct Material { int model; int baseColorTextureId; int emissionTextureId; float roughness; float ior; float emissionStrength; bool emissionTwoSided; };
+struct BsdfSample { vec3 direction; vec3 weight; float pdf; bool delta; bool valid; };
 struct Texture { int type; vec3 colorA; vec3 colorB; float scale; float turbulence; int imageId; };
 struct Hit { float t; vec3 position; vec3 normal; vec3 geometricNormal; vec3 shadingNormal; vec3 barycentrics; vec2 uv; bool frontFace; int materialId; int primitiveType; int primitiveId; };
 struct Interval { float min; float max; };

@@ -4,7 +4,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
     vec3 throughput = vec3(1.0);
     vec3 previousOrigin = ray.origin;
     float previousBsdfPdf = 0.0;
-    bool previousWasLambert = false;
+    bool previousWasNonDelta = false;
     for (int depth = 0; depth < uMaxRayDepth; depth++) {
         bool didHit = hitWorld(world, ray, Interval(1e-3, 1e4), hit);
         if (didHit) {
@@ -12,9 +12,9 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
             vec3 emission = emitted(material, hit);
             if (material.emissionStrength > 0.0) {
                 float emissionWeight = 1.0;
-                if (previousWasLambert && uIntegratorMode == 1) {
+                if (previousWasNonDelta && uIntegratorMode == 1) {
                     emissionWeight = 0.0;
-                } else if (previousWasLambert && uIntegratorMode == 2) {
+                } else if (previousWasNonDelta && uIntegratorMode == 2) {
                     float lightPdf = lightPdfForHit(previousOrigin, hit);
                     emissionWeight = powerHeuristic(previousBsdfPdf, lightPdf);
                 }
@@ -27,7 +27,7 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                 59.0 * float(depth) + 23.0
             );
             if (material.model == 0 && uIntegratorMode != 0) {
-                radiance += estimateDirectLambert(
+                radiance += estimateDirectBsdf(
                     world,
                     hit,
                     material,
@@ -37,13 +37,13 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
             }
 
             previousOrigin = hit.position;
+            BsdfSample bsdfSample = sampleBsdf(ray, hit, material, bounceSeed);
+            if (!bsdfSample.valid) break;
             ray.origin = hit.position;
-            ray.direction = scatter(ray, hit, bounceSeed);
-            previousWasLambert = material.model == 0;
-            previousBsdfPdf = previousWasLambert
-                ? lambertPdf(hit.normal, ray.direction)
-                : 0.0;
-            throughput *= sampleTexture(material.baseColorTextureId, hit);
+            ray.direction = bsdfSample.direction;
+            previousWasNonDelta = !bsdfSample.delta;
+            previousBsdfPdf = bsdfSample.pdf;
+            throughput *= bsdfSample.weight;
         } else {
             vec3 unitDirection = normalize(ray.direction);
             bool sampleEnvironment = uEnvironmentEnabled && (
@@ -52,9 +52,9 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
             );
             if (sampleEnvironment) {
                 float environmentWeight = 1.0;
-                if (depth > 0 && previousWasLambert && uIntegratorMode == 1) {
+                if (depth > 0 && previousWasNonDelta && uIntegratorMode == 1) {
                     environmentWeight = 0.0;
-                } else if (depth > 0 && previousWasLambert && uIntegratorMode == 2) {
+                } else if (depth > 0 && previousWasNonDelta && uIntegratorMode == 2) {
                     environmentWeight = powerHeuristic(
                         previousBsdfPdf,
                         environmentLightPdf(unitDirection)
