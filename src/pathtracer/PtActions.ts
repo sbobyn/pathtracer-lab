@@ -115,7 +115,10 @@ export default class PtActions {
         },
       }));
     });
-    this.renderer.onStaticSceneLoaded(() => this.publishSceneObjects());
+    this.renderer.onStaticSceneLoaded(() => {
+      this.publishSceneObjects();
+      this.publishImportWarnings();
+    });
     this.configureTransformControls();
     this.publishSceneObjects();
   }
@@ -251,6 +254,7 @@ export default class PtActions {
       },
       selection: this.emptySelection(),
       sceneObjects: this.createSceneObjectState(sceneKey),
+      importWarnings: [...scene.staticAssetWarnings],
       bvhTraversal: {
         armed: false,
         step: -1,
@@ -1631,6 +1635,11 @@ export default class PtActions {
   private publishSceneObjects() {
     const sceneObjects = this.createSceneObjectState();
     this.store.update((state) => ({ ...state, sceneObjects }));
+  }
+
+  private publishImportWarnings() {
+    const importWarnings = [...this.renderer.ptScene.staticAssetWarnings];
+    this.store.update((state) => ({ ...state, importWarnings }));
   }
 
   private captureTransform(object: PtEditableObject): TransformSnapshot {

@@ -308,6 +308,12 @@ function SceneSettings({
         layout="horizontal"
         onChange={(value) => actions.setScene(value)}
       />
+      {state.importWarnings.length > 0 && (
+        <div className="import-warning" role="status">
+          <strong>glTF fallback</strong>
+          {state.importWarnings.map((warning) => <span key={warning}>{warning}</span>)}
+        </div>
+      )}
       <SelectField
         label="Environment"
         value={state.settings.environmentMode === "gradient" ? "gradient" : state.settings.environmentSource}

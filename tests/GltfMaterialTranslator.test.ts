@@ -40,3 +40,21 @@ test("glTF physical materials preserve authored IOR", () => {
   const source = new THREE.MeshPhysicalMaterial({ ior: 1.33 });
   assert.equal(translateStaticGltfMaterial(source).definition.ior, 1.33);
 });
+
+test("unsupported UV sets and texture transforms fail explicitly", () => {
+  const uv1Material = new THREE.MeshStandardMaterial();
+  uv1Material.map = new THREE.Texture();
+  uv1Material.map.channel = 1;
+  assert.throws(
+    () => translateStaticGltfMaterial(uv1Material),
+    /TEXCOORD_1.*TEXCOORD_0/
+  );
+
+  const transformedMaterial = new THREE.MeshStandardMaterial();
+  transformedMaterial.map = new THREE.Texture();
+  transformedMaterial.map.offset.set(0.25, 0);
+  assert.throws(
+    () => translateStaticGltfMaterial(transformedMaterial),
+    /KHR_texture_transform/
+  );
+});

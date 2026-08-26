@@ -7,6 +7,10 @@ export function translateStaticGltfMaterial(material: THREE.Material): PtMateria
   if (!(material instanceof THREE.MeshStandardMaterial)) {
     throw new TypeError(`Unsupported glTF material type: ${material.type}`);
   }
+  validateTexture(material.map, "base color");
+  validateTexture(material.metalnessMap, "metallic-roughness");
+  validateTexture(material.roughnessMap, "metallic-roughness");
+  validateTexture(material.emissiveMap, "emission");
   const baseColor = material.map
     ? {
         factor: material.color.clone(),
@@ -38,6 +42,25 @@ export function translateStaticGltfMaterial(material: THREE.Material): PtMateria
     emissionStrength: material.emissiveIntensity,
     emissionTwoSided: material.side === THREE.DoubleSide,
   });
+}
+
+function validateTexture(texture: THREE.Texture | null, semantic: string) {
+  if (!texture) return;
+  if (texture.channel !== 0) {
+    throw new Error(
+      `Unsupported ${semantic} texture UV set: TEXCOORD_${texture.channel}. ` +
+      "The static glTF path currently supports TEXCOORD_0 only."
+    );
+  }
+  if (texture.mapping !== THREE.UVMapping) {
+    throw new Error(`Unsupported ${semantic} texture mapping: ${texture.mapping}`);
+  }
+  texture.updateMatrix();
+  if (!texture.matrix.equals(new THREE.Matrix3())) {
+    throw new Error(
+      `Unsupported ${semantic} texture transform. KHR_texture_transform is deferred from the core glTF slice.`
+    );
+  }
 }
 
 function textureSource(texture: THREE.Texture): string {

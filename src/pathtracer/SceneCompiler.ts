@@ -18,6 +18,8 @@ import PtScene, {
 import { buildTriangleBvh } from "./TriangleBvh";
 import { compileGpuMaterial } from "./MaterialCompiler";
 
+export const MAX_WEBGL_IMAGE_TEXTURES = 4;
+
 export default class SceneCompiler {
   public compile(scene: PtScene): GpuScene {
     const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
@@ -119,6 +121,7 @@ export default class SceneCompiler {
   } {
     const textures: GpuTexture[] = [];
     const imageTextures: THREE.Texture[] = [];
+    const imageTextureIds = new Map<THREE.Texture, number>();
     const materials = scene.getMaterials().map((material, uniformIndex) => {
       const metadata = getMaterialMetadata(material);
       if (metadata.materialId !== uniformIndex) {
@@ -128,19 +131,22 @@ export default class SceneCompiler {
       textures.push(this.compileTexture(
         metadata.materialDefinition.baseColor.texture,
         material,
-        imageTextures
+        imageTextures,
+        imageTextureIds
       ));
       const emissionTextureId = textures.length;
       textures.push(this.compileTexture(
         metadata.materialDefinition.emission.color.texture,
         material,
-        imageTextures
+        imageTextures,
+        imageTextureIds
       ));
       const metallicRoughnessTextureId = textures.length;
       textures.push(this.compileTexture(
         metadata.materialDefinition.metallicRoughnessTexture,
         material,
-        imageTextures
+        imageTextures,
+        imageTextureIds
       ));
       return compileGpuMaterial(
         metadata.materialDefinition,
@@ -149,13 +155,21 @@ export default class SceneCompiler {
         metallicRoughnessTextureId
       );
     });
+    if (imageTextures.length > MAX_WEBGL_IMAGE_TEXTURES) {
+      throw new Error(
+        `The WebGL backend currently supports ${MAX_WEBGL_IMAGE_TEXTURES} unique image textures, ` +
+        `but this scene requires ${imageTextures.length}. Texture atlasing or array storage is required ` +
+        `before this asset can be path traced without dropping material inputs.`
+      );
+    }
     return { materials, textures, imageTextures };
   }
 
   private compileTexture(
     texture: PtTexture,
     previewMaterial: PtPreviewMaterial,
-    imageTextures: THREE.Texture[]
+    imageTextures: THREE.Texture[],
+    imageTextureIds: Map<THREE.Texture, number>
   ): GpuTexture {
     if (texture.type === PtTextureType.Checker) {
       return {
@@ -170,8 +184,12 @@ export default class SceneCompiler {
     if (texture.type === PtTextureType.Image) {
       const runtimeTexture = texture.runtimeTexture ?? previewMaterial.map;
       if (!runtimeTexture) throw new Error("Image texture is not loaded by its preview material");
-      const imageId = imageTextures.length;
-      imageTextures.push(runtimeTexture);
+      let imageId = imageTextureIds.get(runtimeTexture);
+      if (imageId === undefined) {
+        imageId = imageTextures.length;
+        imageTextures.push(runtimeTexture);
+        imageTextureIds.set(runtimeTexture, imageId);
+      }
       return {
         type: GpuTextureType.Image,
         colorA: texture.tint.clone(),

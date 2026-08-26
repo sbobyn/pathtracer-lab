@@ -1068,3 +1068,16 @@ body {
   .transform-toolbar__group[aria-label="Transform mode"] button span { display: none; }
   .transform-toolbar__group[aria-label="Transform mode"] kbd { font-size: 10px; opacity: 1; }
 }
+.import-warning {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, #f2b84b 55%, transparent);
+  border-radius: 0.4rem;
+  color: #f2cf88;
+  font-size: 0.75rem;
+}
+
+.import-warning span {
+  color: var(--editor-muted, #aaa);
+}

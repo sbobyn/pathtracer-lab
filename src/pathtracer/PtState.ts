@@ -139,6 +139,7 @@ export interface PtBvhTraversalState {
 export interface PtState {
   sceneKey: string;
   sceneObjects: PtSceneObjectState[];
+  importWarnings: string[];
   settings: PtSettings;
   selection: PtSelectionState;
   history: PtHistoryState;
@@ -179,6 +180,7 @@ export function createDefaultPtState(): PtState {
   return {
     sceneKey: "Part1Simple",
     sceneObjects: [],
+    importWarnings: [],
     settings: { ...defaultSettings },
     selection: {
       objectId: null,

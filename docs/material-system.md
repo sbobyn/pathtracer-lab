@@ -95,6 +95,28 @@ inputs. Raster preview and path tracing should show the same broad material
 identity, but exact pixels are not expected to match because their integrators,
 sampling noise, environment treatment, and display transforms differ.
 
+## Static glTF subset
+
+The current static importer supports triangle primitives, nested baked
+transforms, multiple meshes and material groups, and the core metallic-roughness
+inputs used by `MeshStandardMaterial`: base-color factor/texture, packed linear
+roughness-green and metallic-blue data, emissive factor/texture, and continuous
+metallic and roughness factors. Image samplers preserve the glTF texture's WebGL
+wrap and filtering state. Color textures are decoded from sRGB while packed
+metallic-roughness data remains linear.
+
+Only `TEXCOORD_0` with an identity texture transform is currently accepted.
+Secondary UV sets and `KHR_texture_transform` fail explicitly instead of being
+sampled with the wrong coordinates. Normal maps, occlusion semantics, alpha
+modes, and double-sided transport remain scoped to STE-714.
+
+The WebGL shader currently exposes four material-image sampler uniforms. Shared
+Three.js texture objects are deduplicated before consuming those slots, and a
+scene that still requires more than four unique images now fails with a clear
+capacity error rather than silently returning the shader's magenta missing-map
+color. Replacing this bounded bridge with atlas/array storage remains a required
+scalability follow-up; a WebGPU backend may use a different resource layout.
+
 ## Backend boundary
 
 `GpuMaterial` uses semantic names such as `model`, `baseColorTextureId`,

@@ -75,6 +75,7 @@ export default class PtScene {
   environmentLoaded: Promise<THREE.Texture> | null = null;
   staticAssetsLoaded: Promise<void> | null = null;
   staticAssetError: Error | null = null;
+  staticAssetWarnings: string[] = [];
 
   camera: THREE.PerspectiveCamera;
 
@@ -227,17 +228,27 @@ export default class PtScene {
     return mesh;
   }
 
-  public loadStaticGltf(source: string, fallbackMaterialId: number, label: string) {
+  public loadStaticGltf(
+    source: string,
+    fallbackMaterialId: number,
+    label: string,
+    importScale = 1
+  ) {
     this.staticAssetError = null;
+    this.staticAssetWarnings = [];
     this.staticAssetsLoaded = loadStaticGltf(source).then((primitives) => {
       const materialIds = new Map<string, number>();
       primitives.forEach((primitive, index) => {
+        if (importScale !== 1) primitive.geometry.scale(importScale, importScale, importScale);
         let materialId = materialIds.get(primitive.material.uuid);
         if (materialId === undefined) {
           try {
             materialId = this.addMaterial(translateStaticGltfMaterial(primitive.material));
           } catch (error) {
-            console.warn(`Using fallback material for ${primitive.name}`, error);
+            const reason = error instanceof Error ? error.message : String(error);
+            const warning = `${primitive.name}: using fallback material — ${reason}`;
+            this.staticAssetWarnings.push(warning);
+            console.warn(warning, error);
             materialId = fallbackMaterialId;
           }
           materialIds.set(primitive.material.uuid, materialId);
