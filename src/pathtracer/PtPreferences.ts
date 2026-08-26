@@ -12,7 +12,7 @@ function isBuiltinEnvironmentSource(source: string) {
 }
 
 export const PT_PREFERENCES_KEY = "three-pathtracer.preferences";
-export const PT_PREFERENCES_VERSION = 1;
+export const PT_PREFERENCES_VERSION = 2;
 
 export interface PtPreferenceStorage {
   getItem(key: string): string | null;
@@ -20,8 +20,8 @@ export interface PtPreferenceStorage {
   removeItem(key: string): void;
 }
 
-interface PtPreferencesV1 {
-  version: 1;
+interface PtPreferencesV2 {
+  version: 2;
   sceneKey: string;
   settings: PtSettings;
 }
@@ -92,7 +92,7 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   return settings;
 }
 
-export function preferenceSnapshot(state: Readonly<PtState>): PtPreferencesV1 {
+export function preferenceSnapshot(state: Readonly<PtState>): PtPreferencesV2 {
   return {
     version: PT_PREFERENCES_VERSION,
     sceneKey: state.sceneKey,
@@ -109,14 +109,23 @@ export function loadPtPreferences(
     const raw = storage.getItem(PT_PREFERENCES_KEY);
     if (!raw) return defaults;
     const candidate = JSON.parse(raw) as Record<string, unknown>;
-    if (candidate.version !== PT_PREFERENCES_VERSION) return defaults;
+    if (candidate.version !== 1 && candidate.version !== PT_PREFERENCES_VERSION) {
+      return defaults;
+    }
+    const settings = validatedSettings(candidate.settings, defaults.settings);
+    if (candidate.version === 1) {
+      // Earlier builds commonly persisted the diagnostic "selected" overlay
+      // while it was being developed. Migrate that old state to the intended
+      // hidden default once; deliberate choices made in v2 continue to persist.
+      settings.triangleOverlayMode = "off";
+    }
     return {
       ...defaults,
       sceneKey:
         typeof candidate.sceneKey === "string" && validSceneKeys.includes(candidate.sceneKey)
           ? candidate.sceneKey
           : defaults.sceneKey,
-      settings: validatedSettings(candidate.settings, defaults.settings),
+      settings,
     };
   } catch {
     return defaults;

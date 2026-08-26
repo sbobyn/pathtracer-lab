@@ -85,6 +85,25 @@ test("invalid, obsolete, and out-of-range data falls back safely", () => {
   assert.deepEqual(loadPtPreferences(storage, defaults, ["Part1Simple"]), defaults);
 });
 
+test("v1 preferences migrate the triangle overlay to its hidden default", () => {
+  const defaults = createDefaultPtState();
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: 1,
+    sceneKey: "Part1Final",
+    settings: {
+      ...defaults.settings,
+      triangleOverlayMode: "selected",
+      numSamples: 7,
+    },
+  });
+
+  const state = loadPtPreferences(storage, defaults, ["Part1Simple", "Part1Final"]);
+  assert.equal(state.sceneKey, "Part1Final");
+  assert.equal(state.settings.numSamples, 7);
+  assert.equal(state.settings.triangleOverlayMode, "off");
+});
+
 test("the snapshot excludes selection, history, and scene object data", () => {
   const state = createDefaultPtState();
   state.selection.objectId = "selected";

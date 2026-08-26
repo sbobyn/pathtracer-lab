@@ -88,10 +88,12 @@ body {
 .editor-right-stack {
   position: absolute;
   top: 16px;
-  display: grid;
+  display: flex;
+  min-height: 0;
+  height: calc(100vh - 32px);
+  flex-direction: column;
   align-items: start;
   gap: 8px;
-  max-height: calc(100vh - 32px);
   pointer-events: none;
 }
 
@@ -103,11 +105,33 @@ body {
 .editor-right-stack {
   top: 54px;
   right: 16px;
+  height: calc(100vh - 70px);
+  align-items: end;
   justify-items: end;
+}
+
+.editor-left-stack > .history-panel,
+.editor-left-stack > [data-collapsed="true"],
+.editor-right-stack > [data-collapsed="true"] {
+  flex: 0 0 auto;
+}
+
+.editor-left-stack > .editor-shell:not([data-collapsed="true"]),
+.editor-left-stack > .object-inspector:not([data-collapsed="true"]),
+.editor-right-stack > .render-panel:not([data-collapsed="true"]) {
+  min-height: 0;
+  max-height: 100%;
+  flex: 0 1 auto;
+}
+
+.editor-left-stack:has(> .editor-shell:not([data-collapsed="true"])):has(> .object-inspector:not([data-collapsed="true"])) > .editor-shell,
+.editor-left-stack:has(> .editor-shell:not([data-collapsed="true"])):has(> .object-inspector:not([data-collapsed="true"])) > .object-inspector {
+  flex-grow: 1;
 }
 
 .editor-shell {
   position: relative;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   color: #f4f4f5;
@@ -664,6 +688,8 @@ body {
 
 .object-inspector {
   position: relative;
+  min-height: 0;
+  max-height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: 260px;
@@ -679,6 +705,8 @@ body {
 
 .render-panel {
   position: relative;
+  min-height: 0;
+  max-height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: 260px;
@@ -743,6 +771,7 @@ body {
   padding: 8px 12px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .render-panel__bvh-stats {
@@ -957,6 +986,7 @@ body {
   padding: 10px 12px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .object-inspector__resize-handle {
