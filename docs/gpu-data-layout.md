@@ -28,7 +28,7 @@ Each material occupies four RGBA texels:
 | 0 | material model | base-color texture ID | emission texture ID | roughness |
 | 1 | base-color factor r | base-color factor g | base-color factor b | index of refraction |
 | 2 | emission factor r | emission factor g | emission factor b | emission strength |
-| 3 | two-sided emission flag | unused | unused | unused |
+| 3 | two-sided emission flag | metallic-roughness texture ID | metallic factor | texture-enable bit mask |
 
 This is a WebGL storage layout, not the authored material model. `GpuMaterial`
 defines the renderer-level meaning of these fields; a future WebGPU backend may

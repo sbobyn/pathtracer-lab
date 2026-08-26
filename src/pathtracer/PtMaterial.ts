@@ -10,6 +10,7 @@ export const PtMaterialModel = {
   LegacyFuzzyMetal: 1,
   LegacyDielectric: 2,
   NoBsdf: 3,
+  PrincipledMetallicRoughness: 4,
 } as const;
 
 export type PtMaterialModel = (typeof PtMaterialModel)[keyof typeof PtMaterialModel];
@@ -27,6 +28,7 @@ export type PtMaterialType = (typeof PtMaterialType)[keyof typeof PtMaterialType
 export interface PtColorInput {
   factor: THREE.Color;
   texture: PtTexture;
+  textureEnabled: boolean;
 }
 
 export type PtColorSource = THREE.Color | PtTexture | PtColorInput;
@@ -35,6 +37,9 @@ export interface PtMaterialDefinition {
   model: PtMaterialModel;
   baseColor: PtColorInput;
   roughness: number;
+  metallic: number;
+  metallicRoughnessTexture: PtTexture;
+  metallicRoughnessTextureEnabled: boolean;
   ior: number;
   emission: {
     color: PtColorInput;
@@ -47,6 +52,9 @@ export interface PtMaterialOptions {
   model: PtMaterialModel;
   baseColor?: PtColorSource;
   roughness?: number;
+  metallic?: number;
+  metallicRoughnessTexture?: PtTexture;
+  metallicRoughnessTextureEnabled?: boolean;
   ior?: number;
   emissionColor?: PtColorSource;
   emissionStrength?: number;
@@ -93,6 +101,14 @@ export default class PtMaterial {
     });
   }
 
+  public static principledMetallicRoughness(options: Omit<PtMaterialOptions, "model">) {
+    return new PtMaterial({
+      ior: 1.5,
+      ...options,
+      model: PtMaterialModel.PrincipledMetallicRoughness,
+    });
+  }
+
   constructor(options: PtMaterialOptions);
   constructor(
     type: PtMaterialType,
@@ -125,6 +141,10 @@ export default class PtMaterial {
       model: options.model,
       baseColor: colorInput(options.baseColor ?? new THREE.Color(1, 1, 1)),
       roughness: options.roughness ?? 0,
+      metallic: options.metallic ?? 0,
+      metallicRoughnessTexture:
+        options.metallicRoughnessTexture ?? constantTexture(0xffffff),
+      metallicRoughnessTextureEnabled: options.metallicRoughnessTextureEnabled ?? true,
       ior: options.ior ?? 0,
       emission: {
         color: colorInput(options.emissionColor ?? new THREE.Color(0, 0, 0)),
@@ -134,7 +154,7 @@ export default class PtMaterial {
     };
   }
 
-  public get type(): PtMaterialType {
+  public get type(): PtMaterialModel {
     return this.definition.model;
   }
 
@@ -160,6 +180,10 @@ export default class PtMaterial {
     return this.definition.ior;
   }
 
+  public get metallic(): number {
+    return this.definition.metallic;
+  }
+
   public get emissionStrength(): number {
     return this.definition.emission.strength;
   }
@@ -171,11 +195,16 @@ export default class PtMaterial {
 
 function colorInput(source: PtColorSource): PtColorInput {
   if ("factor" in source && "texture" in source) {
-    return { factor: source.factor.clone(), texture: source.texture };
+    return {
+      factor: source.factor.clone(),
+      texture: source.texture,
+      textureEnabled: "textureEnabled" in source ? source.textureEnabled !== false : true,
+    };
   }
   const texture = source instanceof THREE.Color ? constantTexture(source) : source;
   return {
     factor: new THREE.Color(1, 1, 1),
     texture,
+    textureEnabled: true,
   };
 }

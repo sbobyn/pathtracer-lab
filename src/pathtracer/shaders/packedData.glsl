@@ -19,8 +19,8 @@ Material readMaterial(int materialIndex) {
     vec4 emission = readPackedTexel(uMaterialData, uMaterialDataSize, base + 2);
     vec4 flags = readPackedTexel(uMaterialData, uMaterialDataSize, base + 3);
     return Material(
-        int(round(surface.x)), int(round(surface.y)), int(round(surface.z)),
-        baseColor.rgb, emission.rgb, surface.w, baseColor.w, emission.w, flags.x > 0.5
+        int(round(surface.x)), int(round(surface.y)), int(round(surface.z)), int(round(flags.y)), int(round(flags.w)),
+        baseColor.rgb, emission.rgb, surface.w, flags.z, baseColor.w, emission.w, flags.x > 0.5
     );
 }
 

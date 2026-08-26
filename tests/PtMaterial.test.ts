@@ -59,6 +59,22 @@ test("color factors remain independent from texture inputs", () => {
   assert.deepEqual(material.definition.baseColor.factor.toArray(), [0.5, 0.25, 1]);
 });
 
+test("principled materials preserve continuous metallic-roughness inputs", () => {
+  const dataTexture = checkerTexture(0x00ffff, 0xff00ff, 4);
+  const material = PtMaterial.principledMetallicRoughness({
+    baseColor: new THREE.Color(0.8, 0.35, 0.1),
+    metallic: 0.65,
+    roughness: 0.3,
+    metallicRoughnessTexture: dataTexture,
+    ior: 1.5,
+  });
+
+  assert.equal(material.definition.model, PtMaterialModel.PrincipledMetallicRoughness);
+  assert.equal(material.definition.metallic, 0.65);
+  assert.equal(material.definition.roughness, 0.3);
+  assert.equal(material.definition.metallicRoughnessTexture, dataTexture);
+});
+
 test("the positional constructor remains a temporary legacy adapter", () => {
   const material = new PtMaterial(
     PtMaterialType.Metal,

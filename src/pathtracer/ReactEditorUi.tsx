@@ -16,7 +16,7 @@ import {
 import * as THREE from "three";
 import type PtActions from "./PtActions";
 import type { PtUiAdapter } from "./PtUiAdapter";
-import type { PtState } from "./PtState";
+import type { PtState, PtTextureState } from "./PtState";
 import { PresetPtScenes } from "./PresetPtScenes";
 import { builtinTextures } from "./BuiltinTextures";
 import { builtinEnvironments, findBuiltinEnvironment } from "./BuiltinEnvironments";
@@ -170,6 +170,64 @@ function ColorField({
         tabIndex={-1}
         value={value}
         onInput={(event) => onChange(event.currentTarget.value)}
+      />
+    </div>
+  );
+}
+
+function MaterialMapSlot({
+  label,
+  texture,
+  onReplace,
+  onRemove,
+  onEnabledChange,
+}: {
+  label: string;
+  texture: PtTextureState;
+  onReplace: (source: string) => void;
+  onRemove: () => void;
+  onEnabledChange: (enabled: boolean) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="texture-slot">
+      <button
+        type="button"
+        className={`texture-slot__preview texture-slot__preview--${texture.type}`}
+        data-empty={!texture.source}
+        title={`${label} texture`}
+        onClick={() => input.current?.click()}
+      >
+        {texture.source ? <img src={texture.source} alt={`${label} texture`} /> : <span>None</span>}
+      </button>
+      <div className="texture-slot__details">
+        <strong>{label}</strong>
+        <span>{texture.source ? texture.label : "No image"}</span>
+        <CheckboxField
+          label="Enabled"
+          checked={texture.enabled}
+          density="compact"
+          layout="horizontal"
+          onChange={onEnabledChange}
+        />
+        <div className="texture-slot__actions">
+          <button type="button" onClick={() => input.current?.click()}>
+            {texture.source ? "Replace" : "Choose"}
+          </button>
+          {texture.source && <button type="button" onClick={onRemove}>Remove</button>}
+        </div>
+      </div>
+      <input
+        ref={input}
+        className="texture-slot__file"
+        type="file"
+        accept="image/*"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (!file) return;
+          onReplace(URL.createObjectURL(file));
+          event.currentTarget.value = "";
+        }}
       />
     </div>
   );
@@ -1190,10 +1248,20 @@ function ObjectInspectorContent({
               <div><dt>Vertices</dt><dd>{selection.mesh.vertexCount}</dd></div>
               <div><dt>Storage</dt><dd>{selection.mesh.indexed ? "Indexed" : "Non-indexed"}</dd></div>
             </dl>
+            <CheckboxField
+              label="Show triangles"
+              checked={selection.mesh.wireframeVisible}
+              density="compact"
+              layout="horizontal"
+              onChange={(checked) =>
+                actions.setSelectedTriangleWireframeVisible(checked)
+              }
+            />
           </PersistentDetails>
         )}
         <PersistentDetails className="editor-subpanel" storageKey="object-material">
           <summary>Material · {material.kind}</summary>
+          {material.kind === "Principled" && <span className="texture-picker__label">Base color</span>}
           <div className="texture-slot">
             <button type="button" className={`texture-slot__preview texture-slot__preview--${material.texture.type}`} data-empty={material.texture.type === "constant"}
               title={material.texture.source ? "Preview texture" : "Choose a texture"}
@@ -1205,6 +1273,16 @@ function ObjectInspectorContent({
             <div className="texture-slot__details">
               <strong>{material.texture.label}</strong>
               <span>{material.texture.type}</span>
+              {material.kind === "Principled" && (
+                <CheckboxField
+                  label="Enabled"
+                  checked={material.texture.enabled}
+                  density="compact" layout="horizontal"
+                  onChange={(enabled) => actions.setMaterialTextureSlotEnabled(
+                    material.id, "baseColor", enabled
+                  )}
+                />
+              )}
               <div className="texture-slot__actions">
                 <button type="button" onClick={() => setTexturePickerOpen((open) => !open)}>{material.texture.source ? "Replace" : "Choose"}</button>
                 {material.texture.source && <button type="button" onClick={() => actions.removeMaterialTexture(material.id)}>Remove</button>}
@@ -1293,9 +1371,9 @@ function ObjectInspectorContent({
               )}
             </div>
           )}
-          {material.texture.type === "constant" && (
+          {(material.kind === "Principled" || material.texture.type === "constant") && (
             <ColorField
-              label="Color"
+              label={material.kind === "Principled" ? "Base color factor" : "Color"}
               value={material.color}
               onBegin={() => actions.beginMaterialEdit(material.id)}
               onChange={(value) =>
@@ -1304,73 +1382,158 @@ function ObjectInspectorContent({
               onCommit={() => actions.commitMaterialEdit()}
             />
           )}
-          {material.emissionStrength !== null && (
+          {material.metallicRoughnessTexture && (
+            <div className="material-input-group">
+              <MaterialMapSlot
+                label="Metallic / roughness"
+                texture={material.metallicRoughnessTexture}
+                onReplace={(source) => actions.setMaterialTextureSlotImage(
+                  material.id, "metallicRoughness", source
+                )}
+                onRemove={() => actions.removeMaterialTextureSlot(
+                  material.id, "metallicRoughness"
+                )}
+                onEnabledChange={(enabled) => actions.setMaterialTextureSlotEnabled(
+                  material.id, "metallicRoughness", enabled
+                )}
+              />
+              {material.metallic !== null && (
+                <EditorNumberField
+                  label="Metallic factor"
+                  value={material.metallic}
+                  min={0} max={1} step={0.01} precisionStep={0.001}
+                  snapInterval={0.1} sensitivity={1 * pathTracerScrubSpeed}
+                  density="compact" layout="horizontal"
+                  onChange={(value) => actions.setMaterialMetallic(material.id, value)}
+                  onCommit={() => actions.commitMaterialEdit()}
+                  onCancel={() => actions.cancelMaterialEdit()}
+                />
+              )}
+              {material.roughness !== null && (
+                <EditorNumberField
+                  label="Roughness factor"
+                  value={material.roughness}
+                  min={0} max={1} step={0.01} precisionStep={0.001}
+                  snapInterval={0.1} sensitivity={1 * pathTracerScrubSpeed}
+                  density="compact" layout="horizontal"
+                  onChange={(value) => {
+                    actions.beginMaterialEdit(material.id);
+                    actions.setMaterialFuzz(material.id, value);
+                  }}
+                  onCommit={() => actions.commitMaterialEdit()}
+                  onCancel={() => actions.cancelMaterialEdit()}
+                />
+              )}
+              {material.ior !== null && (
+                <EditorNumberField
+                  label="Dielectric IOR"
+                  value={material.ior}
+                  min={1} max={2.5} step={0.01} precisionStep={0.001}
+                  snapInterval={0.1} sensitivity={1 * pathTracerScrubSpeed}
+                  density="compact" layout="horizontal"
+                  onChange={(value) => {
+                    actions.beginMaterialEdit(material.id);
+                    actions.setMaterialIor(material.id, value);
+                  }}
+                  onCommit={() => actions.commitMaterialEdit()}
+                  onCancel={() => actions.cancelMaterialEdit()}
+                />
+              )}
+            </div>
+          )}
+          {material.emissionTexture && (
+            <div className="material-input-group">
+              <MaterialMapSlot
+                label="Emission"
+                texture={material.emissionTexture}
+                onReplace={(source) => actions.setMaterialTextureSlotImage(
+                  material.id, "emission", source
+                )}
+                onRemove={() => actions.removeMaterialTextureSlot(material.id, "emission")}
+                onEnabledChange={(enabled) => actions.setMaterialTextureSlotEnabled(
+                  material.id, "emission", enabled
+                )}
+              />
+              {material.emissionColor && (
+                <ColorField
+                  label="Emission color factor"
+                  value={material.emissionColor}
+                  onBegin={() => actions.beginMaterialEdit(material.id)}
+                  onChange={(value) => actions.setMaterialEmissionColor(
+                    material.id, new THREE.Color(value)
+                  )}
+                  onCommit={() => actions.commitMaterialEdit()}
+                />
+              )}
+              {material.emissionStrength !== null && (
+              <EditorNumberField
+                label="Emission strength"
+                value={material.emissionStrength}
+                min={0}
+                max={100}
+                step={0.1}
+                precisionStep={0.01}
+                snapInterval={1}
+                sensitivity={1 * pathTracerScrubSpeed}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => {
+                  actions.beginMaterialEdit(material.id);
+                  actions.setMaterialEmissionStrength(material.id, value);
+                }}
+                onCommit={() => actions.commitMaterialEdit()}
+                onCancel={() => actions.cancelMaterialEdit()}
+              />
+              )}
+              {material.emissionTwoSided !== null && (
+                <CheckboxField
+                  label="Two-sided emission"
+                  checked={material.emissionTwoSided}
+                  density="compact" layout="horizontal"
+                  onChange={(checked) =>
+                    actions.setMaterialEmissionTwoSided(material.id, checked)
+                  }
+                />
+              )}
+            </div>
+          )}
+          {material.kind !== "Principled" && material.emissionStrength !== null && (
             <EditorNumberField
-              label="Intensity"
-              value={material.emissionStrength}
-              min={0}
-              max={100}
-              step={0.1}
-              precisionStep={0.01}
-              snapInterval={1}
-              sensitivity={1 * pathTracerScrubSpeed}
-              density="compact"
-              layout="horizontal"
-              onChange={(value) => {
-                actions.beginMaterialEdit(material.id);
-                actions.setMaterialEmissionStrength(material.id, value);
-              }}
+              label="Emission strength" value={material.emissionStrength}
+              min={0} max={100} step={0.1} precisionStep={0.01}
+              snapInterval={1} sensitivity={1 * pathTracerScrubSpeed}
+              density="compact" layout="horizontal"
+              onChange={(value) => actions.setMaterialEmissionStrength(material.id, value)}
               onCommit={() => actions.commitMaterialEdit()}
               onCancel={() => actions.cancelMaterialEdit()}
             />
           )}
-          {material.emissionTwoSided !== null && (
+          {material.kind !== "Principled" && material.emissionTwoSided !== null && (
             <CheckboxField
-              label="Two-sided"
+              label="Two-sided emission"
               checked={material.emissionTwoSided}
-              density="compact"
-              layout="horizontal"
-              onChange={(checked) =>
-                actions.setMaterialEmissionTwoSided(material.id, checked)
-              }
+              density="compact" layout="horizontal"
+              onChange={(checked) => actions.setMaterialEmissionTwoSided(material.id, checked)}
             />
           )}
-          {material.roughness !== null && (
+          {material.kind !== "Principled" && material.roughness !== null && (
             <EditorNumberField
-              label="Roughness"
-              value={material.roughness}
-              min={0}
-              max={1}
-              step={0.01}
-              precisionStep={0.001}
-              snapInterval={0.1}
-              sensitivity={1 * pathTracerScrubSpeed}
-              density="compact"
-              layout="horizontal"
-              onChange={(value) => {
-                actions.beginMaterialEdit(material.id);
-                actions.setMaterialFuzz(material.id, value);
-              }}
+              label="Roughness" value={material.roughness}
+              min={0} max={1} step={0.01} precisionStep={0.001}
+              snapInterval={0.1} sensitivity={1 * pathTracerScrubSpeed}
+              density="compact" layout="horizontal"
+              onChange={(value) => actions.setMaterialFuzz(material.id, value)}
               onCommit={() => actions.commitMaterialEdit()}
               onCancel={() => actions.cancelMaterialEdit()}
             />
           )}
-          {material.ior !== null && (
+          {material.kind !== "Principled" && material.ior !== null && (
             <EditorNumberField
-              label="IOR"
-              value={material.ior}
-              min={1}
-              max={2.5}
-              step={0.01}
-              precisionStep={0.001}
-              snapInterval={0.1}
-              sensitivity={1 * pathTracerScrubSpeed}
-              density="compact"
-              layout="horizontal"
-              onChange={(value) => {
-                actions.beginMaterialEdit(material.id);
-                actions.setMaterialIor(material.id, value);
-              }}
+              label="IOR" value={material.ior}
+              min={1} max={2.5} step={0.01} precisionStep={0.001}
+              snapInterval={0.1} sensitivity={1 * pathTracerScrubSpeed}
+              density="compact" layout="horizontal"
+              onChange={(value) => actions.setMaterialIor(material.id, value)}
               onCommit={() => actions.commitMaterialEdit()}
               onCancel={() => actions.cancelMaterialEdit()}
             />

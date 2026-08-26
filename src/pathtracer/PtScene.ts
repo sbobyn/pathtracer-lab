@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import PtSphere from "./PtSphere";
 import PtQuad from "./PtQuad";
-import PtMaterial, { PtMaterialType } from "./PtMaterial";
+import PtMaterial, { PtMaterialModel, PtMaterialType } from "./PtMaterial";
 import { PtTextureType, texturePreviewColor, type PtTexture } from "./PtTexture";
 import {
   createPointLightNode,
@@ -407,6 +407,69 @@ export default class PtScene {
     material.needsUpdate = true;
   }
 
+  public setMaterialTextureSlot(
+    materialId: number,
+    slot: "baseColor" | "metallicRoughness" | "emission",
+    texture: PtTexture
+  ) {
+    const material = this.getMaterial(materialId);
+    const definition = getMaterialMetadata(material).materialDefinition;
+    if (slot === "baseColor") {
+      material.map?.dispose();
+      material.map = createPreviewTexture(texture);
+      definition.baseColor.texture = texture;
+    } else if (slot === "metallicRoughness") {
+      const dataMap = createPreviewTexture(texture, false);
+      if (material instanceof THREE.MeshStandardMaterial) {
+        material.metalnessMap?.dispose();
+        material.metalnessMap = dataMap;
+        material.roughnessMap = dataMap;
+      }
+      definition.metallicRoughnessTexture = texture;
+    } else {
+      if (material instanceof THREE.MeshStandardMaterial) {
+        material.emissiveMap?.dispose();
+        material.emissiveMap = createPreviewTexture(texture);
+      }
+      definition.emission.color.texture = texture;
+    }
+    material.needsUpdate = true;
+  }
+
+  public setMaterialTextureSlotEnabled(
+    materialId: number,
+    slot: "baseColor" | "metallicRoughness" | "emission",
+    enabled: boolean
+  ) {
+    const material = this.getMaterial(materialId);
+    const definition = getMaterialMetadata(material).materialDefinition;
+    if (slot === "baseColor") {
+      definition.baseColor.textureEnabled = enabled;
+      material.map = enabled ? createPreviewTexture(definition.baseColor.texture) : null;
+      material.color.copy(definition.baseColor.factor);
+    } else if (slot === "metallicRoughness") {
+      definition.metallicRoughnessTextureEnabled = enabled;
+      if (material instanceof THREE.MeshStandardMaterial) {
+        const map = enabled
+          ? createPreviewTexture(definition.metallicRoughnessTexture, false)
+          : null;
+        material.metalnessMap = map;
+        material.roughnessMap = map;
+      }
+    } else {
+      definition.emission.color.textureEnabled = enabled;
+      if (material instanceof THREE.MeshStandardMaterial) {
+        material.emissiveMap = enabled
+          ? createPreviewTexture(definition.emission.color.texture)
+          : null;
+        material.emissive.copy(
+          enabled ? definition.emission.color.factor : new THREE.Color(0x000000)
+        );
+      }
+    }
+    material.needsUpdate = true;
+  }
+
   private reindexPrimitives() {
     let sphereIndex = 0;
     let quadIndex = 0;
@@ -444,7 +507,8 @@ function createPreviewMaterial(
   materialId: number
 ): PtPreviewMaterial {
   let previewMaterial: PtPreviewMaterial;
-  const previewMap = createPreviewTexture(material.texture);
+  const previewMap = material.definition.baseColor.textureEnabled
+    ? createPreviewTexture(material.texture) : null;
   const previewInput = material.definition.model === PtMaterialType.Emissive
     ? material.definition.emission.color
     : material.definition.baseColor;
@@ -472,6 +536,24 @@ function createPreviewMaterial(
       transmission: 1,
       opacity: 1,
       transparent: true,
+    });
+  } else if (material.type === PtMaterialModel.PrincipledMetallicRoughness) {
+    const dataMap = material.definition.metallicRoughnessTextureEnabled
+      ? createPreviewTexture(material.definition.metallicRoughnessTexture, false)
+      : null;
+    previewMaterial = new THREE.MeshStandardMaterial({
+      color: previewColor,
+      map: previewMap,
+      metalness: material.definition.metallic,
+      roughness: material.definition.roughness,
+      metalnessMap: dataMap,
+      roughnessMap: dataMap,
+      emissive: material.definition.emission.color.textureEnabled
+        ? material.definition.emission.color.factor
+        : new THREE.Color(0x000000),
+      emissiveMap: material.definition.emission.color.textureEnabled
+        ? createPreviewTexture(material.definition.emission.color.texture) : null,
+      emissiveIntensity: material.definition.emission.strength,
     });
   } else if (material.type === PtMaterialType.Emissive) {
     previewMaterial = new THREE.MeshBasicMaterial({
@@ -525,7 +607,7 @@ function applyQuadTransform(mesh: PtQuadMesh, quad: PtQuad) {
 
 export function getMaterialMetadata(material: PtPreviewMaterial): {
   materialId: number;
-  materialType: PtMaterialType;
+  materialType: PtMaterialModel;
   texture: PtTexture;
   emissionStrength: number;
   emissionTwoSided: boolean;
@@ -545,7 +627,7 @@ export function getMaterialMetadata(material: PtPreviewMaterial): {
   return metadata;
 }
 
-function createPreviewTexture(texture: PtTexture): THREE.Texture | null {
+function createPreviewTexture(texture: PtTexture, colorTexture = true): THREE.Texture | null {
   if (texture.type === PtTextureType.Image) {
     if (texture.runtimeTexture) {
       const map = texture.runtimeTexture.clone();
@@ -556,7 +638,7 @@ function createPreviewTexture(texture: PtTexture): THREE.Texture | null {
     let markLoaded!: () => void;
     const loaded = new Promise<void>((resolve) => { markLoaded = resolve; });
     const map = new THREE.TextureLoader().load(texture.source, markLoaded);
-    map.colorSpace = THREE.SRGBColorSpace;
+    map.colorSpace = colorTexture ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     map.wrapS = THREE.RepeatWrapping;
     map.wrapT = THREE.ClampToEdgeWrapping;
     // Ray-generated sphere UVs jump from 1 to 0 at the longitude seam. Implicit

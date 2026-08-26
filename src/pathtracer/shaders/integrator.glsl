@@ -27,12 +27,13 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
                 17.0 * float(depth) + 11.0,
                 59.0 * float(depth) + 23.0
             );
-            if (material.model == 0 && uIntegratorMode != 0) {
+            if (materialSupportsDirectLighting(material) && uIntegratorMode != 0) {
                 radiance += estimateDirectBsdf(
                     world,
                     hit,
                     material,
                     surface,
+                    normalize(-ray.direction),
                     throughput,
                     bounceSeed + vec2(131.0, 197.0)
                 );

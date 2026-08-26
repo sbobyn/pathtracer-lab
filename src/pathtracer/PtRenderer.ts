@@ -56,6 +56,7 @@ export default class PtRenderer {
   private gizmoScene!: THREE.Scene;
   private readonly debugOverlayScene = new THREE.Scene();
   private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
+  private readonly triangleWireframeOverrides = new Map<string, boolean>();
   private readonly bvhHelpers: Array<{ helper: LineSegments2; depth: number }> = [];
   private bvhTraversalState: PtBvhTraversalState | null = null;
   private bvhTraversalInvalidated: (() => void) | null = null;
@@ -258,6 +259,18 @@ export default class PtRenderer {
   public setSelectedTriangleMesh(objectId: string | null) {
     this.selectedTriangleMeshId = objectId;
     this.updateTriangleWireframeVisibility();
+  }
+
+  public setTriangleWireframeVisible(objectId: string, visible: boolean) {
+    this.triangleWireframeOverrides.set(objectId, visible);
+    this.updateTriangleWireframeVisibility();
+  }
+
+  public isTriangleWireframeVisible(objectId: string) {
+    const override = this.triangleWireframeOverrides.get(objectId);
+    if (override !== undefined) return override;
+    return this.settings.triangleOverlayMode === "all" ||
+      (this.settings.triangleOverlayMode === "selected" && objectId === this.selectedTriangleMeshId);
   }
 
   public setBvhOverlayEnabled(enabled: boolean) {
@@ -914,8 +927,7 @@ export default class PtRenderer {
 
   private updateTriangleWireframeVisibility() {
     for (const [objectId, wireframe] of this.triangleWireframes) {
-      wireframe.visible = this.settings.triangleOverlayMode === "all" ||
-        (this.settings.triangleOverlayMode === "selected" && objectId === this.selectedTriangleMeshId);
+      wireframe.visible = this.isTriangleWireframeVisible(objectId);
     }
   }
 

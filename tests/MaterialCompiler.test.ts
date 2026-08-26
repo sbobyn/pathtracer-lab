@@ -22,14 +22,17 @@ test("material compilation preserves authored semantics without preview-material
     emissionTwoSided: true,
   });
 
-  const compiled = compileGpuMaterial(material.definition, 7, 9);
+  const compiled = compileGpuMaterial(material.definition, 7, 9, 11);
 
   assert.equal(compiled.model, PtMaterialModel.LegacyLambert);
   assert.equal(compiled.baseColorTextureId, 7);
   assert.equal(compiled.emissionTextureId, 9);
+  assert.equal(compiled.metallicRoughnessTextureId, 11);
+  assert.equal(compiled.textureEnableMask, 7);
   assert.deepEqual(compiled.baseColorFactor.toArray(), [0.5, 0.25, 1]);
   assert.deepEqual(compiled.emissionFactor.toArray(), [1, 0.5, 0.25]);
   assert.equal(compiled.roughness, 0.2);
+  assert.equal(compiled.metallic, 0);
   assert.equal(compiled.ior, 1.4);
   assert.equal(compiled.emissionStrength, 3);
   assert.equal(compiled.emissionTwoSided, true);

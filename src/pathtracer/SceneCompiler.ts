@@ -136,10 +136,17 @@ export default class SceneCompiler {
         material,
         imageTextures
       ));
+      const metallicRoughnessTextureId = textures.length;
+      textures.push(this.compileTexture(
+        metadata.materialDefinition.metallicRoughnessTexture,
+        material,
+        imageTextures
+      ));
       return compileGpuMaterial(
         metadata.materialDefinition,
         baseColorTextureId,
-        emissionTextureId
+        emissionTextureId,
+        metallicRoughnessTextureId
       );
     });
     return { materials, textures, imageTextures };

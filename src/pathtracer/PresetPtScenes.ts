@@ -14,12 +14,56 @@ export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   if (
     sceneKey === "PackedTrianglesStudy" ||
     sceneKey === "GlTFSuzanneStudy" ||
-    sceneKey === "DamagedHelmetStudy"
+    sceneKey === "DamagedHelmetStudy" ||
+    sceneKey === "PrincipledMaterialStudy"
   ) return 0.5;
   return sceneKey === "CornellBox" ? 0.5 : fallback;
 }
 
 export const PresetPtScenes: { [key: string]: () => PtScene } = {
+  PrincipledMaterialStudy: () => {
+    const metallicValues = [0, 0.5, 1];
+    const roughnessValues = [0.05, 0.25, 0.5, 0.75, 1];
+    const materials = [
+      PtMaterial.legacyLambert(new THREE.Color(0x303238)),
+    ];
+    const spheres: PtSphere[] = [];
+    for (let row = 0; row < metallicValues.length; row++) {
+      for (let column = 0; column < roughnessValues.length; column++) {
+        const materialId = materials.push(PtMaterial.principledMetallicRoughness({
+          baseColor: new THREE.Color(0xb86b35),
+          metallic: metallicValues[row],
+          roughness: roughnessValues[column],
+        })) - 1;
+        spheres.push(new PtSphere(
+          new THREE.Vector3((column - 2) * 1.15, 0.05 + row * 1.15, 0),
+          0.48,
+          materialId
+        ));
+      }
+    }
+    const floor = new PtQuad(
+      new THREE.Vector3(-5, -0.45, 3),
+      new THREE.Vector3(10, 0, 0),
+      new THREE.Vector3(0, 0, -6),
+      0
+    );
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 2.2, 8.5),
+      lookAt: new THREE.Vector3(0, 1.2, 0),
+      far: 10000,
+    });
+    camera.fov = 42;
+    const scene = new PtScene(spheres, materials, camera, [floor]);
+    scene.backgroundColorTop.set(0x000000);
+    scene.backgroundColorBottom.set(0x000000);
+    scene.scene.background = scene.backgroundColorTop;
+    const environment = builtinEnvironments.find(
+      (candidate) => candidate.id === "studio-small-03"
+    );
+    if (environment) scene.setEnvironmentMap(environment.source, environment.label);
+    return scene;
+  },
   GlTFBoxStudy: () => {
     const materials = [
       PtMaterial.legacyLambert(new THREE.Color(0xc8d1dc)),

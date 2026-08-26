@@ -36,7 +36,7 @@ import {
   PtTextureType,
   type PtTexture,
 } from "./PtTexture";
-import PtMaterial, { PtMaterialType } from "./PtMaterial";
+import PtMaterial, { PtMaterialModel, PtMaterialType } from "./PtMaterial";
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
@@ -47,8 +47,15 @@ interface TransformSnapshot {
 interface MaterialSnapshot {
   readonly color: number;
   readonly roughness?: number;
+  readonly metallic?: number;
   readonly ior?: number;
   readonly texture: PtTexture;
+  readonly metallicRoughnessTexture: PtTexture;
+  readonly emissionTexture: PtTexture;
+  readonly baseColorTextureEnabled: boolean;
+  readonly metallicRoughnessTextureEnabled: boolean;
+  readonly emissionTextureEnabled: boolean;
+  readonly emissionColor: number;
   readonly emissionStrength: number;
   readonly emissionTwoSided: boolean;
 }
@@ -391,6 +398,18 @@ export default class PtActions {
   public setTriangleOverlayMode(mode: PtSettings["triangleOverlayMode"]) {
     this.renderer.setTriangleOverlayMode(mode);
     this.updateSetting("triangleOverlayMode", mode);
+    if (this.selectedObject && isPtTriangleMesh(this.selectedObject)) {
+      this.publishSelection();
+    }
+  }
+
+  public setSelectedTriangleWireframeVisible(visible: boolean) {
+    if (!this.selectedObject || !isPtTriangleMesh(this.selectedObject)) return;
+    this.renderer.setTriangleWireframeVisible(
+      this.selectedObject.userData.pathTracer.objectId,
+      visible
+    );
+    this.publishSelection();
   }
 
   public setBvhOverlayEnabled(enabled: boolean) {
@@ -1140,6 +1159,15 @@ export default class PtActions {
     this.publishSelection();
   }
 
+  public setMaterialMetallic(materialId: number, metallic: number) {
+    this.beginMaterialEdit(materialId);
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    if (material instanceof THREE.MeshStandardMaterial) material.metalness = metallic;
+    getMaterialMetadata(material).materialDefinition.metallic = metallic;
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} metallic changed`);
+    this.publishSelection();
+  }
+
   public setMaterialIor(materialId: number, ior: number) {
     this.beginMaterialEdit(materialId);
     const material = this.renderer.ptScene.getMaterial(materialId);
@@ -1157,8 +1185,60 @@ export default class PtActions {
     const metadata = getMaterialMetadata(this.renderer.ptScene.getMaterial(materialId));
     metadata.emissionStrength = strength;
     metadata.materialDefinition.emission.strength = strength;
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    if (material instanceof THREE.MeshStandardMaterial) material.emissiveIntensity = strength;
     this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} emission changed`);
     this.publishSelection();
+  }
+
+  public setMaterialEmissionColor(materialId: number, color: THREE.Color) {
+    this.beginMaterialEdit(materialId);
+    const material = this.renderer.ptScene.getMaterial(materialId);
+    const input = getMaterialMetadata(material).materialDefinition.emission.color;
+    input.factor.copy(color);
+    if (material instanceof THREE.MeshStandardMaterial) {
+      material.emissive.copy(input.textureEnabled ? color : new THREE.Color(0x000000));
+    }
+    this.renderer.invalidate(PtInvalidationLevel.Material, `material ${materialId} emission color changed`);
+    this.publishSelection();
+  }
+
+  public setMaterialTextureSlotImage(
+    materialId: number,
+    slot: "baseColor" | "metallicRoughness" | "emission",
+    source: string
+  ) {
+    this.replaceMaterialTextureSlot(materialId, slot, imageTexture(source), `Set ${slot} texture`);
+  }
+
+  public removeMaterialTextureSlot(
+    materialId: number,
+    slot: "baseColor" | "metallicRoughness" | "emission"
+  ) {
+    this.replaceMaterialTextureSlot(materialId, slot, constantTexture(0xffffff), `Remove ${slot} texture`);
+  }
+
+  public setMaterialTextureSlotEnabled(
+    materialId: number,
+    slot: "baseColor" | "metallicRoughness" | "emission",
+    enabled: boolean
+  ) {
+    this.commitMaterialEdit();
+    const before = this.captureMaterial(materialId);
+    const after = {
+      ...before,
+      baseColorTextureEnabled: slot === "baseColor" ? enabled : before.baseColorTextureEnabled,
+      metallicRoughnessTextureEnabled: slot === "metallicRoughness"
+        ? enabled : before.metallicRoughnessTextureEnabled,
+      emissionTextureEnabled: slot === "emission" ? enabled : before.emissionTextureEnabled,
+    };
+    this.applyMaterialHistory(materialId, after);
+    this.history.record({
+      label: `${enabled ? "Enable" : "Disable"} ${slot} texture`,
+      execute: () => this.applyMaterialHistory(materialId, after),
+      undo: () => this.applyMaterialHistory(materialId, before),
+    });
+    this.publishHistory();
   }
 
   public setMaterialEmissionTwoSided(materialId: number, twoSided: boolean) {
@@ -1331,11 +1411,17 @@ export default class PtActions {
     const { x, y, z } = selectedObject.position;
     const radius = sphere ? sphereRadius(selectedObject) : null;
     const rotation = selectedObject.rotation;
-    const { materialId, materialType, texture, emissionStrength, emissionTwoSided } = getMaterialMetadata(
+    const { materialId, materialType, emissionStrength, emissionTwoSided } = getMaterialMetadata(
       selectedObject.material
     );
     const material = this.renderer.ptScene.getMaterial(materialId);
-    const materialKinds = ["Lambert", "Metal", "Dielectric", "Emissive"] as const;
+    const definition = getMaterialMetadata(material).materialDefinition;
+    const materialKind = materialType === PtMaterialModel.LegacyLambert ? "Lambert"
+      : materialType === PtMaterialModel.LegacyFuzzyMetal ? "Metal"
+      : materialType === PtMaterialModel.LegacyDielectric ? "Dielectric"
+      : materialType === PtMaterialModel.NoBsdf ? "Emissive"
+      : materialType === PtMaterialModel.PrincipledMetallicRoughness ? "Principled"
+      : "Unknown";
     this.store.update((state) => ({
       ...state,
       selection: {
@@ -1360,32 +1446,37 @@ export default class PtActions {
           triangleCount: Math.floor((selectedObject.geometry.index?.count ?? selectedObject.geometry.getAttribute("position").count) / 3),
           vertexCount: selectedObject.geometry.getAttribute("position").count,
           indexed: selectedObject.geometry.index !== null,
+          wireframeVisible: this.renderer.isTriangleWireframeVisible(
+            selectedObject.userData.pathTracer.objectId
+          ),
         } : null,
         material: {
           id: materialId,
-          kind: materialKinds[materialType] ?? "Unknown",
-          color: `#${material.color.getHexString()}`,
-          roughness:
-            material instanceof THREE.MeshStandardMaterial
-              ? material.roughness
-              : null,
-          ior:
-            material instanceof THREE.MeshPhysicalMaterial
-              ? material.ior
-              : null,
-          emissionStrength: materialType === 3 ? emissionStrength : null,
-          emissionTwoSided: materialType === 3 ? emissionTwoSided : null,
-          texture: {
-            type: texture.type === PtTextureType.Image ? "image" : texture.type === PtTextureType.Checker ? "checker" : texture.type === PtTextureType.Perlin ? "perlin" : "constant",
-            label: texture.type === PtTextureType.Image
-              ? (findBuiltinTexture(texture.source)?.label ?? "Imported image")
-              : texture.type === PtTextureType.Checker ? "Checker" : texture.type === PtTextureType.Perlin ? "Perlin marble" : "Solid color",
-            source: texture.type === PtTextureType.Image ? texture.source : null,
-            colorA: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin ? `#${texture.colorA.getHexString()}` : null,
-            colorB: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin ? `#${texture.colorB.getHexString()}` : null,
-            scale: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin ? texture.scale : null,
-            turbulence: texture.type === PtTextureType.Perlin ? texture.turbulence : null,
-          },
+          kind: materialKind,
+          color: `#${definition.baseColor.factor.getHexString()}`,
+          roughness: materialType === PtMaterialModel.LegacyFuzzyMetal || materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? definition.roughness : null,
+          metallic: materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? definition.metallic : null,
+          ior: materialType === PtMaterialModel.LegacyDielectric || materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? definition.ior : null,
+          emissionColor: materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? `#${definition.emission.color.factor.getHexString()}` : null,
+          emissionStrength: materialType === PtMaterialModel.NoBsdf || materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? emissionStrength : null,
+          emissionTwoSided: materialType === PtMaterialModel.NoBsdf || materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? emissionTwoSided : null,
+          texture: textureState(definition.baseColor.texture, definition.baseColor.textureEnabled),
+          metallicRoughnessTexture: materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? textureState(
+                definition.metallicRoughnessTexture,
+                definition.metallicRoughnessTextureEnabled
+              ) : null,
+          emissionTexture: materialType === PtMaterialModel.PrincipledMetallicRoughness
+            ? textureState(
+                definition.emission.color.texture,
+                definition.emission.color.textureEnabled
+              ) : null,
         },
         light: null,
       },
@@ -1606,31 +1697,68 @@ export default class PtActions {
 
   private captureMaterial(materialId: number): MaterialSnapshot {
     const material = this.renderer.ptScene.getMaterial(materialId);
+    const metadata = getMaterialMetadata(material);
     return {
       color: material.color.getHex(),
-      roughness:
-        material instanceof THREE.MeshStandardMaterial
-          ? material.roughness
-          : undefined,
-      ior:
-        material instanceof THREE.MeshPhysicalMaterial
-          ? material.ior
-          : undefined,
-      texture: cloneTexture(getMaterialMetadata(material).texture),
-      emissionStrength: getMaterialMetadata(material).emissionStrength,
-      emissionTwoSided: getMaterialMetadata(material).emissionTwoSided,
+      roughness: metadata.materialDefinition.roughness,
+      metallic: metadata.materialDefinition.metallic,
+      ior: metadata.materialDefinition.ior,
+      texture: cloneTexture(metadata.texture),
+      metallicRoughnessTexture: cloneTexture(
+        metadata.materialDefinition.metallicRoughnessTexture
+      ),
+      emissionTexture: cloneTexture(
+        metadata.materialDefinition.emission.color.texture
+      ),
+      emissionColor: metadata.materialDefinition.emission.color.factor.getHex(),
+      baseColorTextureEnabled: metadata.materialDefinition.baseColor.textureEnabled,
+      metallicRoughnessTextureEnabled:
+        metadata.materialDefinition.metallicRoughnessTextureEnabled,
+      emissionTextureEnabled:
+        metadata.materialDefinition.emission.color.textureEnabled,
+      emissionStrength: metadata.emissionStrength,
+      emissionTwoSided: metadata.emissionTwoSided,
     };
   }
 
   private applyMaterial(materialId: number, snapshot: MaterialSnapshot) {
     const material = this.renderer.ptScene.getMaterial(materialId);
     this.renderer.ptScene.setMaterialTexture(materialId, cloneTexture(snapshot.texture));
+    this.renderer.ptScene.setMaterialTextureSlot(
+      materialId,
+      "metallicRoughness",
+      cloneTexture(snapshot.metallicRoughnessTexture)
+    );
+    this.renderer.ptScene.setMaterialTextureSlot(
+      materialId,
+      "emission",
+      cloneTexture(snapshot.emissionTexture)
+    );
+    this.renderer.ptScene.setMaterialTextureSlotEnabled(
+      materialId, "baseColor", snapshot.baseColorTextureEnabled
+    );
+    this.renderer.ptScene.setMaterialTextureSlotEnabled(
+      materialId, "metallicRoughness", snapshot.metallicRoughnessTextureEnabled
+    );
+    this.renderer.ptScene.setMaterialTextureSlotEnabled(
+      materialId, "emission", snapshot.emissionTextureEnabled
+    );
     material.color.setHex(snapshot.color);
     const metadata = getMaterialMetadata(material);
+    if (snapshot.texture.type === PtTextureType.Image) {
+      metadata.materialDefinition.baseColor.factor.setHex(snapshot.color);
+    }
     metadata.emissionStrength = snapshot.emissionStrength;
     metadata.emissionTwoSided = snapshot.emissionTwoSided;
     metadata.materialDefinition.emission.strength = snapshot.emissionStrength;
     metadata.materialDefinition.emission.twoSided = snapshot.emissionTwoSided;
+    metadata.materialDefinition.emission.color.factor.setHex(snapshot.emissionColor);
+    if (material instanceof THREE.MeshStandardMaterial) {
+      material.emissive.setHex(
+        snapshot.emissionTextureEnabled ? snapshot.emissionColor : 0x000000
+      );
+      material.emissiveIntensity = snapshot.emissionStrength;
+    }
     if (
       snapshot.roughness !== undefined &&
       material instanceof THREE.MeshStandardMaterial
@@ -1638,11 +1766,12 @@ export default class PtActions {
       material.roughness = snapshot.roughness;
       metadata.materialDefinition.roughness = snapshot.roughness;
     }
-    if (
-      snapshot.ior !== undefined &&
-      material instanceof THREE.MeshPhysicalMaterial
-    ) {
-      material.ior = snapshot.ior;
+    if (snapshot.metallic !== undefined && material instanceof THREE.MeshStandardMaterial) {
+      material.metalness = snapshot.metallic;
+      metadata.materialDefinition.metallic = snapshot.metallic;
+    }
+    if (snapshot.ior !== undefined) {
+      if (material instanceof THREE.MeshPhysicalMaterial) material.ior = snapshot.ior;
       metadata.materialDefinition.ior = snapshot.ior;
     }
     if (
@@ -1673,6 +1802,30 @@ export default class PtActions {
     this.publishHistory();
   }
 
+  private replaceMaterialTextureSlot(
+    materialId: number,
+    slot: "baseColor" | "metallicRoughness" | "emission",
+    texture: PtTexture,
+    label: string
+  ) {
+    this.commitMaterialEdit();
+    const before = this.captureMaterial(materialId);
+    const after = {
+      ...before,
+      texture: slot === "baseColor" ? texture : before.texture,
+      metallicRoughnessTexture: slot === "metallicRoughness"
+        ? texture : before.metallicRoughnessTexture,
+      emissionTexture: slot === "emission" ? texture : before.emissionTexture,
+    };
+    this.applyMaterialHistory(materialId, after);
+    this.history.record({
+      label,
+      execute: () => this.applyMaterialHistory(materialId, after),
+      undo: () => this.applyMaterialHistory(materialId, before),
+    });
+    this.publishHistory();
+  }
+
   private updateProceduralTexture(
     materialId: number,
     update: (
@@ -1696,9 +1849,16 @@ export default class PtActions {
   private materialsEqual(a: MaterialSnapshot, b: MaterialSnapshot) {
     return (
       a.color === b.color && a.roughness === b.roughness && a.ior === b.ior &&
+      a.metallic === b.metallic &&
       a.emissionStrength === b.emissionStrength &&
+      a.emissionColor === b.emissionColor &&
+      a.baseColorTextureEnabled === b.baseColorTextureEnabled &&
+      a.metallicRoughnessTextureEnabled === b.metallicRoughnessTextureEnabled &&
+      a.emissionTextureEnabled === b.emissionTextureEnabled &&
       a.emissionTwoSided === b.emissionTwoSided &&
-      JSON.stringify(this.serializeTexture(a.texture)) === JSON.stringify(this.serializeTexture(b.texture))
+      JSON.stringify(this.serializeTexture(a.texture)) === JSON.stringify(this.serializeTexture(b.texture)) &&
+      JSON.stringify(this.serializeTexture(a.metallicRoughnessTexture)) === JSON.stringify(this.serializeTexture(b.metallicRoughnessTexture)) &&
+      JSON.stringify(this.serializeTexture(a.emissionTexture)) === JSON.stringify(this.serializeTexture(b.emissionTexture))
     );
   }
 
@@ -1819,4 +1979,28 @@ export default class PtActions {
     const history = this.history.getSnapshot();
     this.store.update((state) => ({ ...state, history }));
   }
+}
+
+function textureState(
+  texture: PtTexture,
+  enabled: boolean
+): import("./PtState").PtTextureState {
+  return {
+    enabled,
+    type: texture.type === PtTextureType.Image ? "image"
+      : texture.type === PtTextureType.Checker ? "checker"
+      : texture.type === PtTextureType.Perlin ? "perlin" : "constant",
+    label: texture.type === PtTextureType.Image
+      ? (findBuiltinTexture(texture.source)?.label ?? "Imported image")
+      : texture.type === PtTextureType.Checker ? "Checker"
+      : texture.type === PtTextureType.Perlin ? "Perlin marble" : "None",
+    source: texture.type === PtTextureType.Image ? texture.source : null,
+    colorA: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin
+      ? `#${texture.colorA.getHexString()}` : null,
+    colorB: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin
+      ? `#${texture.colorB.getHexString()}` : null,
+    scale: texture.type === PtTextureType.Checker || texture.type === PtTextureType.Perlin
+      ? texture.scale : null,
+    turbulence: texture.type === PtTextureType.Perlin ? texture.turbulence : null,
+  };
 }

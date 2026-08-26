@@ -4,7 +4,18 @@ export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
 export type TriangleOverlayMode = "off" | "selected" | "all";
-export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Unknown";
+export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Principled" | "Unknown";
+
+export interface PtTextureState {
+  enabled: boolean;
+  type: "constant" | "checker" | "image" | "perlin";
+  label: string;
+  source: string | null;
+  colorA: string | null;
+  colorB: string | null;
+  scale: number | null;
+  turbulence: number | null;
+}
 
 export interface PtSceneObjectState {
   id: string;
@@ -26,18 +37,14 @@ export interface PtSelectionMaterialState {
   kind: PtMaterialKind;
   color: string;
   roughness: number | null;
+  metallic: number | null;
   ior: number | null;
+  emissionColor: string | null;
   emissionStrength: number | null;
   emissionTwoSided: boolean | null;
-  texture: {
-    type: "constant" | "checker" | "image" | "perlin";
-    label: string;
-    source: string | null;
-    colorA: string | null;
-    colorB: string | null;
-    scale: number | null;
-    turbulence: number | null;
-  };
+  texture: PtTextureState;
+  metallicRoughnessTexture: PtTextureState | null;
+  emissionTexture: PtTextureState | null;
 }
 
 /** Serializable render and camera preferences. */
@@ -88,6 +95,7 @@ export interface PtSelectionState {
     triangleCount: number;
     vertexCount: number;
     indexed: boolean;
+    wireframeVisible: boolean;
   } | null;
   material: PtSelectionMaterialState | null;
   light: {

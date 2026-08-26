@@ -29,7 +29,12 @@ export function packMaterialTexture(materials: readonly GpuMaterial[], maxTextur
       material.emissionFactor.b,
       material.emissionStrength,
     ], base + 8);
-    data.set([material.emissionTwoSided ? 1 : 0, 0, 0, 0], base + 12);
+    data.set([
+      material.emissionTwoSided ? 1 : 0,
+      material.metallicRoughnessTextureId,
+      material.metallic,
+      material.textureEnableMask,
+    ], base + 12);
   }, "Material");
 }
 

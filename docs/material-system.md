@@ -38,7 +38,8 @@ should use the named factories and structured definition.
 A definition currently separates:
 
 - base-color factor and texture;
-- roughness;
+- perceptual-roughness factor and metallic factor;
+- a linear metallic-roughness texture (green roughness, blue metallic);
 - index of refraction;
 - emission color/texture, strength, and sidedness;
 - the scattering model.
@@ -77,14 +78,28 @@ sampler, and PDF to describe the same distribution. `sampleBsdf()` returns a
 direction, throughput weight, PDF, validity, and delta classification;
 `evaluateBsdf()` and `bsdfPdf()` provide the matching queries used by explicit
 light sampling. The legacy Lambert, fuzzy-metal, and dielectric algorithms are
-implementations behind this boundary. Lambert currently has matching evaluation
-and PDF support, while the two specular learning models are explicitly marked as
-delta samples until their physically based successors are introduced.
+implementations behind this boundary.
+
+The principled metallic-roughness model adds an energy-reduced diffuse lobe and
+a GGX/Trowbridge-Reitz reflection lobe using Schlick Fresnel and separable Smith
+masking-shadowing. It samples a fixed diffuse/specular mixture and reports that
+same mixture PDF to direct-light and MIS code. Roughness is perceptual: the
+microfacet alpha is roughness squared, with a small floor to avoid singular
+highlights. The legacy fuzzy metal and dielectric remain explicit delta learning
+models rather than being silently reinterpreted.
+
+`PrincipledMaterialStudy` provides a controlled grid: roughness increases from
+left to right, while metallic increases from bottom to top. The Suzanne and
+Damaged Helmet glTF studies exercise the same model with Khronos-authored image
+inputs. Raster preview and path tracing should show the same broad material
+identity, but exact pixels are not expected to match because their integrators,
+sampling noise, environment treatment, and display transforms differ.
 
 ## Backend boundary
 
 `GpuMaterial` uses semantic names such as `model`, `baseColorTextureId`,
-`emissionTextureId`, `roughness`, and `ior`. The current WebGL backend packs
+`metallicRoughnessTextureId`, `emissionTextureId`, `roughness`, `metallic`, and
+`ior`. The current WebGL backend packs
 those values into float textures as documented in
 [`gpu-data-layout.md`](gpu-data-layout.md). A future WebGPU backend may use a
 different byte layout without changing authored material or compiler semantics.
