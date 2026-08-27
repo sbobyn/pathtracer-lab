@@ -199,6 +199,39 @@ body {
   pointer-events: none;
 }
 
+.editor-repository-link {
+  position: absolute;
+  z-index: 12;
+  top: 16px;
+  right: 16px;
+  padding: 5px 9px;
+  color: #d4d4d8;
+  background: rgb(24 24 27 / 88%);
+  border: 1px solid #52525b;
+  border-radius: 6px;
+  box-shadow: 0 5px 16px rgb(0 0 0 / 18%);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.editor-repository-link svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.editor-repository-link:hover {
+  color: #18181b;
+  background: #bef264;
+  border-color: #bef264;
+}
+
 .editor-left-stack {
   left: 16px;
   justify-items: start;
