@@ -1817,8 +1817,10 @@ function SelectedObjectInspector({
   renameFocusRequest: number;
 }) {
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:object", false);
-  const [size, setSize] = useState<PanelSize>(() =>
-    clampPanelSize({ width: 260, height: 620 })
+  const [size, setSize] = usePersistentPanelSize(
+    state.sceneKey,
+    "object",
+    { width: 260, height: 620 }
   );
   const resizeGesture = useRef<{
     axis: ResizeAxis;
@@ -1941,6 +1943,64 @@ function clampPanelSize(size: PanelSize): PanelSize {
   };
 }
 
+function readPersistedPanelSize(
+  sceneKey: string,
+  panelKey: string,
+  fallback: PanelSize
+) {
+  try {
+    const stored = localStorage.getItem(
+      `${editorUiStoragePrefix}panel-size:${sceneKey}:${panelKey}`
+    );
+    if (!stored) return clampPanelSize(fallback);
+    const candidate = JSON.parse(stored) as Partial<PanelSize>;
+    if (
+      typeof candidate.width !== "number" ||
+      !Number.isFinite(candidate.width) ||
+      typeof candidate.height !== "number" ||
+      !Number.isFinite(candidate.height)
+    ) {
+      return clampPanelSize(fallback);
+    }
+    return clampPanelSize({ width: candidate.width, height: candidate.height });
+  } catch {
+    return clampPanelSize(fallback);
+  }
+}
+
+function usePersistentPanelSize(
+  sceneKey: string,
+  panelKey: string,
+  fallback: PanelSize
+) {
+  const storageKey = `${editorUiStoragePrefix}panel-size:${sceneKey}:${panelKey}`;
+  const storageKeyRef = useRef(storageKey);
+  const [size, setSizeState] = useState<PanelSize>(() =>
+    readPersistedPanelSize(sceneKey, panelKey, fallback)
+  );
+
+  useEffect(() => {
+    storageKeyRef.current = storageKey;
+    setSizeState(readPersistedPanelSize(sceneKey, panelKey, fallback));
+  }, [fallback.height, fallback.width, panelKey, sceneKey, storageKey]);
+
+  const setSize = (next: PanelSize | ((current: PanelSize) => PanelSize)) => {
+    setSizeState((current) => {
+      const resolved = clampPanelSize(
+        typeof next === "function" ? next(current) : next
+      );
+      try {
+        localStorage.setItem(storageKeyRef.current, JSON.stringify(resolved));
+      } catch {
+        // Panel sizing remains functional when storage is unavailable.
+      }
+      return resolved;
+    });
+  };
+
+  return [size, setSize] as const;
+}
+
 function HistoryPanel({
   state,
   actions,
@@ -2002,8 +2062,10 @@ function RenderPanel({
   actions: PtActions;
 }) {
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:render", false);
-  const [size, setSize] = useState<PanelSize>(() =>
-    clampPanelSize({ width: 260, height: 360 })
+  const [size, setSize] = usePersistentPanelSize(
+    state.sceneKey,
+    "render",
+    { width: 260, height: 360 }
   );
   const resizeGesture = useRef<{
     axis: ResizeAxis;
@@ -2176,8 +2238,10 @@ function EditorShell({ actions }: { actions: PtActions }) {
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
   const analyticLightSelected = state.selection.light !== null;
   const pointLightSelected = state.selection.light?.type === "point";
-  const [size, setSize] = useState<PanelSize>(() =>
-    clampPanelSize({ width: 260, height: 620 })
+  const [size, setSize] = usePersistentPanelSize(
+    state.sceneKey,
+    "scene",
+    { width: 260, height: 620 }
   );
   const resizeGesture = useRef<{
     axis: ResizeAxis;

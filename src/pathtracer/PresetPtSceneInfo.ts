@@ -25,11 +25,6 @@ export const presetPtSceneInfo: Record<string, PresetPtSceneInfo> = {
     implementation: "Imports the Khronos Damaged Helmet and maps glTF material factors and texture channels into the path tracer's principled material representation.",
     concepts: "glTF stores roughness in the green channel and metallic in blue; factors multiply sampled texture values before BSDF evaluation.",
   },
-  GlTFMetalRoughStressStudy: {
-    purpose: "Stress-tests many glTF primitives and material assignments while checking metallic-roughness behavior across a large asset.",
-    implementation: "Loads the Khronos metallic-roughness test model as a deliberately expensive optional scene and compiles its primitives into shared packed GPU resources.",
-    concepts: "The scene should show a systematic transition from dielectric to conductor response and from sharp to broad specular lobes.",
-  },
   GlTFSimpleMeshesStudy: {
     purpose: "Checks multiple glTF meshes and material groups in one lightweight imported scene.",
     implementation: "Extracts several static mesh primitives, retains their individual material indices, and combines them into one triangle/BVH compilation pass.",
