@@ -473,9 +473,9 @@ export default class PtScene {
         material.emissiveMap = enabled
           ? createPreviewTexture(definition.emission.color.texture)
           : null;
-        material.emissive.copy(
-          enabled ? definition.emission.color.factor : new THREE.Color(0x000000)
-        );
+        material.emissive.copy(enabled
+          ? previewColorInput(definition.emission.color)
+          : new THREE.Color(0x000000));
       }
     }
     material.needsUpdate = true;
@@ -552,6 +552,9 @@ function createPreviewMaterial(
     const dataMap = material.definition.metallicRoughnessTextureEnabled
       ? createPreviewTexture(material.definition.metallicRoughnessTexture, false)
       : null;
+    const emissionMap = material.definition.emission.color.textureEnabled
+      ? createPreviewTexture(material.definition.emission.color.texture)
+      : null;
     previewMaterial = new THREE.MeshStandardMaterial({
       color: previewColor,
       map: previewMap,
@@ -559,11 +562,14 @@ function createPreviewMaterial(
       roughness: material.definition.roughness,
       metalnessMap: dataMap,
       roughnessMap: dataMap,
+      // A color input is factor * texture. For a constant texture, there is no
+      // Three.js map object, so its value must be folded into the preview
+      // emissive color. Using only the factor turned glTF materials with the
+      // default constant-black emission into solid white emitters.
       emissive: material.definition.emission.color.textureEnabled
-        ? material.definition.emission.color.factor
+        ? previewColorInput(material.definition.emission.color)
         : new THREE.Color(0x000000),
-      emissiveMap: material.definition.emission.color.textureEnabled
-        ? createPreviewTexture(material.definition.emission.color.texture) : null,
+      emissiveMap: emissionMap,
       emissiveIntensity: material.definition.emission.strength,
     });
   } else if (material.type === PtMaterialType.Emissive) {
@@ -586,6 +592,10 @@ function createPreviewMaterial(
     materialDefinition: material.definition,
   };
   return previewMaterial;
+}
+
+function previewColorInput(input: PtMaterial["definition"]["baseColor"]): THREE.Color {
+  return texturePreviewColor(input.texture).clone().multiply(input.factor);
 }
 
 function createQuadGeometry() {
