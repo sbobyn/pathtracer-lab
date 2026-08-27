@@ -1,6 +1,3 @@
-#ifndef MAX_SPHERES
-#define MAX_SPHERES 1
-#endif
 #ifndef MAX_QUADS
 #define MAX_QUADS 1
 #endif
@@ -37,6 +34,13 @@ uniform vec2 uRandomSequence;
 uniform Camera uCamera;
 uniform World uWorld;
 uniform int uSphereCount;
+uniform sampler2D uSphereData;
+uniform vec2 uSphereDataSize;
+uniform int uSphereBvhNodeCount;
+uniform sampler2D uSphereBvhNodeData;
+uniform vec2 uSphereBvhNodeDataSize;
+uniform sampler2D uSphereBvhIndexData;
+uniform vec2 uSphereBvhIndexDataSize;
 uniform int uQuadCount;
 uniform int uTriangleCount;
 uniform sampler2D uTriangleData;

@@ -1,4 +1,5 @@
 const int TRIANGLE_TEXELS = 8;
+const int SPHERE_TEXELS = 2;
 const int MATERIAL_TEXELS = 4;
 const int TEXTURE_TEXELS = 3;
 
@@ -10,6 +11,13 @@ vec4 readPackedTexel(sampler2D dataTexture, vec2 dataSize, int linearIndex) {
 vec4 readTriangleTexel(int triangleIndex, int texelOffset) {
     int linearIndex = triangleIndex * TRIANGLE_TEXELS + texelOffset;
     return readPackedTexel(uTriangleData, uTriangleDataSize, linearIndex);
+}
+
+Sphere readSphere(int sphereIndex) {
+    int base = sphereIndex * SPHERE_TEXELS;
+    vec4 geometry = readPackedTexel(uSphereData, uSphereDataSize, base);
+    vec4 properties = readPackedTexel(uSphereData, uSphereDataSize, base + 1);
+    return Sphere(geometry.xyz, geometry.w, int(round(properties.x)), int(round(properties.y)));
 }
 
 Material readMaterial(int materialIndex) {
@@ -64,4 +72,18 @@ void readBvhNode(int nodeIndex, out vec3 boundsMin, out vec3 boundsMax, out int 
 
 int readBvhTriangleIndex(int indexOffset) {
     return int(round(readPackedTexel(uBvhIndexData, uBvhIndexDataSize, indexOffset).x));
+}
+
+void readSphereBvhNode(int nodeIndex, out vec3 boundsMin, out vec3 boundsMax, out int payload, out int sphereCount) {
+    int base = nodeIndex * 2;
+    vec4 minimum = readPackedTexel(uSphereBvhNodeData, uSphereBvhNodeDataSize, base);
+    vec4 maximum = readPackedTexel(uSphereBvhNodeData, uSphereBvhNodeDataSize, base + 1);
+    boundsMin = minimum.xyz;
+    boundsMax = maximum.xyz;
+    payload = int(round(minimum.w));
+    sphereCount = int(round(maximum.w));
+}
+
+int readSphereBvhIndex(int indexOffset) {
+    return int(round(readPackedTexel(uSphereBvhIndexData, uSphereBvhIndexDataSize, indexOffset).x));
 }

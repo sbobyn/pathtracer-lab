@@ -144,7 +144,75 @@ bool hitTrianglesBruteForce(Ray ray, Interval rayInterval, inout Hit hit, inout 
     return hitAnything;
 }
 
+bool hitSpheresBruteForce(Ray ray, Interval rayInterval, inout Hit hit, inout float closestSoFar) {
+    Hit candidate;
+    bool hitAnything = false;
+    for (int i = 0; i < uSphereCount; i++) {
+        Sphere sphere = readSphere(i);
+        if (hitSphere(sphere, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+            hitAnything = true;
+            closestSoFar = candidate.t;
+            hit = candidate;
+            hit.materialId = sphere.materialId;
+            hit.primitiveType = 0;
+            hit.primitiveId = i;
+        }
+    }
+    return hitAnything;
+}
+
 const int BVH_STACK_SIZE = 64;
+
+bool hitSpheresBvh(Ray ray, Interval rayInterval, inout Hit hit, inout float closestSoFar) {
+    if (uSphereBvhNodeCount == 0) return false;
+    int stack[BVH_STACK_SIZE];
+    int stackSize = 1;
+    stack[0] = 0;
+    bool hitAnything = false;
+    bool invalidTraversal = false;
+    Hit candidate;
+    while (stackSize > 0) {
+        int nodeIndex = stack[--stackSize];
+        if (nodeIndex < 0 || nodeIndex >= uSphereBvhNodeCount) {
+            invalidTraversal = true;
+            break;
+        }
+        vec3 boundsMin;
+        vec3 boundsMax;
+        int payload;
+        int sphereCount;
+        readSphereBvhNode(nodeIndex, boundsMin, boundsMax, payload, sphereCount);
+        if (!hitAabb(boundsMin, boundsMax, ray, Interval(rayInterval.min, closestSoFar))) continue;
+        if (sphereCount > 0) {
+            for (int offset = 0; offset < sphereCount; offset++) {
+                int sphereIndex = readSphereBvhIndex(payload + offset);
+                if (sphereIndex < 0 || sphereIndex >= uSphereCount) {
+                    invalidTraversal = true;
+                    break;
+                }
+                Sphere sphere = readSphere(sphereIndex);
+                if (hitSphere(sphere, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+                    hitAnything = true;
+                    closestSoFar = candidate.t;
+                    hit = candidate;
+                    hit.materialId = sphere.materialId;
+                    hit.primitiveType = 0;
+                    hit.primitiveId = sphereIndex;
+                }
+            }
+            if (invalidTraversal) break;
+            continue;
+        }
+        if (stackSize + 2 > BVH_STACK_SIZE) {
+            invalidTraversal = true;
+            break;
+        }
+        stack[stackSize++] = payload;
+        stack[stackSize++] = nodeIndex + 1;
+    }
+    if (invalidTraversal) return hitSpheresBruteForce(ray, rayInterval, hit, closestSoFar) || hitAnything;
+    return hitAnything;
+}
 
 bool hitTrianglesBvh(Ray ray, Interval rayInterval, inout Hit hit, inout float closestSoFar) {
     if (uBvhNodeCount == 0) return false;
@@ -203,18 +271,10 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
     Hit candidate;
     bool hitAnything = false;
     float closestSoFar = rayInterval.max;
-    for (int i = 0; i < MAX_SPHERES; i++) {
-        if (i >= uSphereCount) break;
-        Sphere sphere = world.spheres[i];
-        if (hitSphere(sphere, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
-            hitAnything = true;
-            closestSoFar = candidate.t;
-            hit = candidate;
-            hit.materialId = sphere.materialId;
-            hit.primitiveType = 0;
-            hit.primitiveId = i;
-        }
-    }
+    bool hitSpheres = uTriangleTraversalMode == 1
+        ? hitSpheresBvh(ray, rayInterval, hit, closestSoFar)
+        : hitSpheresBruteForce(ray, rayInterval, hit, closestSoFar);
+    hitAnything = hitSpheres || hitAnything;
     for (int i = 0; i < MAX_QUADS; i++) {
         if (i >= uQuadCount) break;
         Quad quad = world.quads[i];

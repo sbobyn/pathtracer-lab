@@ -123,14 +123,16 @@ export interface PtBvhTraversalState {
   rayOrigin: [number, number, number] | null;
   rayDirection: [number, number, number] | null;
   events: Array<
-    | { kind: "node"; nodeIndex: number; hit: boolean; leaf: boolean }
-    | { kind: "triangle"; nodeIndex: number; triangleIndex: number; distance: number | null; closest: boolean }
+    | { kind: "node"; geometryKind: "triangle" | "sphere"; nodeIndex: number; hit: boolean; leaf: boolean }
+    | { kind: "triangle"; geometryKind: "triangle"; nodeIndex: number; triangleIndex: number; distance: number | null; closest: boolean }
+    | { kind: "sphere"; geometryKind: "sphere"; nodeIndex: number; sphereIndex: number; distance: number | null; closest: boolean }
   >;
   result: {
-    triangleIndex: number;
+    geometryKind: "triangle" | "sphere" | null;
+    primitiveIndex: number;
     distance: number | null;
     nodeTests: number;
-    triangleTests: number;
+    primitiveTests: number;
     agreesWithBruteForce: boolean;
   } | null;
 }

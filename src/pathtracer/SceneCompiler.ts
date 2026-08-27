@@ -16,6 +16,7 @@ import PtScene, {
   type PtPreviewMaterial,
 } from "./PtScene";
 import { buildTriangleBvh } from "./TriangleBvh";
+import { buildSphereBvh } from "./SphereBvh";
 import { compileGpuMaterial } from "./MaterialCompiler";
 
 export const MAX_WEBGL_IMAGE_TEXTURES = 4;
@@ -24,8 +25,10 @@ export default class SceneCompiler {
   public compile(scene: PtScene): GpuScene {
     const { materials, textures, imageTextures } = this.compileMaterialResources(scene);
     const triangles = this.compileTriangles(scene);
+    const spheres = this.compileSpheres(scene);
     return new GpuScene(
-      this.compileSpheres(scene),
+      spheres,
+      buildSphereBvh(spheres),
       this.compileQuads(scene),
       triangles,
       buildTriangleBvh(triangles),
@@ -44,7 +47,8 @@ export default class SceneCompiler {
       return;
     }
     if (level >= PtInvalidationLevel.Geometry) {
-      gpuScene.updateSpheres(this.compileSpheres(scene));
+      const spheres = this.compileSpheres(scene);
+      gpuScene.updateSpheres(spheres, buildSphereBvh(spheres));
       gpuScene.updateQuads(this.compileQuads(scene));
       const triangles = this.compileTriangles(scene);
       gpuScene.updateTriangles(triangles, buildTriangleBvh(triangles));

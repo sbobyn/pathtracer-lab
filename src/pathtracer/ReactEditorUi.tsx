@@ -656,6 +656,7 @@ function RenderSettings({
 }) {
   const { settings } = state;
   const bvhStats = actions.getTriangleBvhStats();
+  const sphereBvhStats = actions.getSphereBvhStats();
   const bvhProbeStats = actions.getTriangleBvhProbeStats();
   const [showBvhVisualizationHelp, setShowBvhVisualizationHelp] = useState(false);
   const [bvhTraversalPlaying, setBvhTraversalPlaying] = useState(false);
@@ -664,7 +665,7 @@ function RenderSettings({
   const traversalEvent = traversal.events[traversal.step] ?? null;
   const visibleTraversalEvents = traversal.events.slice(0, Math.max(0, traversal.step + 1));
   const visibleNodeTests = visibleTraversalEvents.filter((event) => event.kind === "node").length;
-  const visibleTriangleTests = visibleTraversalEvents.filter((event) => event.kind === "triangle").length;
+  const visiblePrimitiveTests = visibleTraversalEvents.filter((event) => event.kind === "triangle" || event.kind === "sphere").length;
   useEffect(() => {
     if (!bvhTraversalPlaying) return;
     if (traversal.step >= traversal.events.length - 1) {
@@ -836,14 +837,14 @@ function RenderSettings({
           }}
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
-      {bvhStats.triangleCount > 0 && (
-        <HelpedControl label="Triangles" content={{
-          meaning: "Chooses how rays search the packed triangle set for the closest intersection.",
-          math: "Brute force tests every triangle; the BVH rejects groups of triangles using bounding-box tests.",
+      {(bvhStats.triangleCount > 0 || sphereBvhStats.sphereCount > 0) && (
+        <HelpedControl label="Acceleration" content={{
+          meaning: "Chooses how rays search packed spheres and triangles for the closest intersection.",
+          math: "Brute force tests every primitive; the BVH rejects spatial groups using bounding-box tests before exact intersections.",
           lookFor: "Both modes should produce the same image. Differences indicate an intersection or BVH correctness bug.",
           performance: "BVH traversal scales far better for large meshes; brute force is retained as a correctness baseline.",
         }}><SelectField
-          label="Triangles"
+          label="Acceleration"
           value={settings.triangleTraversalMode}
           options={[
             { value: "bvh", label: "BVH" },
@@ -852,13 +853,13 @@ function RenderSettings({
           density="compact"
           layout="horizontal"
           onChange={(value) =>
-            commitSetting(actions, "Change triangle traversal", () =>
+            commitSetting(actions, "Change acceleration traversal", () =>
               actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
             )
           }
         /></HelpedControl>
       )}
-      {bvhStats.nodeCount > 0 && (
+      {(bvhStats.nodeCount > 0 || sphereBvhStats.nodeCount > 0) && (
         <PersistentDetails
           className="editor-subpanel render-panel__bvh-visualization"
           storageKey="bvh-visualization"
@@ -883,10 +884,11 @@ function RenderSettings({
           </div>
           {showBvhVisualizationHelp && (
             <p className="render-panel__bvh-help">
-              Shows the bounding boxes used to organize triangles. Depth 0 is the
-              root; higher values reveal progressively smaller child boxes. These
-              controls affect only the debug overlay—not the BVH build, ray
-              traversal, or accumulated image.
+              Shows the bounding boxes used to organize accelerated primitives.
+              Triangle nodes are blue/green; sphere nodes are purple/gold. Depth
+              0 is the root; higher values reveal progressively smaller child
+              boxes. These controls affect only the debug overlay—not the BVH
+              build, ray traversal, or accumulated image.
             </p>
           )}
           <CheckboxField
@@ -904,9 +906,9 @@ function RenderSettings({
             actions={actions}
             label="Visible depth"
             historyLabel="Change visible BVH depth"
-            value={Math.min(settings.bvhOverlayDepth, bvhStats.maxDepth)}
+            value={Math.min(settings.bvhOverlayDepth, Math.max(bvhStats.maxDepth, sphereBvhStats.maxDepth))}
             min={0}
-            max={bvhStats.maxDepth}
+            max={Math.max(bvhStats.maxDepth, sphereBvhStats.maxDepth)}
             step={1}
             precisionStep={1}
             snapInterval={1}
@@ -974,13 +976,17 @@ function RenderSettings({
                 />
                 <dl className="render-panel__traversal-stats">
                   <div><dt>Step</dt><dd>{traversal.step + 1} / {traversal.events.length}</dd></div>
-                  <div><dt>Node / triangle tests</dt><dd>{visibleNodeTests} / {visibleTriangleTests}</dd></div>
+                  <div><dt>Node / primitive tests</dt><dd>{visibleNodeTests} / {visiblePrimitiveTests}</dd></div>
                   <div><dt>Current</dt><dd>{traversalEvent?.kind === "node"
-                    ? `Node ${traversalEvent.nodeIndex}: ${traversalEvent.hit ? (traversalEvent.leaf ? "leaf" : "entered") : "rejected"}`
-                    : traversalEvent
+                    ? `${traversalEvent.geometryKind === "sphere" ? "Sphere" : "Triangle"} node ${traversalEvent.nodeIndex}: ${traversalEvent.hit ? (traversalEvent.leaf ? "leaf" : "entered") : "rejected"}`
+                    : traversalEvent?.kind === "triangle"
                       ? `Triangle ${traversalEvent.triangleIndex}: ${traversalEvent.closest ? "new closest" : "miss"}`
-                      : "—"}</dd></div>
-                  <div><dt>Final hit</dt><dd>{traversal.result?.triangleIndex === -1 ? "Miss" : `Triangle ${traversal.result?.triangleIndex}`}</dd></div>
+                      : traversalEvent?.kind === "sphere"
+                        ? `Sphere ${traversalEvent.sphereIndex}: ${traversalEvent.closest ? "new closest" : "miss"}`
+                        : "—"}</dd></div>
+                  <div><dt>Final hit</dt><dd>{!traversal.result || traversal.result.primitiveIndex === -1
+                    ? "Miss"
+                    : `${traversal.result.geometryKind === "sphere" ? "Sphere" : "Triangle"} ${traversal.result.primitiveIndex}`}</dd></div>
                   <div><dt>Brute-force check</dt><dd>{traversal.result?.agreesWithBruteForce ? "Agrees" : "Mismatch"}</dd></div>
                 </dl>
               </>
@@ -1002,6 +1008,13 @@ function RenderSettings({
             <dt>Probe nodes / hits</dt>
             <dd>{bvhProbeStats.averageNodeTests.toFixed(1)} / {bvhProbeStats.hitCount} of {bvhProbeStats.rayCount}</dd>
           </div>
+        </dl>
+      )}
+      {sphereBvhStats.sphereCount > 0 && (
+        <dl className="render-panel__bvh-stats" aria-label="Sphere BVH statistics">
+          <div><dt>BVH spheres</dt><dd>{sphereBvhStats.sphereCount}</dd></div>
+          <div><dt>Sphere nodes / leaves</dt><dd>{sphereBvhStats.nodeCount} / {sphereBvhStats.leafCount}</dd></div>
+          <div><dt>Sphere depth / leaf max</dt><dd>{sphereBvhStats.maxDepth} / {sphereBvhStats.maxLeafSize}</dd></div>
         </dl>
       )}
       </div>

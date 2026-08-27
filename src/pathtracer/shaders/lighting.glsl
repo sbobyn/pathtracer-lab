@@ -113,7 +113,7 @@ LightSample sampleLight(World world, vec3 origin, vec2 seed) {
     }
 
     if (light.primitiveType == 0) {
-        Sphere sphere = world.spheres[light.primitiveIndex];
+        Sphere sphere = readSphere(light.primitiveIndex);
         lightSample.normal = randomOnUnitSphere(surfaceSeed);
         lightSample.position = sphere.position + sphere.radius * lightSample.normal;
         lightSample.uv = sphere.uvMapping == 1
@@ -155,7 +155,7 @@ float lightPdfForHit(vec3 origin, Hit hit) {
         ) continue;
 
         vec3 outwardNormal = light.primitiveType == 0
-            ? normalize(hit.position - uWorld.spheres[light.primitiveIndex].position)
+            ? normalize(hit.position - readSphere(light.primitiveIndex).position)
             : uWorld.quads[light.primitiveIndex].normal;
         vec3 fromOrigin = hit.position - origin;
         float distanceSquared = dot(fromOrigin, fromOrigin);

@@ -4,6 +4,8 @@ import * as THREE from "three";
 import type { GpuTriangle } from "../src/pathtracer/GpuScene.ts";
 import { packTriangleBvh } from "../src/pathtracer/PackedTriangleBvh.ts";
 import { buildTriangleBvh } from "../src/pathtracer/TriangleBvh.ts";
+import { buildSphereBvh } from "../src/pathtracer/SphereBvh.ts";
+import { packSphereBvh } from "../src/pathtracer/PackedTriangleBvh.ts";
 
 const normal = new THREE.Vector3(0, 0, 1);
 const triangle = (x: number): GpuTriangle => ({
@@ -32,4 +34,20 @@ test("packed BVH resources wrap rows and reject device capacity overflow", () =>
   packed.nodeTexture.dispose();
   packed.indexTexture.dispose();
   assert.throws(() => packTriangleBvh(buildTriangleBvh(Array.from({ length: 32 }, (_, i) => triangle(i)), 1), 4), /capacity exceeded/);
+});
+
+test("sphere BVHs reuse the backend-neutral packed node and index layout", () => {
+  const spheres = [0, 1, 2].map((x) => ({
+    position: new THREE.Vector3(x * 2, 0, 0),
+    radius: 0.5,
+    materialId: x,
+    uvMapping: 0,
+  }));
+  const bvh = buildSphereBvh(spheres, 1);
+  const packed = packSphereBvh(bvh, 64);
+  const indices = packed.indexTexture.image.data as Float32Array;
+  assert.deepEqual(bvh.sphereIndices.map((_, index) => indices[index * 4]), bvh.sphereIndices);
+  assert.equal(packed.nodeCount, bvh.nodes.length);
+  packed.nodeTexture.dispose();
+  packed.indexTexture.dispose();
 });

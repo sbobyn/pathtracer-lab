@@ -1,6 +1,7 @@
 import type * as THREE from "three";
 import type PtMaterial from "./PtMaterial";
 import type { TriangleBvh } from "./TriangleBvh";
+import type { SphereBvh } from "./SphereBvh";
 
 export interface GpuSphere {
   position: THREE.Vector3;
@@ -79,6 +80,7 @@ export interface GpuLight {
 
 export default class GpuScene {
   public spheres: GpuSphere[];
+  public sphereBvh: SphereBvh;
   public quads: GpuQuad[];
   public triangles: GpuTriangle[];
   public triangleBvh: TriangleBvh;
@@ -90,6 +92,7 @@ export default class GpuScene {
 
   constructor(
     spheres: GpuSphere[],
+    sphereBvh: SphereBvh,
     quads: GpuQuad[],
     triangles: GpuTriangle[],
     triangleBvh: TriangleBvh,
@@ -99,6 +102,7 @@ export default class GpuScene {
     lights: GpuLight[]
   ) {
     this.spheres = spheres;
+    this.sphereBvh = sphereBvh;
     this.quads = quads;
     this.triangles = triangles;
     this.triangleBvh = triangleBvh;
@@ -108,9 +112,10 @@ export default class GpuScene {
     this.lights = lights;
   }
 
-  public updateSpheres(spheres: GpuSphere[]) {
+  public updateSpheres(spheres: GpuSphere[], sphereBvh: SphereBvh) {
     this.assertUsable();
     this.spheres = spheres;
+    this.sphereBvh = sphereBvh;
   }
 
   public updateQuads(quads: GpuQuad[]) {
@@ -144,6 +149,7 @@ export default class GpuScene {
     if (this.disposed) return;
     this.disposed = true;
     this.spheres = [];
+    this.sphereBvh = { nodes: [], sphereIndices: [], stats: { sphereCount: 0, nodeCount: 0, leafCount: 0, maxDepth: 0, maxLeafSize: 0 } };
     this.quads = [];
     this.triangles = [];
     this.triangleBvh = { nodes: [], triangleIndices: [], stats: { triangleCount: 0, nodeCount: 0, leafCount: 0, maxDepth: 0, maxLeafSize: 0 } };

@@ -131,6 +131,10 @@ export default class PtActions {
     return this.renderer.getTriangleBvhStats();
   }
 
+  public getSphereBvhStats() {
+    return this.renderer.getSphereBvhStats();
+  }
+
   public getTriangleBvhProbeStats() {
     return this.renderer.getTriangleBvhProbeStats();
   }

@@ -40,6 +40,11 @@ export const presetPtSceneInfo: Record<string, PresetPtSceneInfo> = {
     implementation: "Procedurally creates a field of diffuse, metal, and glass spheres plus three large reference spheres using the legacy material adapters.",
     concepts: "Monte Carlo path tracing estimates radiance by averaging many random light-transport paths; independent samples reduce noise roughly with 1 / √N.",
   },
+  RTIOW1SphereBvhStudy: {
+    purpose: "Stress-tests analytic-sphere acceleration with a reproducible full-scale RTIOW1-style random scene.",
+    implementation: "A fixed seed creates hundreds of diffuse, metal, and dielectric spheres. Sphere records and their flattened BVH are packed into GPU textures, while a brute-force mode remains available for matched comparisons.",
+    concepts: "The BVH first rejects ray–AABB regions, then performs the unchanged exact quadratic sphere test only for primitives in reached leaves. Both traversal modes should produce the same image.",
+  },
   TextureStudy: {
     purpose: "Compares image, checker, and Perlin procedural textures on spheres, including reflection in a smooth metal reference.",
     implementation: "Texture descriptors are evaluated from sphere UVs or procedural coordinates and modulate the legacy material albedo before scattering.",

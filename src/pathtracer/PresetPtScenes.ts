@@ -13,10 +13,11 @@ import boxGltfUrl from "../assets/gltf/box/Box.glb?url";
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   if (
     sceneKey === "PackedTrianglesStudy" ||
+    sceneKey === "RTIOW1SphereBvhStudy" ||
     sceneKey === "GlTFSuzanneStudy" ||
     sceneKey === "DamagedHelmetStudy" ||
     sceneKey === "PrincipledMaterialStudy"
-  ) return 0.5;
+  ) return sceneKey === "RTIOW1SphereBvhStudy" ? 0.25 : 0.5;
   return sceneKey === "CornellBox" ? 0.5 : fallback;
 }
 
@@ -260,6 +261,51 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 20;
 
+    return new PtScene(spheres, materials, camera);
+  },
+
+  RTIOW1SphereBvhStudy: () => {
+    const random = createSeededRandom(0x805b7a);
+    const spheres: PtSphere[] = [new PtSphere(new THREE.Vector3(0, -1000, 0), 1000, 0)];
+    const materials: PtMaterial[] = [PtMaterial.legacyLambert(new THREE.Color(0.5, 0.5, 0.5))];
+    const protectedCenters = [
+      new THREE.Vector3(0, 0.2, 0),
+      new THREE.Vector3(-4, 0.2, 0),
+      new THREE.Vector3(4, 0.2, 0),
+    ];
+
+    for (let a = -11; a < 11; a += 1) {
+      for (let b = -11; b < 11; b += 1) {
+        const center = new THREE.Vector3(a + 0.9 * random(), 0.2, b + 0.9 * random());
+        if (protectedCenters.some((protectedCenter) => center.distanceTo(protectedCenter) <= 0.9)) continue;
+
+        const chooseMaterial = random();
+        if (chooseMaterial < 0.8) {
+          materials.push(PtMaterial.legacyLambert(new THREE.Color(
+            random() * random(), random() * random(), random() * random()
+          )));
+        } else if (chooseMaterial < 0.95) {
+          materials.push(PtMaterial.legacyFuzzyMetal(new THREE.Color(
+            0.5 * (1 + random()), 0.5 * (1 + random()), 0.5 * (1 + random())
+          ), 0.5 * random()));
+        } else {
+          materials.push(PtMaterial.legacyDielectric(1.5));
+        }
+        spheres.push(new PtSphere(center, 0.2, materials.length - 1));
+      }
+    }
+
+    materials.push(PtMaterial.legacyLambert(new THREE.Color(0.4, 0.2, 0.1)));
+    spheres.push(new PtSphere(new THREE.Vector3(-4, 1, 0), 1, materials.length - 1));
+    materials.push(PtMaterial.legacyDielectric(1.5));
+    spheres.push(new PtSphere(new THREE.Vector3(0, 1, 0), 1, materials.length - 1));
+    materials.push(PtMaterial.legacyFuzzyMetal(new THREE.Color(0.7, 0.6, 0.5), 0));
+    spheres.push(new PtSphere(new THREE.Vector3(4, 1, 0), 1, materials.length - 1));
+
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(13, 2, 3), lookAt: new THREE.Vector3(0, 0, 0), far: 10000,
+    });
+    camera.fov = 20;
     return new PtScene(spheres, materials, camera);
   },
 
@@ -601,11 +647,20 @@ export const presetPtSceneOrder = [
   "GlTFSimpleMeshesStudy",
   "DamagedHelmetStudy",
   "PrincipledMaterialStudy",
+  "RTIOW1SphereBvhStudy",
 ] as const;
 
 export function presetPtSceneLabel(sceneKey: string) {
   const index = presetPtSceneOrder.indexOf(sceneKey as typeof presetPtSceneOrder[number]);
   return index === -1 ? sceneKey : `${String(index).padStart(2, "0")}-${sceneKey}`;
+}
+
+function createSeededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
 }
 
 function createIndexedPyramidGeometry() {

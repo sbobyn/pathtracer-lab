@@ -26,8 +26,10 @@ import GpuScene from "./GpuScene";
 import SceneCompiler from "./SceneCompiler";
 import { packTriangleTexture, type PackedTriangleTexture } from "./PackedTriangleTexture";
 import { packMaterialTexture, packTextureTexture, type PackedDataTexture } from "./PackedMaterialTextures";
-import { packTriangleBvh, type PackedTriangleBvh } from "./PackedTriangleBvh";
+import { packSphereBvh, packTriangleBvh, type PackedTriangleBvh } from "./PackedTriangleBvh";
+import { packSphereTexture, type PackedSphereTexture } from "./PackedSphereTexture";
 import { describeTriangleBvh, hitTriangleDistance, measureTriangleBvh, traceTriangleBvhTraversal, type TriangleBvhStats } from "./TriangleBvh";
+import { describeSphereBvh, hitSphereDistance, traceSphereBvhTraversal } from "./SphereBvh";
 
 function integratorModeValue(mode: PtSettings["integratorMode"]): number {
   if (mode === "direct") return 1;
@@ -57,7 +59,7 @@ export default class PtRenderer {
   private readonly debugOverlayScene = new THREE.Scene();
   private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
   private readonly triangleWireframeOverrides = new Map<string, boolean>();
-  private readonly bvhHelpers: Array<{ helper: LineSegments2; depth: number }> = [];
+  private readonly bvhHelpers: Array<{ helper: LineSegments2; depth: number; kind: "triangle" | "sphere" }> = [];
   private bvhTraversalState: PtBvhTraversalState | null = null;
   private bvhTraversalInvalidated: (() => void) | null = null;
   private bvhTraversalRay: Line2 | null = null;
@@ -69,6 +71,8 @@ export default class PtRenderer {
   public uniforms: PtUniforms;
   private readonly sceneCompiler = new SceneCompiler();
   private gpuScene: GpuScene;
+  private packedSpheres!: PackedSphereTexture;
+  private packedSphereBvh!: PackedTriangleBvh;
   private packedTriangles!: PackedTriangleTexture;
   private packedTriangleBvh!: PackedTriangleBvh;
   private packedMaterials!: PackedDataTexture;
@@ -138,6 +142,8 @@ export default class PtRenderer {
     this.gpuScene = this.sceneCompiler.compile(ptScene);
 
     this.setupRenderer();
+    this.packedSpheres = packSphereTexture(this.gpuScene.spheres, this.renderer.capabilities.maxTextureSize);
+    this.packedSphereBvh = packSphereBvh(this.gpuScene.sphereBvh, this.renderer.capabilities.maxTextureSize);
     this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
     this.packedTriangleBvh = packTriangleBvh(this.gpuScene.triangleBvh, this.renderer.capabilities.maxTextureSize);
     this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
@@ -188,12 +194,16 @@ export default class PtRenderer {
 
   setScene(ptScene: PtScene, invalidate = true) {
     this.gpuScene.dispose();
+    this.packedSpheres.texture.dispose();
+    this.disposePackedSphereBvh();
     this.packedTriangles.texture.dispose();
     this.disposePackedTriangleBvh();
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
     this.ptScene = ptScene;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
+    this.packedSpheres = packSphereTexture(this.gpuScene.spheres, this.renderer.capabilities.maxTextureSize);
+    this.packedSphereBvh = packSphereBvh(this.gpuScene.sphereBvh, this.renderer.capabilities.maxTextureSize);
     this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
     this.packedTriangleBvh = packTriangleBvh(this.gpuScene.triangleBvh, this.renderer.capabilities.maxTextureSize);
     this.packedMaterials = packMaterialTexture(this.gpuScene.materials, this.renderer.capabilities.maxTextureSize);
@@ -348,7 +358,7 @@ export default class PtRenderer {
     }
     if (level >= PtInvalidationLevel.Material) {
       this.sceneCompiler.update(this.gpuScene, this.ptScene, level);
-      if (level >= PtInvalidationLevel.Geometry) this.updatePackedTriangleTexture();
+      if (level >= PtInvalidationLevel.Geometry) this.updatePackedGeometryTextures();
       this.updatePackedMaterialTextures();
       this.updateSceneUniforms();
       this.watchImageTextures(this.gpuScene);
@@ -374,6 +384,10 @@ export default class PtRenderer {
     return { ...this.gpuScene.triangleBvh.stats };
   }
 
+  public getSphereBvhStats() {
+    return { ...this.gpuScene.sphereBvh.stats };
+  }
+
   public getTriangleBvhProbeStats() {
     return measureTriangleBvh(this.gpuScene.triangleBvh, this.gpuScene.triangles);
   }
@@ -390,28 +404,59 @@ export default class PtRenderer {
       origin: raycaster.ray.origin.clone(),
       direction: raycaster.ray.direction.clone().normalize(),
     };
-    const trace = traceTriangleBvhTraversal(this.gpuScene.triangleBvh, this.gpuScene.triangles, ray);
+    const minimumDistance = 1e-3;
+    const sphereTrace = traceSphereBvhTraversal(
+      this.gpuScene.sphereBvh, this.gpuScene.spheres, ray, minimumDistance
+    );
+    const triangleTrace = traceTriangleBvhTraversal(
+      this.gpuScene.triangleBvh,
+      this.gpuScene.triangles,
+      ray,
+      minimumDistance,
+      sphereTrace.result.distance
+    );
+    const events: PtBvhTraversalState["events"] = [
+      ...sphereTrace.events.map((event) => ({ ...event, geometryKind: "sphere" as const })),
+      ...triangleTrace.events.map((event) => ({ ...event, geometryKind: "triangle" as const })),
+    ];
+    const triangleWon = triangleTrace.result.triangleIndex >= 0;
+    const geometryKind = triangleWon
+      ? "triangle" as const
+      : sphereTrace.result.sphereIndex >= 0 ? "sphere" as const : null;
+    const primitiveIndex = triangleWon
+      ? triangleTrace.result.triangleIndex
+      : sphereTrace.result.sphereIndex;
+    const distance = triangleWon ? triangleTrace.result.distance : sphereTrace.result.distance;
+
+    const bruteSphere = this.gpuScene.spheres.reduce(
+      (closest, sphere, sphereIndex) => {
+        const hitDistance = hitSphereDistance(sphere, ray, minimumDistance, closest.distance);
+        return hitDistance === null ? closest : { geometryKind: "sphere" as const, primitiveIndex: sphereIndex, distance: hitDistance };
+      },
+      { geometryKind: null as "sphere" | "triangle" | null, primitiveIndex: -1, distance: Number.POSITIVE_INFINITY }
+    );
     const bruteForce = this.gpuScene.triangles.reduce(
       (closest, triangle, triangleIndex) => {
-        const distance = hitTriangleDistance(triangle, ray, 1e-4, closest.distance);
-        return distance === null ? closest : { triangleIndex, distance };
+        const hitDistance = hitTriangleDistance(triangle, ray, minimumDistance, closest.distance);
+        return hitDistance === null ? closest : { geometryKind: "triangle" as const, primitiveIndex: triangleIndex, distance: hitDistance };
       },
-      { triangleIndex: -1, distance: Number.POSITIVE_INFINITY }
+      bruteSphere
     );
     const state: PtBvhTraversalState = {
       armed: false,
-      step: trace.events.length > 0 ? 0 : -1,
+      step: events.length > 0 ? 0 : -1,
       rayOrigin: ray.origin.toArray(),
       rayDirection: ray.direction.toArray(),
-      events: trace.events,
+      events,
       result: {
-        triangleIndex: trace.result.triangleIndex,
-        distance: Number.isFinite(trace.result.distance) ? trace.result.distance : null,
-        nodeTests: trace.result.nodeTests,
-        triangleTests: trace.result.triangleTests,
+        geometryKind,
+        primitiveIndex,
+        distance: Number.isFinite(distance) ? distance : null,
+        nodeTests: sphereTrace.result.nodeTests + triangleTrace.result.nodeTests,
+        primitiveTests: sphereTrace.result.sphereTests + triangleTrace.result.triangleTests,
         agreesWithBruteForce:
-          trace.result.triangleIndex === bruteForce.triangleIndex &&
-          (trace.result.triangleIndex < 0 || Math.abs(trace.result.distance - bruteForce.distance) < 1e-7),
+          geometryKind === bruteForce.geometryKind && primitiveIndex === bruteForce.primitiveIndex &&
+          (primitiveIndex < 0 || Math.abs(distance - bruteForce.distance) < 1e-7),
       },
     };
     this.setBvhTraversalVisualization(state);
@@ -426,10 +471,12 @@ export default class PtRenderer {
     if (state?.rayOrigin && state.rayDirection) {
       const origin = new THREE.Vector3(...state.rayOrigin);
       const direction = new THREE.Vector3(...state.rayDirection);
-      const root = this.gpuScene.triangleBvh.nodes[0];
-      const fallbackLength = root
-        ? origin.distanceTo(root.boundsMin.clone().add(root.boundsMax).multiplyScalar(0.5)) +
-          root.boundsMax.clone().sub(root.boundsMin).length()
+      const roots = [this.gpuScene.sphereBvh.nodes[0], this.gpuScene.triangleBvh.nodes[0]].filter(Boolean);
+      const rootBounds = roots.length > 0
+        ? roots.reduce((bounds, root) => bounds.expandByPoint(root!.boundsMin).expandByPoint(root!.boundsMax), new THREE.Box3())
+        : null;
+      const fallbackLength = rootBounds
+        ? origin.distanceTo(rootBounds.getCenter(new THREE.Vector3())) + rootBounds.getSize(new THREE.Vector3()).length()
         : 10;
       const length = state.result?.distance ?? fallbackLength;
       const end = origin.clone().addScaledVector(direction, length);
@@ -447,8 +494,16 @@ export default class PtRenderer {
           currentEvent.closest ? 0xfacc15 : 0xfb7185
         );
       }
-      if (state.result && state.result.triangleIndex >= 0) {
-        this.bvhTraversalHit = this.createTriangleDebugLine(state.result.triangleIndex, 0x4ade80, 3);
+      if (currentEvent?.kind === "sphere") {
+        this.bvhTraversalTriangle = this.createSphereDebugLine(
+          currentEvent.sphereIndex,
+          currentEvent.closest ? 0xfacc15 : 0xfb7185
+        );
+      }
+      if (state.result && state.result.primitiveIndex >= 0) {
+        this.bvhTraversalHit = state.result.geometryKind === "sphere"
+          ? this.createSphereDebugLine(state.result.primitiveIndex, 0x4ade80, 3)
+          : this.createTriangleDebugLine(state.result.primitiveIndex, 0x4ade80, 3);
       }
     }
     this.updateBvhHelperVisibility();
@@ -463,6 +518,42 @@ export default class PtRenderer {
       ...triangle.b.toArray(), ...triangle.c.toArray(),
       ...triangle.c.toArray(), ...triangle.a.toArray(),
     ]);
+    const material = new LineMaterial({ color, linewidth, depthTest: false, depthWrite: false });
+    const line = new LineSegments2(geometry, material);
+    line.computeLineDistances();
+    this.debugOverlayScene.add(line);
+    return line;
+  }
+
+  private createSphereDebugLine(sphereIndex: number, color: number, linewidth = 3) {
+    const sphere = this.gpuScene.spheres[sphereIndex];
+    if (!sphere) return null;
+    const positions: number[] = [];
+    const segments = 48;
+    for (let plane = 0; plane < 3; plane += 1) {
+      for (let segment = 0; segment < segments; segment += 1) {
+        const start = (segment / segments) * Math.PI * 2;
+        const end = ((segment + 1) / segments) * Math.PI * 2;
+        const startPoint = new THREE.Vector3();
+        const endPoint = new THREE.Vector3();
+        if (plane === 0) {
+          startPoint.set(Math.cos(start), Math.sin(start), 0);
+          endPoint.set(Math.cos(end), Math.sin(end), 0);
+        } else if (plane === 1) {
+          startPoint.set(Math.cos(start), 0, Math.sin(start));
+          endPoint.set(Math.cos(end), 0, Math.sin(end));
+        } else {
+          startPoint.set(0, Math.cos(start), Math.sin(start));
+          endPoint.set(0, Math.cos(end), Math.sin(end));
+        }
+        positions.push(
+          ...startPoint.multiplyScalar(sphere.radius).add(sphere.position).toArray(),
+          ...endPoint.multiplyScalar(sphere.radius).add(sphere.position).toArray()
+        );
+      }
+    }
+    const geometry = new LineSegmentsGeometry();
+    geometry.setPositions(positions);
     const material = new LineMaterial({ color, linewidth, depthTest: false, depthWrite: false });
     const line = new LineSegments2(geometry, material);
     line.computeLineDistances();
@@ -493,14 +584,12 @@ export default class PtRenderer {
   }
 
   private setupShaderCanvas() {
-    const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
-      fragmentShader: `#define MAX_SPHERES ${capacity}
-       #define MAX_QUADS ${quadCapacity}
+      fragmentShader: `#define MAX_QUADS ${quadCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`,
       uniforms: this.uniforms,
@@ -512,18 +601,12 @@ export default class PtRenderer {
   }
 
   private updateShaderCanvas() {
-    const capacity = this.sceneUniformCapacity();
     const quadCapacity = this.quadUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas
-      .setShader(`#define MAX_SPHERES ${capacity}
-       #define MAX_QUADS ${quadCapacity}
+      .setShader(`#define MAX_QUADS ${quadCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`);
-  }
-
-  private sceneUniformCapacity() {
-    return Math.max(1, this.gpuScene.spheres.length);
   }
 
   private quadUniformCapacity() {
@@ -631,11 +714,17 @@ export default class PtRenderer {
       },
       uWorld: {
         value: {
-          spheres: this.uniformSphereValues(),
           quads: this.uniformQuadValues(),
         },
       },
       uSphereCount: { value: this.gpuScene.spheres.length },
+      uSphereData: { value: this.packedSpheres.texture },
+      uSphereDataSize: { value: this.packedSpheres.size },
+      uSphereBvhNodeCount: { value: this.packedSphereBvh.nodeCount },
+      uSphereBvhNodeData: { value: this.packedSphereBvh.nodeTexture },
+      uSphereBvhNodeDataSize: { value: this.packedSphereBvh.nodeTextureSize },
+      uSphereBvhIndexData: { value: this.packedSphereBvh.indexTexture },
+      uSphereBvhIndexDataSize: { value: this.packedSphereBvh.indexTextureSize },
       uQuadCount: { value: this.gpuScene.quads.length },
       uTriangleCount: { value: this.gpuScene.triangles.length },
       uTriangleData: { value: this.packedTriangles.texture },
@@ -685,9 +774,15 @@ export default class PtRenderer {
   }
 
   private updateSceneUniforms() {
-    this.uniforms.uWorld.value.spheres = this.uniformSphereValues();
     this.uniforms.uWorld.value.quads = this.uniformQuadValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
+    this.uniforms.uSphereData.value = this.packedSpheres.texture;
+    this.uniforms.uSphereDataSize.value.copy(this.packedSpheres.size);
+    this.uniforms.uSphereBvhNodeCount.value = this.packedSphereBvh.nodeCount;
+    this.uniforms.uSphereBvhNodeData.value = this.packedSphereBvh.nodeTexture;
+    this.uniforms.uSphereBvhNodeDataSize.value.copy(this.packedSphereBvh.nodeTextureSize);
+    this.uniforms.uSphereBvhIndexData.value = this.packedSphereBvh.indexTexture;
+    this.uniforms.uSphereBvhIndexDataSize.value.copy(this.packedSphereBvh.indexTextureSize);
     this.uniforms.uQuadCount.value = this.gpuScene.quads.length;
     this.uniforms.uTriangleCount.value = this.gpuScene.triangles.length;
     this.uniforms.uTriangleData.value = this.packedTriangles.texture;
@@ -709,20 +804,6 @@ export default class PtRenderer {
     this.uniforms.uImageTexture3.value = this.gpuScene.imageTextures[3] ?? this.fallbackImageTexture;
   }
 
-  private uniformSphereValues() {
-    const capacity = this.sceneUniformCapacity();
-    const padding = {
-      position: new THREE.Vector3(),
-      radius: 0,
-      materialId: 0,
-      uvMapping: 0,
-    };
-    return Array.from(
-      { length: capacity },
-      (_, index) => this.gpuScene.spheres[index] ?? padding
-    );
-  }
-
   private uniformQuadValues() {
     const capacity = this.quadUniformCapacity();
     const padding = {
@@ -735,7 +816,11 @@ export default class PtRenderer {
     return Array.from({ length: capacity }, (_, index) => this.gpuScene.quads[index] ?? padding);
   }
 
-  private updatePackedTriangleTexture() {
+  private updatePackedGeometryTextures() {
+    this.packedSpheres.texture.dispose();
+    this.disposePackedSphereBvh();
+    this.packedSpheres = packSphereTexture(this.gpuScene.spheres, this.renderer.capabilities.maxTextureSize);
+    this.packedSphereBvh = packSphereBvh(this.gpuScene.sphereBvh, this.renderer.capabilities.maxTextureSize);
     this.packedTriangles.texture.dispose();
     this.disposePackedTriangleBvh();
     this.packedTriangles = packTriangleTexture(this.gpuScene.triangles, this.renderer.capabilities.maxTextureSize);
@@ -745,6 +830,11 @@ export default class PtRenderer {
   private disposePackedTriangleBvh() {
     this.packedTriangleBvh.nodeTexture.dispose();
     this.packedTriangleBvh.indexTexture.dispose();
+  }
+
+  private disposePackedSphereBvh() {
+    this.packedSphereBvh.nodeTexture.dispose();
+    this.packedSphereBvh.indexTexture.dispose();
   }
 
   private uniformLightValues() {
@@ -965,7 +1055,29 @@ export default class PtRenderer {
       helper.userData.bvhNodeIndex = description.index;
       helper.userData.bvhNode = description;
       this.debugOverlayScene.add(helper);
-      this.bvhHelpers.push({ helper, depth: description.depth });
+      this.bvhHelpers.push({ helper, depth: description.depth, kind: "triangle" });
+    }
+    const sphereDescriptions = describeSphereBvh(this.gpuScene.sphereBvh);
+    for (const description of sphereDescriptions) {
+      const node = this.gpuScene.sphereBvh.nodes[description.index]!;
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(this.boxEdgePositions(node.boundsMin, node.boundsMax));
+      const material = new LineMaterial({
+        color: description.leaf ? 0xfbbf24 : 0xc084fc,
+        linewidth: description.leaf ? 2.5 : 2,
+      });
+      material.transparent = true;
+      material.opacity = description.leaf ? 0.85 : 0.55;
+      material.depthTest = false;
+      material.depthWrite = false;
+      const helper = new LineSegments2(geometry, material);
+      helper.computeLineDistances();
+      helper.visible = false;
+      helper.userData.bvhNodeIndex = description.index;
+      helper.userData.bvhNode = description;
+      helper.userData.bvhKind = "sphere";
+      this.debugOverlayScene.add(helper);
+      this.bvhHelpers.push({ helper, depth: description.depth, kind: "sphere" });
     }
     this.updateBvhHelperVisibility();
   }
@@ -990,12 +1102,17 @@ export default class PtRenderer {
     const currentEvent = visibleEvents.at(-1);
     for (const entry of this.bvhHelpers) {
       const nodeIndex = entry.helper.userData.bvhNodeIndex as number;
-      const event = [...nodeEvents].reverse().find((candidate) => candidate.nodeIndex === nodeIndex);
+      const event = [...nodeEvents].reverse().find(
+        (candidate) => candidate.geometryKind === entry.kind && candidate.nodeIndex === nodeIndex
+      );
       const material = entry.helper.material as LineMaterial;
-      const description = entry.helper.userData.bvhNode as ReturnType<typeof describeTriangleBvh>[number];
+      const description = entry.helper.userData.bvhNode as { leaf: boolean };
       if (event) material.color.set(event.hit ? 0xfbbf24 : 0xf87171);
+      else if (entry.kind === "sphere") material.color.set(description.leaf ? 0xfbbf24 : 0xc084fc);
       else material.color.set(description.leaf ? 0x9bea78 : 0x63b3ed);
-      if (currentEvent && currentEvent.nodeIndex === nodeIndex) material.color.set(0xffffff);
+      if (currentEvent?.kind === "node" && currentEvent.geometryKind === entry.kind && currentEvent.nodeIndex === nodeIndex) {
+        material.color.set(0xffffff);
+      }
       entry.helper.visible = Boolean(event) ||
         (this.settings.bvhOverlayEnabled && entry.depth <= this.settings.bvhOverlayDepth);
     }
@@ -1072,6 +1189,8 @@ export default class PtRenderer {
 
     this.shaderCanvas.dispose();
     this.gpuScene.dispose();
+    this.packedSpheres.texture.dispose();
+    this.disposePackedSphereBvh();
     this.packedTriangles.texture.dispose();
     this.disposePackedTriangleBvh();
     this.packedMaterials.texture.dispose();

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { TriangleBvh } from "./TriangleBvh";
+import type { SphereBvh } from "./SphereBvh";
 
 export interface PackedTriangleBvh {
   nodeTexture: THREE.DataTexture;
@@ -12,20 +13,32 @@ export interface PackedTriangleBvh {
 const NODE_TEXELS = 2;
 
 export function packTriangleBvh(bvh: TriangleBvh, maxTextureSize: number): PackedTriangleBvh {
-  const nodes = createTexture(Math.max(1, bvh.nodes.length * NODE_TEXELS), maxTextureSize, "BVH node");
-  bvh.nodes.forEach((node, index) => {
+  return packBvh(bvh.nodes, bvh.triangleIndices, maxTextureSize);
+}
+
+export function packSphereBvh(bvh: SphereBvh, maxTextureSize: number): PackedTriangleBvh {
+  return packBvh(bvh.nodes, bvh.sphereIndices, maxTextureSize);
+}
+
+function packBvh(
+  nodesToPack: TriangleBvh["nodes"],
+  primitiveIndices: readonly number[],
+  maxTextureSize: number
+): PackedTriangleBvh {
+  const nodes = createTexture(Math.max(1, nodesToPack.length * NODE_TEXELS), maxTextureSize, "BVH node");
+  nodesToPack.forEach((node, index) => {
     const offset = index * NODE_TEXELS * 4;
     nodes.data.set([node.boundsMin.x, node.boundsMin.y, node.boundsMin.z, node.payload], offset);
     nodes.data.set([node.boundsMax.x, node.boundsMax.y, node.boundsMax.z, node.triangleCount], offset + 4);
   });
-  const indices = createTexture(Math.max(1, bvh.triangleIndices.length), maxTextureSize, "BVH index");
-  bvh.triangleIndices.forEach((triangleIndex, index) => { indices.data[index * 4] = triangleIndex; });
+  const indices = createTexture(Math.max(1, primitiveIndices.length), maxTextureSize, "BVH index");
+  primitiveIndices.forEach((primitiveIndex, index) => { indices.data[index * 4] = primitiveIndex; });
   return {
     nodeTexture: nodes.texture,
     nodeTextureSize: nodes.size,
     indexTexture: indices.texture,
     indexTextureSize: indices.size,
-    nodeCount: bvh.nodes.length,
+    nodeCount: nodesToPack.length,
   };
 }
 
