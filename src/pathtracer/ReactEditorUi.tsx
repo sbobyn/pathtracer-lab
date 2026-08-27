@@ -1,11 +1,14 @@
 import {
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import {
   CheckboxField,
@@ -17,12 +20,159 @@ import * as THREE from "three";
 import type PtActions from "./PtActions";
 import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState, PtTextureState } from "./PtState";
-import { PresetPtScenes } from "./PresetPtScenes";
+import {
+  presetPtSceneLabel,
+  presetPtSceneOrder,
+} from "./PresetPtScenes";
+import { presetPtSceneInfo } from "./PresetPtSceneInfo";
 import { builtinTextures } from "./BuiltinTextures";
 import { builtinEnvironments, findBuiltinEnvironment } from "./BuiltinEnvironments";
 
 const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
 const pathTracerScrubSpeed = 0.25;
+const contextualHelpOpenEvent = "three-pathtracer:contextual-help-open";
+
+type ContextualHelpContent = {
+  meaning: ReactNode;
+  math?: ReactNode;
+  lookFor?: ReactNode;
+  performance?: ReactNode;
+};
+
+function ContextualHelp({ label, content, triggerLeft }: {
+  label: string;
+  content: ContextualHelpContent;
+  triggerLeft: number | null;
+}) {
+  const id = useId();
+  const button = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const bounds = button.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const width = Math.min(320, window.innerWidth - 24);
+      const left = Math.min(Math.max(12, bounds.left), Math.max(12, window.innerWidth - width - 12));
+      const estimatedHeight = 260;
+      const below = bounds.bottom + 8;
+      const top = below + estimatedHeight <= window.innerHeight - 12
+        ? below
+        : Math.max(12, bounds.top - estimatedHeight - 8);
+      setPosition({ left, top });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const closeOtherHelp = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== id) {
+        setOpen(false);
+        setPinned(false);
+      }
+    };
+    const dismiss = (event: PointerEvent) => {
+      if (open && !button.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setPinned(false);
+      }
+    };
+    const dismissWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setPinned(false);
+        button.current?.focus();
+      }
+    };
+    window.addEventListener(contextualHelpOpenEvent, closeOtherHelp);
+    window.addEventListener("pointerdown", dismiss, true);
+    window.addEventListener("keydown", dismissWithEscape);
+    return () => {
+      window.removeEventListener(contextualHelpOpenEvent, closeOtherHelp);
+      window.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("keydown", dismissWithEscape);
+    };
+  }, [id, open]);
+
+  const show = () => {
+    window.dispatchEvent(new CustomEvent(contextualHelpOpenEvent, { detail: id }));
+    setOpen(true);
+  };
+
+  return <>
+    <button
+      ref={button}
+      type="button"
+      className="editor-contextual-help__trigger"
+      aria-label={`Explain ${label}`}
+      aria-describedby={open ? id : undefined}
+      aria-expanded={open}
+      style={{ left: triggerLeft ?? 0, visibility: triggerLeft === null ? "hidden" : "visible" }}
+      onPointerEnter={show}
+      onPointerLeave={() => { if (!pinned) setOpen(false); }}
+      onFocus={show}
+      onBlur={() => { if (!pinned) setOpen(false); }}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (open && pinned) {
+          setOpen(false);
+          setPinned(false);
+        } else {
+          show();
+          setPinned(true);
+        }
+      }}
+    >?</button>
+    {open && createPortal(
+      <aside id={id} className="editor-contextual-help__surface" role="tooltip" style={{ left: position.left, top: position.top }}>
+        <strong>{label}</strong>
+        <dl>
+          <div><dt>Meaning</dt><dd>{content.meaning}</dd></div>
+          {content.math && <div><dt>Math</dt><dd>{content.math}</dd></div>}
+          {content.lookFor && <div><dt>Look for</dt><dd>{content.lookFor}</dd></div>}
+          {content.performance && <div><dt>Performance</dt><dd>{content.performance}</dd></div>}
+        </dl>
+      </aside>,
+      document.body
+    )}
+  </>;
+}
+
+function HelpedControl({ label, content, children }: { label: string; content: ContextualHelpContent; children: ReactNode }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [triggerLeft, setTriggerLeft] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const root = container.current;
+    if (!root) return;
+    const update = () => {
+      const control = root.querySelector<HTMLElement>(".eui-field-row__body");
+      if (!control) return;
+      const rootBounds = root.getBoundingClientRect();
+      const controlBounds = control.getBoundingClientRect();
+      setTriggerLeft(Math.max(0, controlBounds.left - rootBounds.left - 22));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+
+  return <div ref={container} className="editor-contextual-help">
+    {children}
+    <ContextualHelp label={label} content={content} triggerLeft={triggerLeft} />
+  </div>;
+}
 
 function readPersistedBoolean(key: string, fallback: boolean) {
   try {
@@ -246,6 +396,7 @@ function SettingsNumberField({
   sensitivity,
   integer = false,
   disabled = false,
+  help,
   setValue,
 }: {
   actions: PtActions;
@@ -260,9 +411,10 @@ function SettingsNumberField({
   sensitivity: number;
   integer?: boolean;
   disabled?: boolean;
+  help?: ContextualHelpContent;
   setValue: (value: number) => void;
 }) {
-  return (
+  const field = (
     <EditorNumberField
       label={label}
       value={value}
@@ -284,6 +436,7 @@ function SettingsNumberField({
       onCancel={() => actions.cancelSettingsEdit()}
     />
   );
+  return help ? <HelpedControl label={label} content={help}>{field}</HelpedControl> : field;
 }
 
 function SceneSettings({
@@ -300,14 +453,37 @@ function SceneSettings({
       <SelectField
         label="Preset"
         value={state.sceneKey}
-        options={Object.keys(PresetPtScenes).map((sceneKey) => ({
+        options={presetPtSceneOrder.map((sceneKey) => ({
           value: sceneKey,
-          label: sceneKey,
+          label: presetPtSceneLabel(sceneKey),
         }))}
         density="compact"
         layout="horizontal"
         onChange={(value) => actions.setScene(value)}
       />
+      {presetPtSceneInfo[state.sceneKey] && (
+        <PersistentDetails
+          className="editor-subpanel scene-about"
+          storageKey={`scene-about:${state.sceneKey}`}
+          defaultOpen={false}
+        >
+          <summary>About this scene</summary>
+          <dl className="scene-about__content">
+            <div>
+              <dt>Purpose</dt>
+              <dd>{presetPtSceneInfo[state.sceneKey].purpose}</dd>
+            </div>
+            <div>
+              <dt>Implementation</dt>
+              <dd>{presetPtSceneInfo[state.sceneKey].implementation}</dd>
+            </div>
+            <div>
+              <dt>Concepts &amp; math</dt>
+              <dd>{presetPtSceneInfo[state.sceneKey].concepts}</dd>
+            </div>
+          </dl>
+        </PersistentDetails>
+      )}
       {state.importWarnings.length > 0 && (
         <div className="import-warning" role="status">
           <strong>glTF fallback</strong>
@@ -389,7 +565,12 @@ function SceneSettings({
             onCommit={() => actions.commitSettingsEdit()}
             onCancel={() => actions.cancelSettingsEdit()}
           />
-          <EditorNumberField
+          <HelpedControl label="Background intensity" content={{
+            meaning: "Scales only the environment image seen directly by the camera.",
+            math: <>Displayed background radiance is multiplied by this factor.</>,
+            lookFor: "The visible HDR changes brightness without changing how strongly it illuminates objects.",
+            performance: "No meaningful render-cost change; this changes radiance, not sample count.",
+          }}><EditorNumberField
             label="Background intensity"
             value={state.settings.environmentIntensity}
             min={0}
@@ -406,8 +587,13 @@ function SceneSettings({
             }}
             onCommit={() => actions.commitSettingsEdit()}
             onCancel={() => actions.cancelSettingsEdit()}
-          />
-          <EditorNumberField
+          /></HelpedControl>
+          <HelpedControl label="Lighting intensity" content={{
+            meaning: "Scales the HDR environment radiance used to light the scene.",
+            math: <>Environment-light samples use <code>L = texture × intensity</code>.</>,
+            lookFor: "Surfaces and reflections change brightness while the visible background remains unchanged.",
+            performance: "No meaningful per-sample cost change, though brighter lighting can make variance easier to see.",
+          }}><EditorNumberField
             label="Lighting intensity"
             value={state.settings.environmentLightingIntensity}
             min={0}
@@ -424,7 +610,7 @@ function SceneSettings({
             }}
             onCommit={() => actions.commitSettingsEdit()}
             onCancel={() => actions.cancelSettingsEdit()}
-          />
+          /></HelpedControl>
           <CheckboxField
             label="Visible background"
             checked={state.settings.environmentBackgroundVisible}
@@ -520,6 +706,12 @@ function RenderSettings({
           snapInterval={1}
           sensitivity={0.5}
           integer
+          help={{
+            meaning: "Independent camera rays traced per pixel during each rendered frame.",
+            math: <>The frame estimate is the average <code>(1/N) Σ Lᵢ</code> of N samples.</>,
+            lookFor: "More samples reduce fresh-frame noise and make the image settle faster.",
+            performance: "Cost is approximately linear: doubling samples roughly doubles path-tracing work per frame.",
+          }}
           setValue={(value) => actions.setNumSamples(value)}
         />
         <SettingsNumberField
@@ -534,9 +726,20 @@ function RenderSettings({
           snapInterval={1}
           sensitivity={0.5}
           integer
+          help={{
+            meaning: "Maximum number of surface interactions allowed along one camera path.",
+            math: "Tracing stops after this many bounces even if the path has not escaped or reached a light.",
+            lookFor: "Higher depths recover multi-bounce light, especially inside glass, reflections, and enclosed scenes.",
+            performance: "Raises worst-case work per sample; actual cost depends on how long paths survive.",
+          }}
           setValue={(value) => actions.setMaxRayDepth(value)}
         />
-      <SelectField
+      <HelpedControl label="Integrator" content={{
+        meaning: "Chooses how the renderer samples indirect scattering and explicit light sources.",
+        math: "BSDF samples scattering only; Direct samples lights explicitly; MIS combines both estimators with balance weights.",
+        lookFor: "With small or delta lights, Direct and MIS should converge much faster than BSDF only.",
+        performance: "Direct and MIS add shadow-ray work, but usually need fewer samples for a clean result.",
+      }}><SelectField
           label="Integrator"
           value={settings.integratorMode}
           options={[
@@ -551,7 +754,7 @@ function RenderSettings({
               actions.setIntegratorMode(value as typeof settings.integratorMode)
             )
           }
-      />
+      /></HelpedControl>
       {bvhStats.triangleCount > 0 && (
         <SelectField
           label="Wireframe"
@@ -570,7 +773,12 @@ function RenderSettings({
           }
         />
       )}
-      <SelectField
+      <HelpedControl label="Resolution" content={{
+        meaning: "Scales the width and height of the internal path-tracing render target.",
+        math: <>Pixel work scales with area: <code>cost ∝ scale²</code>.</>,
+        lookFor: "Lower values look softer or more pixelated but remain compositionally identical.",
+        performance: "A 0.5× scale traces about one quarter as many pixels as 1×; 2× traces about four times as many.",
+      }}><SelectField
           label="Resolution"
           value={String(settings.resolutionScale)}
           options={[2, 1, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({
@@ -584,8 +792,13 @@ function RenderSettings({
               actions.setResolutionScale(Number(value))
             )
           }
-      />
-      <SelectField
+      /></HelpedControl>
+      <HelpedControl label="Accumulation" content={{
+        meaning: "Selects the numeric precision used to store the progressively averaged image.",
+        math: "More bits preserve smaller updates as the running sample count grows.",
+        lookFor: "Low precision can eventually band, stall, darken, or discolor after long accumulation.",
+        performance: "Higher precision consumes more GPU memory and bandwidth; support and speed vary by device.",
+      }}><SelectField
           label="Accumulation"
           value={settings.accumulationFormat}
           options={[
@@ -602,7 +815,7 @@ function RenderSettings({
               )
             )
           }
-      />
+      /></HelpedControl>
         <SettingsNumberField
           actions={actions}
           label="Frame limit"
@@ -615,10 +828,21 @@ function RenderSettings({
           snapInterval={100}
           sensitivity={10}
           integer
+          help={{
+            meaning: "Stops progressive accumulation after this many frames; zero means no limit.",
+            math: "The final sample budget is approximately frames × samples per frame.",
+            lookFor: "The image stops changing at the limit and resumes after a scene invalidation.",
+            performance: "Caps total idle rendering and prevents very long accumulation from wasting GPU time.",
+          }}
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
       {bvhStats.triangleCount > 0 && (
-        <SelectField
+        <HelpedControl label="Triangles" content={{
+          meaning: "Chooses how rays search the packed triangle set for the closest intersection.",
+          math: "Brute force tests every triangle; the BVH rejects groups of triangles using bounding-box tests.",
+          lookFor: "Both modes should produce the same image. Differences indicate an intersection or BVH correctness bug.",
+          performance: "BVH traversal scales far better for large meshes; brute force is retained as a correctness baseline.",
+        }}><SelectField
           label="Triangles"
           value={settings.triangleTraversalMode}
           options={[
@@ -632,7 +856,7 @@ function RenderSettings({
               actions.setTriangleTraversalMode(value as typeof settings.triangleTraversalMode)
             )
           }
-        />
+        /></HelpedControl>
       )}
       {bvhStats.nodeCount > 0 && (
         <PersistentDetails
@@ -808,9 +1032,20 @@ function CameraSettings({
         snapInterval={5}
         sensitivity={1}
         integer
+        help={{
+          meaning: "Controls the vertical angular extent captured by the perspective camera.",
+          math: <>Projection scale is proportional to <code>1 / tan(FOV / 2)</code>.</>,
+          lookFor: "Wider angles show more of the scene with stronger perspective; narrower angles magnify and flatten depth.",
+          performance: "It does not directly change the number of rays, though framing different geometry can change average path cost.",
+        }}
         setValue={(value) => actions.setFov(value)}
       />
-      <CheckboxField
+      <HelpedControl label="Depth of field" content={{
+        meaning: "Samples rays across a finite lens instead of sending every ray through one camera point.",
+        math: "Each ray starts at a random aperture position and aims toward the focal plane.",
+        lookFor: "Objects near the focus distance remain sharp while nearer and farther objects blur.",
+        performance: "Ray count is unchanged, but lens blur increases variance and can require more samples to converge.",
+      }}><CheckboxField
           label="Depth of field"
           checked={settings.enableDepthOfField}
           density="compact"
@@ -820,7 +1055,7 @@ function CameraSettings({
               actions.setDepthOfFieldEnabled(checked)
             )
           }
-      />
+      /></HelpedControl>
       <fieldset
         className="editor-controls-group"
         disabled={!settings.enableDepthOfField}
@@ -836,6 +1071,12 @@ function CameraSettings({
           precisionStep={0.0001}
           snapInterval={0.01}
           sensitivity={1}
+          help={{
+            meaning: "Sets the radius of the lens region from which camera rays originate.",
+            math: "A larger aperture samples a wider disk around the camera origin.",
+            lookFor: "Increasing it strengthens out-of-focus blur; zero behaves like a pinhole camera.",
+            performance: "It does not add rays, but stronger blur generally needs more samples to look smooth.",
+          }}
           setValue={(value) => actions.setAperture(value)}
         />
         <SettingsNumberField
@@ -849,6 +1090,12 @@ function CameraSettings({
           precisionStep={0.01}
           snapInterval={1}
           sensitivity={1}
+          help={{
+            meaning: "Sets the distance from the camera at which sampled lens rays converge.",
+            math: "The renderer aims lens samples toward points on the focal plane at this distance.",
+            lookFor: "Move the sharp band forward or backward through the scene while aperture is above zero.",
+            performance: "No meaningful direct cost; it changes which parts of the image converge sharply.",
+          }}
           setValue={(value) => actions.setFocusDistance(value)}
         />
       </fieldset>
@@ -1688,8 +1935,8 @@ function clampPanelSize(size: PanelSize): PanelSize {
   return {
     width: Math.min(Math.max(220, size.width), Math.max(220, window.innerWidth - 32)),
     height: Math.min(
-      Math.max(220, size.height),
-      Math.max(220, window.innerHeight - 32)
+      Math.max(96, size.height),
+      Math.max(96, window.innerHeight - 32)
     ),
   };
 }
@@ -1818,7 +2065,7 @@ function RenderPanel({
       className="render-panel"
       aria-label="Render settings"
       data-collapsed={collapsed}
-      style={collapsed ? undefined : { width: size.width, height: size.height }}
+      style={collapsed ? undefined : { width: size.width, maxHeight: size.height }}
     >
       <button
         className="render-panel__toggle"
@@ -2120,7 +2367,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
           onClick={() => setCollapsed((current) => !current)}
         >
           <span className="editor-shell__title">Path Tracer</span>
-          <span className="editor-shell__scene">{state.sceneKey}</span>
+          <span className="editor-shell__scene">{presetPtSceneLabel(state.sceneKey)}</span>
           <span className="editor-shell__chevron" aria-hidden="true">⌃</span>
         </button>
       </div>

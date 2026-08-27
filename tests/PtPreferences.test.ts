@@ -22,7 +22,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
   const storage = new MemoryStorage();
   storage.value = JSON.stringify({
     version: PT_PREFERENCES_VERSION,
-    sceneKey: "Part1Final",
+    sceneKey: "RTIOW1Final",
     settings: {
       numSamples: 8,
       fov: 60,
@@ -36,8 +36,8 @@ test("loads valid versioned preferences over authoritative defaults", () => {
       transformSpace: "local",
     },
   });
-  const state = loadPtPreferences(storage, createDefaultPtState(), ["Part1Simple", "Part1Final"]);
-  assert.equal(state.sceneKey, "Part1Final");
+  const state = loadPtPreferences(storage, createDefaultPtState(), ["RTIOW1Simple", "RTIOW1Final"]);
+  assert.equal(state.sceneKey, "RTIOW1Final");
   assert.equal(state.settings.numSamples, 8);
   assert.equal(state.settings.fov, 60);
   assert.equal(state.settings.resolutionScale, 0.5);
@@ -68,7 +68,7 @@ test("invalid, obsolete, and out-of-range data falls back safely", () => {
       backgroundColorTop: "blue",
     },
   });
-  const state = loadPtPreferences(storage, defaults, ["Part1Simple"]);
+  const state = loadPtPreferences(storage, defaults, ["RTIOW1Simple"]);
   assert.equal(state.sceneKey, defaults.sceneKey);
   assert.equal(state.settings.numSamples, defaults.settings.numSamples);
   assert.equal(state.settings.fov, 120);
@@ -79,10 +79,10 @@ test("invalid, obsolete, and out-of-range data falls back safely", () => {
   assert.equal(state.settings.bvhOverlayDepth, 64);
   assert.equal(state.settings.backgroundColorTop, defaults.settings.backgroundColorTop);
 
-  storage.value = JSON.stringify({ version: 999, sceneKey: "Part1Final" });
-  assert.deepEqual(loadPtPreferences(storage, defaults, ["Part1Simple", "Part1Final"]), defaults);
+  storage.value = JSON.stringify({ version: 999, sceneKey: "RTIOW1Final" });
+  assert.deepEqual(loadPtPreferences(storage, defaults, ["RTIOW1Simple", "RTIOW1Final"]), defaults);
   storage.value = "not json";
-  assert.deepEqual(loadPtPreferences(storage, defaults, ["Part1Simple"]), defaults);
+  assert.deepEqual(loadPtPreferences(storage, defaults, ["RTIOW1Simple"]), defaults);
 });
 
 test("v1 preferences migrate the triangle overlay to its hidden default", () => {
@@ -90,7 +90,7 @@ test("v1 preferences migrate the triangle overlay to its hidden default", () => 
   const storage = new MemoryStorage();
   storage.value = JSON.stringify({
     version: 1,
-    sceneKey: "Part1Final",
+    sceneKey: "RTIOW1Final",
     settings: {
       ...defaults.settings,
       triangleOverlayMode: "selected",
@@ -98,10 +98,23 @@ test("v1 preferences migrate the triangle overlay to its hidden default", () => 
     },
   });
 
-  const state = loadPtPreferences(storage, defaults, ["Part1Simple", "Part1Final"]);
-  assert.equal(state.sceneKey, "Part1Final");
+  const state = loadPtPreferences(storage, defaults, ["RTIOW1Simple", "RTIOW1Final"]);
+  assert.equal(state.sceneKey, "RTIOW1Final");
   assert.equal(state.settings.numSamples, 7);
   assert.equal(state.settings.triangleOverlayMode, "off");
+});
+
+test("renamed RTIOW presets preserve existing saved scene selections", () => {
+  const defaults = createDefaultPtState();
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: PT_PREFERENCES_VERSION,
+    sceneKey: "Part1Final",
+    settings: defaults.settings,
+  });
+
+  const state = loadPtPreferences(storage, defaults, ["RTIOW1Simple", "RTIOW1Final"]);
+  assert.equal(state.sceneKey, "RTIOW1Final");
 });
 
 test("the snapshot excludes selection, history, and scene object data", () => {

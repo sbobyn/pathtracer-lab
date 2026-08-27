@@ -129,8 +129,8 @@ The current packed triangle, material, and procedural-texture descriptor contrac
 
 The baseline has been manually verified in a Chromium browser on macOS with Three.js r177 and WebGL:
 
-- `Part1Simple` renders in raster and path-traced modes.
-- `Part1Final` renders in raster and path-traced modes.
+- `RTIOW1Simple` renders in raster and path-traced modes.
+- `RTIOW1Final` renders in raster and path-traced modes.
 - `TextureStudy` exercises image, checker, and Perlin textures plus sphere UV mapping.
 - `QuadStudy` exercises bounded quad intersection, quad UVs, and mixed sphere/quad closest-hit behavior.
 - `EmissiveStudy` exercises authored quad/sphere emitters against a procedural floor and reflective/diffuse objects on a black environment.
@@ -142,7 +142,7 @@ The baseline has been manually verified in a Chromium browser on macOS with Thre
 
 Known baseline limitations:
 
-- `Part1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
+- `RTIOW1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
 - Visual verification is manual; there is no automated image-regression suite yet.
 - The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
 - Static triangle meshes are currently preset-authored and read-only; glTF import and general mesh authoring are not implemented yet.

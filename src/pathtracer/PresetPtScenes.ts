@@ -193,7 +193,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     if (environment) scene.setEnvironmentMap(environment.source, environment.label);
     return scene;
   },
-  Part1Simple: () => {
+  RTIOW1Simple: () => {
     const spheres: PtSphere[] = [
       new PtSphere(new THREE.Vector3(0, -100.5, 0), 100, 0), // Ground
       new PtSphere(new THREE.Vector3(0, 0, 0), 0.5, 1), // Center
@@ -216,7 +216,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return new PtScene(spheres, materials, camera);
   },
 
-  Part1Final: () => {
+  RTIOW1Final: () => {
     const spheres: PtSphere[] = [
       new PtSphere(new THREE.Vector3(0, -1000, 0), 1000, 0), // Ground
     ];
@@ -609,6 +609,33 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     return scene;
   },
 };
+
+// Presentation order follows the first Git commit that introduced each study.
+// Keep the stable keys unnumbered so reorganizing the UI never invalidates
+// saved preferences or external scene references.
+export const presetPtSceneOrder = [
+  "RTIOW1Simple",
+  "RTIOW1Final",
+  "TextureStudy",
+  "QuadStudy",
+  "CornellBox",
+  "EmissiveStudy",
+  "AnalyticLightsStudy",
+  "EnvironmentStudy",
+  "TriangleStudy",
+  "PackedTrianglesStudy",
+  "GlTFBoxStudy",
+  "GlTFSuzanneStudy",
+  "GlTFSimpleMeshesStudy",
+  "DamagedHelmetStudy",
+  "PrincipledMaterialStudy",
+  "GlTFMetalRoughStressStudy",
+] as const;
+
+export function presetPtSceneLabel(sceneKey: string) {
+  const index = presetPtSceneOrder.indexOf(sceneKey as typeof presetPtSceneOrder[number]);
+  return index === -1 ? sceneKey : `${String(index).padStart(2, "0")}-${sceneKey}`;
+}
 
 function createIndexedPyramidGeometry() {
   const geometry = new THREE.BufferGeometry();

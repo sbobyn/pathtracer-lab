@@ -35,6 +35,10 @@ const triangleOverlayModes = new Set(["off", "selected", "all"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
 const environmentModes = new Set(["gradient", "map"]);
 const colorPattern = /^#[0-9a-f]{6}$/i;
+const renamedSceneKeys: Record<string, string> = {
+  Part1Simple: "RTIOW1Simple",
+  Part1Final: "RTIOW1Final",
+};
 
 function finiteNumber(value: unknown, minimum: number, maximum: number) {
   return typeof value === "number" && Number.isFinite(value)
@@ -119,11 +123,14 @@ export function loadPtPreferences(
       // hidden default once; deliberate choices made in v2 continue to persist.
       settings.triangleOverlayMode = "off";
     }
+    const storedSceneKey = typeof candidate.sceneKey === "string"
+      ? renamedSceneKeys[candidate.sceneKey] ?? candidate.sceneKey
+      : null;
     return {
       ...defaults,
       sceneKey:
-        typeof candidate.sceneKey === "string" && validSceneKeys.includes(candidate.sceneKey)
-          ? candidate.sceneKey
+        storedSceneKey !== null && validSceneKeys.includes(storedSceneKey)
+          ? storedSceneKey
           : defaults.sceneKey,
       settings,
     };

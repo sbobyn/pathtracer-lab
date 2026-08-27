@@ -178,7 +178,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
 
 export function createDefaultPtState(): PtState {
   return {
-    sceneKey: "Part1Simple",
+    sceneKey: "RTIOW1Simple",
     sceneObjects: [],
     importWarnings: [],
     settings: { ...defaultSettings },
