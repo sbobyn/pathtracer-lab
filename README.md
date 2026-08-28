@@ -1,162 +1,53 @@
-# Three.js WebGL Pathtracer
+# Path Tracer Lab
 
-An educational, real-time WebGL path tracer integrated with Three.js. It is an original implementation that currently follows the concepts in Peter Shirley's [Ray Tracing in One Weekend](https://raytracing.github.io/) while adapting them to an iterative GLSL renderer.
+<!-- Hero image or GIF -->
 
-Live demo: https://sbobyn.github.io/three-pathtracer/
+An educational path tracer that runs interactively in the browser, built with Three.js, React, GLSL, and WebGL2.
 
-![Path tracer demo](three-pathtracer.gif)
+This project began as a continuation of my [three-pathtracer](https://github.com/sbobyn/three-pathtracer) project, which followed Peter Shirley’s [Ray Tracing in One Weekend](https://raytracing.github.io/) with adaptations for interactive rendering through WebGL, plus overlays and editing helpers provided by a parallel Three.js scene.
 
-## Lineage
+It now has a broader purpose: to be an inspectable environment for learning how modern renderers are designed—from light transport and sampling to physically based materials, acceleration structures, GPU data layouts, scene compilation, and interactive editor architecture.
 
-This project continues the original public
-[Three.js Pathtracer](https://github.com/sbobyn/three-pathtracer). It preserves
-that repository's Git history while evolving into a broader educational
-rendering lab for path tracing, editor architecture, BVH visualization, mesh
-rendering, WebGL/WebGPU comparisons, and raster approximations.
+The current renderer supports spheres, quads, triangle meshes, glTF assets, image and procedural textures, emissive geometry, analytic lights, HDR environments, physically based materials, multiple sampling strategies, progressive accumulation, and a custom BVH implementation. The editor includes scene and object inspectors, transform controls, material editing, render settings, and debugging visualizations for triangle meshes, BVH nodes, and individual ray traversals.
 
-## Current capabilities
+The project also includes a conventional Three.js rasterized preview of each scene. This provides a responsive editing view and makes it possible to compare rasterization and path tracing directly.
 
-The path tracer currently supports:
+Scenes are arranged roughly in the order that their underlying techniques were introduced.
 
-- sphere and bounded-quad intersections with UVs and oriented normals
-- indexed and non-indexed triangle-mesh intersections with barycentric UV and normal interpolation
-- deterministic CPU BVH construction, packed GPU nodes, and iterative shader traversal
-- switchable brute-force/BVH triangle traversal with build and probe diagnostics
-- production-BVH hierarchy overlays with depth controls and step-by-step selected-ray traversal inspection
-- diffuse, metal, and dielectric materials
-- constant, checker, image, and procedural Perlin textures
-- spherical and box-projected sphere UV mapping
-- authorable emissive quad and sphere lights with intensity and sidedness controls
-- authorable point, directional/sun, and spot lights with editor transforms and gizmos
-- selectable BSDF-only, explicit direct-light, and multiple-importance-sampling integrators
-- solid-angle-correct HDR importance sampling with independent background and lighting intensity
-- Cornell-box and black-background emissive-lighting study presets
-- depth of field / defocus blur
-- progressive ping-pong accumulation with selectable 8-bit, 16-bit float, and 32-bit float storage
-- bounded accumulation and reset after camera, setting, material, or geometry changes
+Each scene includes a short description of what it demonstrates, relevant implementation details or math, and suggestions for what to observe while experimenting with its settings. Renderer controls also include tooltips explaining important parameters, their visual effects, and their likely performance costs.
 
-The Three.js application provides:
+## Current Features
 
-- a `THREE.Scene` scene graph for scene and camera management
-- a switchable raster preview
-- orbit camera controls
-- raycaster-based object selection
-- transform controls for selected objects
-- selection outlines via `OutlinePass`
-- selectable triangle-mesh wireframes, per-mesh geometry statistics, and BVH debug overlays
-- a React editor UI for renderer settings, scene hierarchy, contextual object editing, and undo/redo
-- sphere creation, selection, transforms, rename, duplicate, and deletion
-- persistent, versioned lightweight editor preferences
+- Progressive path-traced rendering with configurable ray depth, samples per frame, resolution, accumulation precision, and frame limit
+- BSDF-only, direct-light, and multiple importance sampling integrators
+- Spheres, quads, triangles, and indexed triangle meshes
+- A custom BVH with selectable BVH or brute-force traversal
+- Lambertian, metallic, dielectric, emissive, and principled materials
+- Image, checker, Perlin noise, marble, and imported glTF textures
+- Point, spot, directional, and emissive-geometry lighting
+- HDR environment backgrounds and importance-sampled environment lighting
+- glTF mesh, texture, and physically based material import
+- A Three.js rasterized preview for comparison and interaction
+- Scene, object, material, camera, and render inspectors
+- Transform gizmos, object authoring, and an undo/redo stack
+- Triangle, BVH, and ray-traversal debugging overlays
 
-## Architecture
+> The undo/redo history currently resets when the browser is refreshed.
 
-The editable `THREE.Scene` is the authoritative authoring scene. Application
-actions perform edits and classify their renderer invalidation consequences. A
-`SceneCompiler` derives renderer-owned `GpuScene` data rather than making the
-editor mutate uniforms directly. The path-tracing shader is split into focused
-camera, geometry, material, texture, sampling, integration, and accumulation
-modules under `src/pathtracer/shaders/`.
+## Included Scenes
 
-## Light-transport comparison modes
+- The initial and final scenes from _Ray Tracing in One Weekend_
+- UV orientation, image texture, checker, and Perlin noise studies
+- Quad and triangle intersection studies
+- A Cornell box for comparing BSDF sampling, direct-light sampling, and MIS
+- Emissive-geometry and analytic-light studies
+- HDR environment lighting and importance sampling
+- Packed triangle meshes and custom BVH traversal
+- BVH construction and ray-traversal visualizations
+- A larger BVH-accelerated sphere scene
+- glTF box, Suzanne, and Damaged Helmet studies
+- Physically based material and multi-material glTF tests
 
-The Render panel exposes three estimators so their convergence can be compared
-on the same authored scene:
+## Screenshots and Demos
 
-- **BSDF only** discovers emissive geometry and environment lighting through ordinary path scattering.
-- **Direct light** also selects an emissive sphere or quad and samples a point on
-  its surface, or importance-samples an HDR environment, then traces a shadow ray.
-- **MIS** combines both strategies with the power heuristic so paths found well
-  by either strategy contribute without being counted twice.
-
-Geometry light surfaces are sampled uniformly by area. Their area probability density is
-converted to solid angle at the shaded point before evaluating the Lambertian
-BRDF. HDR environments use a luminance-weighted row/column distribution that
-accounts for equirectangular texel solid angle. This implementation applies explicit sampling to diffuse bounces;
-specular metal and dielectric paths continue through ordinary scattering.
-
-Analytic lights use explicit radiometric contracts in the path tracer. Point
-and spot lights treat intensity as radiant intensity and apply inverse-square
-falloff. Spot lights additionally apply a smooth inner-to-outer cone response.
-A directional light with zero angular diameter is an ideal delta light; a
-finite angular diameter samples a cone of directions as a soft sun while
-holding total irradiance stable. Three.js preview lights are editing aids and
-are not presented as pixel-identical reference implementations of these
-path-tracing contracts.
-
-React owns presentation and ephemeral interface state. It does not own mutable
-Three.js objects, compiled scene data, GPU resources, or accumulation buffers.
-
-## Saved preferences
-
-The editor saves a versioned preference record under the local-storage key
-`three-pathtracer.preferences`. The current schema stores the last preset and
-the lightweight render, camera, background, and transform-mode settings in
-`PtSettings`.
-
-Scene objects, imported assets, selection, undo history, GPU resources,
-compiled scene data, BVHs, and accumulation buffers are deliberately excluded.
-Missing or invalid fields fall back to current defaults, and unknown schema
-versions are ignored. **Reset preferences** clears the record and reloads the
-application with authoritative defaults.
-
-The hash-based random-number generator was adapted from [this ShaderToy](https://www.shadertoy.com/view/4djSRW).
-
-## Running locally
-
-Prerequisites: Node.js 20.17 or newer and pnpm.
-
-```sh
-pnpm install --frozen-lockfile
-pnpm dev
-```
-
-The development server defaults to `http://localhost:3005/three-pathtracer/`.
-
-Quality checks:
-
-```sh
-pnpm typecheck
-pnpm build
-pnpm verify
-```
-
-`pnpm verify` runs unit tests, the random-seed precision check, TypeScript
-checking, and the production build.
-
-## Verified baseline
-
-The current packed triangle, material, and procedural-texture descriptor contract is documented in [`docs/gpu-data-layout.md`](docs/gpu-data-layout.md).
-
-The baseline has been manually verified in a Chromium browser on macOS with Three.js r177 and WebGL:
-
-- `RTIOW1Simple` renders in raster and path-traced modes.
-- `RTIOW1Final` renders in raster and path-traced modes.
-- `TextureStudy` exercises image, checker, and Perlin textures plus sphere UV mapping.
-- `QuadStudy` exercises bounded quad intersection, quad UVs, and mixed sphere/quad closest-hit behavior.
-- `EmissiveStudy` exercises authored quad/sphere emitters against a procedural floor and reflective/diffuse objects on a black environment.
-- `EnvironmentStudy` exercises image-based lighting and camera-visible HDR backgrounds with diffuse, rough-metal, and mirror materials.
-- `TriangleStudy` exercises indexed triangles, barycentric UV interpolation, smooth vertex normals, BVH traversal, and HDR reflections.
-- `PackedTrianglesStudy` stress-tests packed GPU triangle and BVH transport with a 2,048-triangle indexed wave and exposes a brute-force/BVH comparison mode.
-- orbit controls, object selection, object lifecycle commands, transforms, material editing, resolution scale, accumulation controls, and depth-of-field controls respond without browser warnings or errors.
-- unit tests, random-seed verification, TypeScript checking, and the production Vite build pass.
-
-Known baseline limitations:
-
-- `RTIOW1Final` uses `Math.random()`, so its scene and reference image vary between reloads.
-- Visual verification is manual; there is no automated image-regression suite yet.
-- The production bundle currently triggers Vite's non-blocking warning for a chunk larger than 500 kB.
-- Static triangle meshes are currently preset-authored and read-only; glTF import and general mesh authoring are not implemented yet.
-- A WebGL-capable browser is required. There is no WebGPU backend yet.
-
-## Roadmap
-
-Broad future directions include:
-
-- extend analytic light types and advanced light controls
-- extend the completed triangle/BVH foundation to scoped static glTF scene loading
-- glTF mesh rendering built on the triangle, BVH, material, and texture systems
-- extend the authoritative scene/compiler and React editor workflows to new primitives and lights
-- a WebGPU backend and reproducible WebGL/WebGPU benchmarks
-- rasterized approximations for side-by-side quality and performance comparisons
-
-External projects may inform architecture research, but code and renderer design remain original unless attribution explicitly says otherwise.
+<!-- Add screenshots and GIFs here -->
