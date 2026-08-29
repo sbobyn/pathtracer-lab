@@ -83,6 +83,8 @@ export class ShaderCanvas {
         uRandomSequence: { value: new THREE.Vector2(0, 0) },
         ...uniforms,
       },
+      depthTest: false,
+      depthWrite: false,
     });
 
     const mesh = new THREE.Mesh(geometry, this.material);
@@ -111,7 +113,8 @@ export class ShaderCanvas {
 
   public render(
     renderer: THREE.WebGLRenderer,
-    region?: { left: number; bottom: number; width: number; height: number }
+    region?: { left: number; bottom: number; width: number; height: number },
+    prepareTarget?: (renderer: THREE.WebGLRenderer) => void
   ) {
     if (
       this.maxAccumulationFrames > 0 &&
@@ -121,6 +124,7 @@ export class ShaderCanvas {
     }
 
     renderer.setRenderTarget(this.pongRenderTarget);
+    prepareTarget?.(renderer);
 
     if (region) {
       const targetWidth = Math.max(1, Math.floor(this.width * this.resolutionScale));
@@ -215,6 +219,17 @@ export class ShaderCanvas {
     this.setRandomSequenceIndex(0);
   }
 
+  public setStencilMaskEnabled(enabled: boolean) {
+    this.material.stencilWrite = enabled;
+    this.material.stencilFunc = THREE.EqualStencilFunc;
+    this.material.stencilRef = 1;
+    this.material.stencilFuncMask = 0xff;
+    this.material.stencilWriteMask = 0x00;
+    this.material.stencilFail = THREE.KeepStencilOp;
+    this.material.stencilZFail = THREE.KeepStencilOp;
+    this.material.stencilZPass = THREE.KeepStencilOp;
+  }
+
   /** Sets completed sample batches; the next render advances to the following index. */
   public setRandomSequenceIndex(index: number) {
     if (!Number.isSafeInteger(index) || index < 0) {
@@ -271,7 +286,8 @@ export class ShaderCanvas {
         magFilter: THREE.NearestFilter,
         format: THREE.RGBAFormat,
         type: this.accumulationTextureType,
-        depthBuffer: false,
+        depthBuffer: true,
+        stencilBuffer: true,
       }
     );
   }

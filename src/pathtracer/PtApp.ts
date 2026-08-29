@@ -55,7 +55,9 @@ export default class PtApp {
       this.actions.inspectBvhTraversalAtNdc(this.mouse.x, this.mouse.y);
       return;
     }
-    this.selectAtPointer();
+    this.selectAtPointer(
+      event.metaKey ? "remove" : event.shiftKey ? "add" : "replace"
+    );
   };
 
   private readonly pointerCancelHandler = (event: PointerEvent) => {
@@ -256,7 +258,7 @@ export default class PtApp {
     this.ui.dispose();
   }
 
-  private selectAtPointer() {
+  private selectAtPointer(mode: "replace" | "add" | "remove") {
     this.raycaster.setFromCamera(this.mouse, this.ptRenderer.camera);
     const [intersection] = this.raycaster.intersectObjects(
       [this.intersectGroup, this.ptRenderer.ptScene.analyticLightGroup, this.ptRenderer.ptScene.triangleMeshGroup],
@@ -266,19 +268,20 @@ export default class PtApp {
     const analyticLight = analyticLightNodeFromObject(object ?? null);
 
     if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object) && !isPtTriangleMesh(object) && !analyticLight)) {
-      this.selectedObject = null;
-      this.actions.selectObject(null);
+      if (mode === "replace") {
+        this.selectedObject = null;
+        this.actions.selectObject(null);
+      }
       return;
     }
 
     const nextObject: PtEditableObject = analyticLight ?? object as PtEditableObject;
-    if (nextObject === this.selectedObject) {
+    if (mode === "replace" && nextObject === this.selectedObject) {
       this.selectedObject = null;
       this.actions.selectObject(null);
       return;
     }
 
-    this.selectedObject = nextObject;
-    this.actions.selectObject(nextObject);
+    this.selectedObject = this.actions.selectObject(nextObject, mode);
   }
 }

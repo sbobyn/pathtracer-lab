@@ -62,6 +62,8 @@ uniform sampler2D uImageTexture0;
 uniform sampler2D uImageTexture1;
 uniform sampler2D uImageTexture2;
 uniform sampler2D uImageTexture3;
+uniform bool uObjectMaskEnabled;
+uniform bool uObjectMaskHasSelection;
 
 #include packedData.glsl
 #include geometry.glsl
@@ -76,6 +78,9 @@ uniform sampler2D uImageTexture3;
 #include accumulation.glsl
 
 void main() {
+    if (uObjectMaskEnabled) {
+        if (!uObjectMaskHasSelection) discard;
+    }
     vec3 color = vec3(0.0);
     for (int s = 0; s < int(uNumSamples); s++) {
         float sampleIndex = float(s);

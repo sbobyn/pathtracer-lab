@@ -688,6 +688,7 @@ function RenderSettings({
             { value: "pathtraced", label: "Path traced" },
             { value: "comparison", label: "Comparison" },
             { value: "region", label: "Region" },
+            { value: "selectedObject", label: "Selected object" },
           ]}
           density="compact"
           layout="horizontal"
@@ -2197,6 +2198,8 @@ function RenderPanel({
                 ? "Comparison"
                 : state.settings.renderMode === "region"
                   ? "Region"
+                  : state.settings.renderMode === "selectedObject"
+                    ? "Selected object"
                   : "Path tracing"
           }
         </span>

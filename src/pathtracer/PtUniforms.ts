@@ -63,4 +63,6 @@ export default interface PtUniforms {
   uEnvironmentIntensity: { value: number };
   uEnvironmentLightingIntensity: { value: number };
   uEnableDoF: { value: boolean };
+  uObjectMaskEnabled: { value: boolean };
+  uObjectMaskHasSelection: { value: boolean };
 }

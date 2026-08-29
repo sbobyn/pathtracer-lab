@@ -72,6 +72,7 @@ interface AnalyticLightSnapshot {
 
 export default class PtActions {
   private selectedObject: PtEditableObject | null = null;
+  private readonly selectedObjects = new Set<PtEditableObject>();
   private readonly history = new CommandHistory(100);
   private pendingTransform: {
     object: PtEditableObject;
@@ -229,6 +230,8 @@ export default class PtActions {
     // scene are intentionally discarded rather than replayed into a new one.
     this.history.clear();
     this.selectedObject = null;
+    this.selectedObjects.clear();
+    this.renderer.setSelectedObjectIds([]);
     this.renderer.setBvhTraversalVisualization(null);
     this.renderer.transformControls.detach();
     this.renderer.outlinePass.selectedObjects = [];
@@ -539,36 +542,60 @@ export default class PtActions {
     this.updateSetting("transformSpace", space);
   }
 
-  public selectObject(object: PtEditableObject | null) {
+  public selectObject(
+    object: PtEditableObject | null,
+    mode: "replace" | "add" | "remove" = "replace"
+  ) {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     this.commitSelectedLightEdit();
-    this.selectedObject = object;
-    this.renderer.setSelectedTriangleMesh(object && isPtTriangleMesh(object)
-      ? object.userData.pathTracer.objectId
+
+    if (mode === "replace") {
+      this.selectedObjects.clear();
+      if (object) this.selectedObjects.add(object);
+      this.selectedObject = object;
+    } else if (mode === "add" && object) {
+      this.selectedObjects.add(object);
+      this.selectedObject = object;
+    } else if (mode === "remove" && object) {
+      this.selectedObjects.delete(object);
+      if (this.selectedObject === object) {
+        this.selectedObject = [...this.selectedObjects].at(-1) ?? null;
+      }
+    }
+
+    const primary = this.selectedObject;
+    this.renderer.setSelectedObjectIds(
+      [...this.selectedObjects]
+        .filter((candidate) => !isPtAnalyticLightNode(candidate))
+        .map((candidate) => candidate.userData.pathTracer.objectId)
+    );
+    this.renderer.setSelectedTriangleMesh(primary && isPtTriangleMesh(primary)
+      ? primary.userData.pathTracer.objectId
       : null);
-    if (!object) {
+    if (!primary) {
       this.renderer.outlinePass.selectedObjects = [];
       this.renderer.transformControls.detach();
       this.store.update((state) => ({
         ...state,
         selection: this.emptySelection(),
       }));
-      return;
+      return null;
     }
 
-    this.renderer.outlinePass.selectedObjects = [object];
-    this.renderer.transformControls.attach(object);
+    this.renderer.outlinePass.selectedObjects = [...this.selectedObjects];
+    this.renderer.transformControls.attach(primary);
     if (
-      isPtAnalyticLightNode(object) &&
+      isPtAnalyticLightNode(primary) &&
       (this.renderer.transformControls.mode === "scale" ||
-        (object.userData.pathTracer.lightType === "point" &&
+        (primary.userData.pathTracer.lightType === "point" &&
           this.renderer.transformControls.mode === "rotate"))
     ) {
       this.setTransformMode("translate");
     }
     this.configureTransformControls();
     this.publishSelection();
+    return primary;
   }
 
   public selectSphere(sphereIndex: number) {

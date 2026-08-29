@@ -60,6 +60,33 @@ export default class PtRenderer {
     format: THREE.RGBAFormat,
     depthBuffer: true,
   });
+  private readonly objectIdTarget = new THREE.WebGLRenderTarget(1, 1, {
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    depthBuffer: true,
+  });
+  private readonly objectIdMaterials = new Map<string, THREE.ShaderMaterial>();
+  private readonly objectIdColors = new Map<string, THREE.Vector3>();
+  private readonly objectMaskDepthMaterial = new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: true,
+    depthTest: true,
+    side: THREE.DoubleSide,
+  });
+  private readonly objectMaskStencilMaterial = new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: false,
+    depthTest: true,
+    depthFunc: THREE.EqualDepth,
+    side: THREE.DoubleSide,
+    stencilWrite: true,
+    stencilRef: 1,
+    stencilFunc: THREE.AlwaysStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
+  });
+  private readonly selectedObjectIds = new Set<string>();
   private readonly hybridScene = new THREE.Scene();
   private readonly hybridCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly hybridMaterial = new THREE.ShaderMaterial({
@@ -69,6 +96,13 @@ export default class PtRenderer {
       uSeam: { value: 0.5 },
       uRegion: { value: new THREE.Vector4(0.3, 0.3, 0.7, 0.7) },
       uRegionMode: { value: false },
+      tObjectIds: { value: null },
+      uSelectedObjectIdColors: {
+        value: Array.from({ length: 32 }, () => new THREE.Vector3()),
+      },
+      uSelectedObjectIdCount: { value: 0 },
+      uObjectMode: { value: false },
+      uObjectSelectionActive: { value: false },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -83,6 +117,11 @@ export default class PtRenderer {
       uniform float uSeam;
       uniform vec4 uRegion;
       uniform bool uRegionMode;
+      uniform sampler2D tObjectIds;
+      uniform vec3 uSelectedObjectIdColors[32];
+      uniform int uSelectedObjectIdCount;
+      uniform bool uObjectMode;
+      uniform bool uObjectSelectionActive;
       varying vec2 vUv;
       void main() {
         vec4 raster = texture2D(tRaster, vUv);
@@ -90,9 +129,20 @@ export default class PtRenderer {
         bool insideRegion =
           vUv.x >= uRegion.x && vUv.y >= uRegion.y &&
           vUv.x <= uRegion.z && vUv.y <= uRegion.w;
-        gl_FragColor = uRegionMode
-          ? (insideRegion ? pathtraced : raster)
-          : (vUv.x < uSeam ? raster : pathtraced);
+        vec3 visibleObjectId = texture2D(tObjectIds, vUv).rgb;
+        bool selectedObject = false;
+        for (int i = 0; i < 32; i++) {
+          if (i >= uSelectedObjectIdCount) break;
+          selectedObject = selectedObject || distance(
+            visibleObjectId,
+            uSelectedObjectIdColors[i]
+          ) <= (0.5 / 255.0);
+        }
+        gl_FragColor = uObjectMode
+          ? (uObjectSelectionActive && selectedObject ? pathtraced : raster)
+          : uRegionMode
+            ? (insideRegion ? pathtraced : raster)
+            : (vUv.x < uSeam ? raster : pathtraced);
       }
     `,
     depthTest: false,
@@ -189,6 +239,7 @@ export default class PtRenderer {
     this.camera = ptScene.camera;
 
     this.settings = settings;
+    this.objectIdTarget.texture.colorSpace = THREE.NoColorSpace;
     this.fallbackImageTexture.needsUpdate = true;
     this.fallbackEnvironmentDistribution.needsUpdate = true;
     this.gpuScene = this.sceneCompiler.compile(ptScene);
@@ -284,8 +335,32 @@ export default class PtRenderer {
   public setRenderMode(mode: PtSettings["renderMode"]) {
     this.settings.renderMode = mode;
     this.hybridMaterial.uniforms.uRegionMode.value = mode === "region";
+    this.hybridMaterial.uniforms.uObjectMode.value = mode === "selectedObject";
+    this.uniforms.uObjectMaskEnabled.value = mode === "selectedObject";
+    this.shaderCanvas.setStencilMaskEnabled(mode === "selectedObject");
     this.updateComposerMode();
     this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
+  }
+
+  public setSelectedObjectIds(objectIds: string[]) {
+    const next = new Set(objectIds.slice(0, 32));
+    if (
+      next.size === this.selectedObjectIds.size &&
+      [...next].every((objectId) => this.selectedObjectIds.has(objectId))
+    ) return;
+    this.selectedObjectIds.clear();
+    for (const objectId of next) this.selectedObjectIds.add(objectId);
+    const colors = this.hybridMaterial.uniforms.uSelectedObjectIdColors.value as THREE.Vector3[];
+    let index = 0;
+    for (const objectId of this.selectedObjectIds) {
+      colors[index++].copy(this.objectIdColor(objectId));
+    }
+    this.hybridMaterial.uniforms.uSelectedObjectIdCount.value = index;
+    this.hybridMaterial.uniforms.uObjectSelectionActive.value = index > 0;
+    this.uniforms.uObjectMaskHasSelection.value = index > 0;
+    if (this.settings.renderMode === "selectedObject") {
+      this.shaderCanvas.resetAccumulation();
+    }
   }
 
   public setRegionTracingMode(mode: PtSettings["regionTracingMode"]) {
@@ -885,6 +960,8 @@ export default class PtRenderer {
       uEnvironmentIntensity: { value: this.settings.environmentIntensity },
       uEnvironmentLightingIntensity: { value: this.settings.environmentLightingIntensity },
       uEnableDoF: { value: this.settings.enableDepthOfField },
+      uObjectMaskEnabled: { value: this.settings.renderMode === "selectedObject" },
+      uObjectMaskHasSelection: { value: false },
     };
     return uniforms;
   }
@@ -1095,10 +1172,15 @@ export default class PtRenderer {
 
   private updateComposerMode() {
     this.hybridMaterial.uniforms.uRegionMode.value = this.settings.renderMode === "region";
+    this.hybridMaterial.uniforms.uObjectMode.value = this.settings.renderMode === "selectedObject";
+    this.uniforms.uObjectMaskEnabled.value = this.settings.renderMode === "selectedObject";
+    this.shaderCanvas.setStencilMaskEnabled(this.settings.renderMode === "selectedObject");
     this.renderPass.enabled = this.settings.renderMode === "raster";
     this.ptPass.enabled = this.settings.renderMode === "pathtraced";
     this.hybridPass.enabled =
-      this.settings.renderMode === "comparison" || this.settings.renderMode === "region";
+      this.settings.renderMode === "comparison" ||
+      this.settings.renderMode === "region" ||
+      this.settings.renderMode === "selectedObject";
   }
 
   private resizeHybridTarget(width: number, height: number, pixelRatio: number) {
@@ -1106,6 +1188,125 @@ export default class PtRenderer {
       Math.max(1, Math.floor(width * pixelRatio)),
       Math.max(1, Math.floor(height * pixelRatio))
     );
+    this.objectIdTarget.setSize(
+      Math.max(1, Math.floor(width * pixelRatio)),
+      Math.max(1, Math.floor(height * pixelRatio))
+    );
+  }
+
+  private objectIdColor(objectId: string) {
+    const existing = this.objectIdColors.get(objectId);
+    if (existing) return existing;
+    const encoded = this.objectIdColors.size + 1;
+    const color = new THREE.Vector3(
+      (encoded & 0xff) / 255,
+      ((encoded >> 8) & 0xff) / 255,
+      ((encoded >> 16) & 0xff) / 255
+    );
+    this.objectIdColors.set(objectId, color);
+    return color;
+  }
+
+  private objectIdMaterial(objectId: string) {
+    const existing = this.objectIdMaterials.get(objectId);
+    if (existing) return existing;
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uIdColor: { value: this.objectIdColor(objectId) } },
+      vertexShader: `
+        void main() {
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uIdColor;
+        void main() { gl_FragColor = vec4(uIdColor, 1.0); }
+      `,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: true,
+      toneMapped: false,
+    });
+    this.objectIdMaterials.set(objectId, material);
+    return material;
+  }
+
+  private renderObjectIds() {
+    const traceable = new Map<THREE.Mesh, string>();
+    for (const mesh of [
+      ...this.ptScene.getSphereMeshes(),
+      ...this.ptScene.getQuadMeshes(),
+      ...this.ptScene.getTriangleMeshes(),
+    ]) {
+      traceable.set(mesh, mesh.userData.pathTracer.objectId);
+    }
+
+    const restored: Array<{
+      mesh: THREE.Mesh;
+      material: THREE.Material | THREE.Material[];
+      visible: boolean;
+    }> = [];
+    this.ptScene.scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      restored.push({ mesh: object, material: object.material, visible: object.visible });
+      const objectId = traceable.get(object);
+      if (objectId && object.visible) object.material = this.objectIdMaterial(objectId);
+      else object.visible = false;
+    });
+
+    const clearColor = this.renderer.getClearColor(new THREE.Color()).clone();
+    const clearAlpha = this.renderer.getClearAlpha();
+    this.renderer.setRenderTarget(this.objectIdTarget);
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.clear(true, true, true);
+    this.renderer.render(this.ptScene.scene, this.camera);
+    this.renderer.setRenderTarget(null);
+    this.renderer.setClearColor(clearColor, clearAlpha);
+
+    for (const entry of restored) {
+      entry.mesh.material = entry.material;
+      entry.mesh.visible = entry.visible;
+    }
+  }
+
+  private renderSelectedObjectStencil(renderer: THREE.WebGLRenderer) {
+    renderer.clear(false, true, true);
+    if (this.selectedObjectIds.size === 0) return;
+
+    const traceable = new Map<THREE.Mesh, string>();
+    for (const mesh of [
+      ...this.ptScene.getSphereMeshes(),
+      ...this.ptScene.getQuadMeshes(),
+      ...this.ptScene.getTriangleMeshes(),
+    ]) {
+      traceable.set(mesh, mesh.userData.pathTracer.objectId);
+    }
+    const restored: Array<{
+      mesh: THREE.Mesh;
+      material: THREE.Material | THREE.Material[];
+      visible: boolean;
+    }> = [];
+    this.ptScene.scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      restored.push({ mesh: object, material: object.material, visible: object.visible });
+      if (traceable.has(object) && object.visible) {
+        object.material = this.objectMaskDepthMaterial;
+      } else {
+        object.visible = false;
+      }
+    });
+    renderer.render(this.ptScene.scene, this.camera);
+
+    for (const entry of restored) {
+      const objectId = traceable.get(entry.mesh);
+      entry.mesh.visible = entry.visible && Boolean(objectId && this.selectedObjectIds.has(objectId));
+      if (entry.mesh.visible) entry.mesh.material = this.objectMaskStencilMaterial;
+    }
+    renderer.render(this.ptScene.scene, this.camera);
+
+    for (const entry of restored) {
+      entry.mesh.material = entry.material;
+      entry.mesh.visible = entry.visible;
+    }
   }
 
   public disposePostProcessing() {
@@ -1273,6 +1474,10 @@ export default class PtRenderer {
       this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
     }
 
+    if (this.settings.renderMode === "selectedObject") {
+      this.renderObjectIds();
+    }
+
     const pauseFullFrameHybridTracing = this.hybridRegionInteractionActive && (
       (this.settings.renderMode === "region" && this.settings.regionTracingMode === "fullFrame") ||
       (this.settings.renderMode === "comparison" && this.settings.comparisonTracingMode === "fullFrame")
@@ -1307,16 +1512,27 @@ export default class PtRenderer {
               height: 1,
             }
           : undefined;
-      this.shaderCanvas.render(this.renderer, region);
+      this.shaderCanvas.render(
+        this.renderer,
+        region,
+        this.settings.renderMode === "selectedObject"
+          ? (renderer) => this.renderSelectedObjectStencil(renderer)
+          : undefined
+      );
     }
 
-    if (this.settings.renderMode === "comparison" || this.settings.renderMode === "region") {
+    if (
+      this.settings.renderMode === "comparison" ||
+      this.settings.renderMode === "region" ||
+      this.settings.renderMode === "selectedObject"
+    ) {
       this.renderer.setRenderTarget(this.hybridRasterTarget);
       this.renderer.clear();
       this.renderer.render(this.ptScene.scene, this.camera);
       this.renderer.setRenderTarget(null);
       this.hybridMaterial.uniforms.tRaster.value = this.hybridRasterTarget.texture;
       this.hybridMaterial.uniforms.tPathtraced.value = this.shaderCanvas.outputTexture;
+      this.hybridMaterial.uniforms.tObjectIds.value = this.objectIdTarget.texture;
     }
 
     // transform controls
@@ -1371,6 +1587,12 @@ export default class PtRenderer {
 
     this.shaderCanvas.dispose();
     this.hybridRasterTarget.dispose();
+    this.objectIdTarget.dispose();
+    for (const material of this.objectIdMaterials.values()) material.dispose();
+    this.objectIdMaterials.clear();
+    this.objectIdColors.clear();
+    this.objectMaskDepthMaterial.dispose();
+    this.objectMaskStencilMaterial.dispose();
     this.hybridMaterial.dispose();
     this.hybridScene.traverse((object) => {
       if (object instanceof THREE.Mesh) object.geometry.dispose();
