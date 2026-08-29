@@ -32,6 +32,7 @@ const transformSpaces = new Set(["global", "local"]);
 const integratorModes = new Set(["bsdf", "direct", "mis"]);
 const renderModes = new Set(["raster", "pathtraced", "comparison", "region"]);
 const regionTracingModes = new Set(["fullFrame", "roiOnly"]);
+const comparisonTracingModes = new Set(["fullFrame", "pathtracedSide"]);
 const triangleTraversalModes = new Set(["bvh", "bruteForce"]);
 const triangleOverlayModes = new Set(["off", "selected", "all"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
@@ -67,6 +68,9 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   }
   if (regionTracingModes.has(candidate.regionTracingMode as string)) {
     settings.regionTracingMode = candidate.regionTracingMode as PtSettings["regionTracingMode"];
+  }
+  if (comparisonTracingModes.has(candidate.comparisonTracingMode as string)) {
+    settings.comparisonTracingMode = candidate.comparisonTracingMode as PtSettings["comparisonTracingMode"];
   }
   if (environmentModes.has(candidate.environmentMode as string)) settings.environmentMode = candidate.environmentMode as PtSettings["environmentMode"];
   if (

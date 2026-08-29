@@ -99,6 +99,7 @@ export default class PtRenderer {
     depthWrite: false,
   });
   private readonly hybridRegion = new THREE.Vector4(0.3, 0.3, 0.7, 0.7);
+  private hybridSeam = 0.5;
   private hybridRegionInteractionActive = false;
 
   public orbitControls!: OrbitControls;
@@ -293,8 +294,24 @@ export default class PtRenderer {
     this.shaderCanvas.resetAccumulation();
   }
 
+  public setComparisonTracingMode(mode: PtSettings["comparisonTracingMode"]) {
+    if (this.settings.comparisonTracingMode === mode) return;
+    this.settings.comparisonTracingMode = mode;
+    this.shaderCanvas.resetAccumulation();
+  }
+
   public setHybridComparisonSeam(seam: number) {
-    this.hybridMaterial.uniforms.uSeam.value = THREE.MathUtils.clamp(seam, 0, 1);
+    const next = THREE.MathUtils.clamp(seam, 0, 1);
+    const changed = next !== this.hybridSeam;
+    this.hybridSeam = next;
+    this.hybridMaterial.uniforms.uSeam.value = next;
+    if (
+      changed &&
+      this.settings.renderMode === "comparison" &&
+      this.settings.comparisonTracingMode === "pathtracedSide"
+    ) {
+      this.shaderCanvas.resetAccumulation();
+    }
   }
 
   public setHybridRegion(left: number, top: number, width: number, height: number) {
@@ -317,6 +334,10 @@ export default class PtRenderer {
   }
 
   public setHybridRegionInteractionActive(active: boolean) {
+    this.setHybridInteractionActive(active);
+  }
+
+  public setHybridInteractionActive(active: boolean) {
     this.hybridRegionInteractionActive = active;
   }
 
@@ -1252,12 +1273,12 @@ export default class PtRenderer {
       this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
     }
 
-    const pauseFullFrameRegionTracing =
-      this.settings.renderMode === "region" &&
-      this.settings.regionTracingMode === "fullFrame" &&
-      this.hybridRegionInteractionActive;
+    const pauseFullFrameHybridTracing = this.hybridRegionInteractionActive && (
+      (this.settings.renderMode === "region" && this.settings.regionTracingMode === "fullFrame") ||
+      (this.settings.renderMode === "comparison" && this.settings.comparisonTracingMode === "fullFrame")
+    );
 
-    if (pathtracedVisible && !pauseFullFrameRegionTracing) {
+    if (pathtracedVisible && !pauseFullFrameHybridTracing) {
       this.camera.updateMatrixWorld();
       this.camera.updateProjectionMatrix();
 
@@ -1277,7 +1298,15 @@ export default class PtRenderer {
             width: this.hybridRegion.z - this.hybridRegion.x,
             height: this.hybridRegion.w - this.hybridRegion.y,
           }
-        : undefined;
+        : this.settings.renderMode === "comparison" &&
+            this.settings.comparisonTracingMode === "pathtracedSide"
+          ? {
+              left: this.hybridSeam,
+              bottom: 0,
+              width: 1 - this.hybridSeam,
+              height: 1,
+            }
+          : undefined;
       this.shaderCanvas.render(this.renderer, region);
     }
 

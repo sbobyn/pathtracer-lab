@@ -4,6 +4,7 @@ export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
 export type RenderMode = "raster" | "pathtraced" | "comparison" | "region";
 export type RegionTracingMode = "fullFrame" | "roiOnly";
+export type ComparisonTracingMode = "fullFrame" | "pathtracedSide";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
 export type TriangleOverlayMode = "off" | "selected" | "all";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Principled" | "Unknown";
@@ -53,6 +54,7 @@ export interface PtSelectionMaterialState {
 export interface PtSettings {
   renderMode: RenderMode;
   regionTracingMode: RegionTracingMode;
+  comparisonTracingMode: ComparisonTracingMode;
   environmentMode: "gradient" | "map";
   environmentSource: string;
   environmentLabel: string;
@@ -154,6 +156,7 @@ export interface PtState {
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
   renderMode: "pathtraced",
   regionTracingMode: "roiOnly",
+  comparisonTracingMode: "fullFrame",
   environmentMode: "gradient",
   environmentSource: "",
   environmentLabel: "Gradient",

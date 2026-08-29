@@ -714,6 +714,23 @@ function RenderSettings({
           }
         />
       )}
+      {settings.renderMode === "comparison" && (
+        <SelectField
+          label="Comparison tracing"
+          value={settings.comparisonTracingMode}
+          options={[
+            { value: "pathtracedSide", label: "Visible side · faster" },
+            { value: "fullFrame", label: "Full frame · preserve" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change comparison tracing strategy", () =>
+              actions.setComparisonTracingMode(value as typeof settings.comparisonTracingMode)
+            )
+          }
+        />
+      )}
       <fieldset
         className="editor-controls-group"
         disabled={settings.renderMode === "raster"}
@@ -2274,6 +2291,13 @@ function CreationMenu({
 function HybridComparisonSeam({ actions }: { actions: PtActions }) {
   const [seam, setSeam] = useState(0.5);
   const draggingPointer = useRef<number | null>(null);
+  const hovering = useRef(false);
+  const focused = useRef(false);
+
+  useEffect(
+    () => () => actions.setHybridComparisonInteractionActive(false),
+    [actions]
+  );
 
   const updateSeam = (clientX: number) => {
     const next = THREE.MathUtils.clamp(clientX / window.innerWidth, 0.03, 0.97);
@@ -2292,9 +2316,30 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
       aria-valuemax={97}
       aria-valuenow={Math.round(seam * 100)}
       tabIndex={0}
+      onPointerEnter={() => {
+        hovering.current = true;
+        actions.setHybridComparisonInteractionActive(true);
+      }}
+      onPointerLeave={() => {
+        hovering.current = false;
+        if (draggingPointer.current === null && !focused.current) {
+          actions.setHybridComparisonInteractionActive(false);
+        }
+      }}
+      onFocus={() => {
+        focused.current = true;
+        actions.setHybridComparisonInteractionActive(true);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        if (!hovering.current && draggingPointer.current === null) {
+          actions.setHybridComparisonInteractionActive(false);
+        }
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         draggingPointer.current = event.pointerId;
+        actions.setHybridComparisonInteractionActive(true);
         event.currentTarget.setPointerCapture(event.pointerId);
         updateSeam(event.clientX);
       }}
@@ -2304,9 +2349,17 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
       onPointerUp={(event) => {
         if (draggingPointer.current !== event.pointerId) return;
         draggingPointer.current = null;
+        if (!hovering.current && !focused.current) {
+          actions.setHybridComparisonInteractionActive(false);
+        }
         event.currentTarget.releasePointerCapture(event.pointerId);
       }}
-      onPointerCancel={() => { draggingPointer.current = null; }}
+      onPointerCancel={() => {
+        draggingPointer.current = null;
+        if (!hovering.current && !focused.current) {
+          actions.setHybridComparisonInteractionActive(false);
+        }
+      }}
       onKeyDown={(event) => {
         const delta = event.shiftKey ? 0.01 : 0.05;
         if (event.key === "ArrowLeft") {

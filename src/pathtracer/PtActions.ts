@@ -286,9 +286,18 @@ export default class PtActions {
     this.updateSetting("regionTracingMode", mode);
   }
 
+  public setComparisonTracingMode(mode: PtSettings["comparisonTracingMode"]) {
+    this.renderer.setComparisonTracingMode(mode);
+    this.updateSetting("comparisonTracingMode", mode);
+  }
+
   /** Ephemeral comparison UI state; changing it does not invalidate accumulation. */
   public setHybridComparisonSeam(seam: number) {
     this.renderer.setHybridComparisonSeam(seam);
+  }
+
+  public setHybridComparisonInteractionActive(active: boolean) {
+    this.renderer.setHybridInteractionActive(active);
   }
 
   /** Ephemeral ROI UI state; moving it resets the region's accumulation count. */
@@ -1910,6 +1919,9 @@ export default class PtActions {
     }
     if (current.regionTracingMode !== settings.regionTracingMode) {
       this.setRegionTracingMode(settings.regionTracingMode);
+    }
+    if (current.comparisonTracingMode !== settings.comparisonTracingMode) {
+      this.setComparisonTracingMode(settings.comparisonTracingMode);
     }
     if (current.backgroundColorTop !== settings.backgroundColorTop) {
       this.setBackgroundColorTop(settings.backgroundColorTop);

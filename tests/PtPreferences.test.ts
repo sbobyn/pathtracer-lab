@@ -141,6 +141,23 @@ test("the hybrid region render mode persists", () => {
   assert.equal(state.settings.regionTracingMode, "fullFrame");
 });
 
+test("the optimized seam tracing strategy persists", () => {
+  const defaults = createDefaultPtState();
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: PT_PREFERENCES_VERSION,
+    sceneKey: "RTIOW1Simple",
+    settings: {
+      renderMode: "comparison",
+      comparisonTracingMode: "pathtracedSide",
+    },
+  });
+
+  const state = loadPtPreferences(storage, defaults, ["RTIOW1Simple"]);
+  assert.equal(state.settings.renderMode, "comparison");
+  assert.equal(state.settings.comparisonTracingMode, "pathtracedSide");
+});
+
 test("renamed RTIOW presets preserve existing saved scene selections", () => {
   const defaults = createDefaultPtState();
   const storage = new MemoryStorage();
