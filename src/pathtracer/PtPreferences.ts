@@ -30,6 +30,7 @@ const accumulationFormats = new Set(["rgba8", "rgba16f", "rgba32f"]);
 const transformModes = new Set(["translate", "rotate", "scale"]);
 const transformSpaces = new Set(["global", "local"]);
 const integratorModes = new Set(["bsdf", "direct", "mis"]);
+const renderModes = new Set(["raster", "pathtraced", "comparison"]);
 const triangleTraversalModes = new Set(["bvh", "bruteForce"]);
 const triangleOverlayModes = new Set(["off", "selected", "all"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
@@ -56,7 +57,13 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   const candidate = value as Record<string, unknown>;
   const settings = { ...defaults };
 
-  if (typeof candidate.pathtracingEnabled === "boolean") settings.pathtracingEnabled = candidate.pathtracingEnabled;
+  if (renderModes.has(candidate.renderMode as string)) {
+    settings.renderMode = candidate.renderMode as PtSettings["renderMode"];
+  } else if (typeof candidate.pathtracingEnabled === "boolean") {
+    // Migrate the former two-state render toggle without requiring a storage
+    // schema reset. Comparison mode is an explicit opt-in in current builds.
+    settings.renderMode = candidate.pathtracingEnabled ? "pathtraced" : "raster";
+  }
   if (environmentModes.has(candidate.environmentMode as string)) settings.environmentMode = candidate.environmentMode as PtSettings["environmentMode"];
   if (
     typeof candidate.environmentSource === "string" &&

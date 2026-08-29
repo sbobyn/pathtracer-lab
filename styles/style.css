@@ -64,6 +64,65 @@ body {
   width: 100%;
 }
 
+.hybrid-comparison-seam {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  color: #18181b;
+  background: #d9f99d;
+  box-shadow: 0 0 0 1px rgb(24 24 27 / 45%), 0 0 16px rgb(190 242 100 / 35%);
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translateX(-50%);
+}
+
+.hybrid-comparison-seam:focus-visible {
+  outline: 2px solid #bef264;
+  outline-offset: 3px;
+}
+
+.hybrid-comparison-seam__handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: #18181b;
+  background: #bef264;
+  border: 2px solid rgb(255 255 255 / 72%);
+  border-radius: 999px;
+  box-shadow: 0 5px 18px rgb(0 0 0 / 32%);
+  font: 700 15px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  transform: translate(-50%, -50%);
+}
+
+.hybrid-comparison-seam__label {
+  position: absolute;
+  top: calc(50% + 22px);
+  padding: 4px 7px;
+  color: #f4f4f5;
+  background: rgb(24 24 27 / 84%);
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 20%);
+  backdrop-filter: blur(8px);
+  font: 650 10px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.hybrid-comparison-seam__label--raster {
+  right: 9px;
+}
+
+.hybrid-comparison-seam__label--pathtraced {
+  left: 9px;
+}
+
 #editor-root .editor-subpanel > .eui-number-field-row .eui-field-row__layout {
   grid-template-columns: minmax(0, 1fr) 48px;
 }

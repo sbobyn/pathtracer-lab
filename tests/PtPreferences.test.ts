@@ -25,6 +25,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
     sceneKey: "RTIOW1Final",
     settings: {
       numSamples: 8,
+      renderMode: "comparison",
       fov: 60,
       resolutionScale: 0.5,
       integratorMode: "mis",
@@ -39,6 +40,7 @@ test("loads valid versioned preferences over authoritative defaults", () => {
   const state = loadPtPreferences(storage, createDefaultPtState(), ["RTIOW1Simple", "RTIOW1Final"]);
   assert.equal(state.sceneKey, "RTIOW1Final");
   assert.equal(state.settings.numSamples, 8);
+  assert.equal(state.settings.renderMode, "comparison");
   assert.equal(state.settings.fov, 60);
   assert.equal(state.settings.resolutionScale, 0.5);
   assert.equal(state.settings.integratorMode, "mis");
@@ -102,6 +104,27 @@ test("v1 preferences migrate the triangle overlay to its hidden default", () => 
   assert.equal(state.sceneKey, "RTIOW1Final");
   assert.equal(state.settings.numSamples, 7);
   assert.equal(state.settings.triangleOverlayMode, "off");
+});
+
+test("legacy path-tracing toggles migrate to the explicit render mode", () => {
+  const defaults = createDefaultPtState();
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: PT_PREFERENCES_VERSION,
+    sceneKey: "RTIOW1Simple",
+    settings: { pathtracingEnabled: false },
+  });
+
+  const raster = loadPtPreferences(storage, defaults, ["RTIOW1Simple"]);
+  assert.equal(raster.settings.renderMode, "raster");
+
+  storage.value = JSON.stringify({
+    version: PT_PREFERENCES_VERSION,
+    sceneKey: "RTIOW1Simple",
+    settings: { pathtracingEnabled: true },
+  });
+  const pathtraced = loadPtPreferences(storage, defaults, ["RTIOW1Simple"]);
+  assert.equal(pathtraced.settings.renderMode, "pathtraced");
 });
 
 test("renamed RTIOW presets preserve existing saved scene selections", () => {

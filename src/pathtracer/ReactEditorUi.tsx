@@ -680,20 +680,25 @@ function RenderSettings({
   }, [actions, bvhTraversalPlaying, bvhTraversalSpeed, traversal.events.length, traversal.step]);
   return (
       <div className="render-panel__content">
-      <CheckboxField
-          label="Path tracing"
-          checked={settings.pathtracingEnabled}
+      <SelectField
+          label="Render mode"
+          value={settings.renderMode}
+          options={[
+            { value: "raster", label: "Raster" },
+            { value: "pathtraced", label: "Path traced" },
+            { value: "comparison", label: "Comparison" },
+          ]}
           density="compact"
           layout="horizontal"
-          onChange={(checked) =>
-            commitSetting(actions, "Toggle path tracing", () =>
-              actions.setPathtracingEnabled(checked)
+          onChange={(value) =>
+            commitSetting(actions, "Change render mode", () =>
+              actions.setRenderMode(value as typeof settings.renderMode)
             )
           }
       />
       <fieldset
         className="editor-controls-group"
-        disabled={!settings.pathtracingEnabled}
+        disabled={settings.renderMode === "raster"}
       >
         <SettingsNumberField
           actions={actions}
@@ -2150,7 +2155,13 @@ function RenderPanel({
       >
         <span>Render</span>
         <span className="render-panel__meta">
-          {fps === null ? "—" : fps} FPS · {state.settings.pathtracingEnabled ? "Path tracing" : "Preview"}
+          {fps === null ? "—" : fps} FPS · {
+            state.settings.renderMode === "raster"
+              ? "Raster"
+              : state.settings.renderMode === "comparison"
+                ? "Comparison"
+                : "Path tracing"
+          }
         </span>
         <span className="render-panel__chevron" aria-hidden="true">⌃</span>
       </button>
@@ -2236,6 +2247,68 @@ function CreationMenu({
           <span>Delete</span>
         </button>
       )}
+    </div>
+  );
+}
+
+function HybridComparisonSeam({ actions }: { actions: PtActions }) {
+  const [seam, setSeam] = useState(0.5);
+  const draggingPointer = useRef<number | null>(null);
+
+  const updateSeam = (clientX: number) => {
+    const next = THREE.MathUtils.clamp(clientX / window.innerWidth, 0.03, 0.97);
+    setSeam(next);
+    actions.setHybridComparisonSeam(next);
+  };
+
+  return (
+    <div
+      className="hybrid-comparison-seam"
+      style={{ left: `${seam * 100}%` }}
+      role="separator"
+      aria-label="Raster and path-traced comparison seam"
+      aria-orientation="vertical"
+      aria-valuemin={3}
+      aria-valuemax={97}
+      aria-valuenow={Math.round(seam * 100)}
+      tabIndex={0}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        draggingPointer.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updateSeam(event.clientX);
+      }}
+      onPointerMove={(event) => {
+        if (draggingPointer.current === event.pointerId) updateSeam(event.clientX);
+      }}
+      onPointerUp={(event) => {
+        if (draggingPointer.current !== event.pointerId) return;
+        draggingPointer.current = null;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => { draggingPointer.current = null; }}
+      onKeyDown={(event) => {
+        const delta = event.shiftKey ? 0.01 : 0.05;
+        if (event.key === "ArrowLeft") {
+          const next = Math.max(0.03, seam - delta);
+          setSeam(next);
+          actions.setHybridComparisonSeam(next);
+          event.preventDefault();
+        } else if (event.key === "ArrowRight") {
+          const next = Math.min(0.97, seam + delta);
+          setSeam(next);
+          actions.setHybridComparisonSeam(next);
+          event.preventDefault();
+        }
+      }}
+    >
+      <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--raster">
+        Raster
+      </span>
+      <span className="hybrid-comparison-seam__handle" aria-hidden="true">↔</span>
+      <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--pathtraced">
+        Path traced
+      </span>
     </div>
   );
 }
@@ -2385,6 +2458,9 @@ function EditorShell({ actions }: { actions: PtActions }) {
 
   return (
     <>
+    {state.settings.renderMode === "comparison" && (
+      <HybridComparisonSeam actions={actions} />
+    )}
     <a
       className="editor-repository-link"
       href="https://github.com/sbobyn/pathtracer-lab"

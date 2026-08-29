@@ -52,7 +52,43 @@ export default class PtRenderer {
   private gammaCorrectionPass!: ShaderPass;
   public ptPass!: RenderPass;
   public renderPass!: RenderPass;
+  private hybridPass!: RenderPass;
   public outlinePass!: OutlinePass;
+  private readonly hybridRasterTarget = new THREE.WebGLRenderTarget(1, 1, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat,
+    depthBuffer: true,
+  });
+  private readonly hybridScene = new THREE.Scene();
+  private readonly hybridCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private readonly hybridMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      tRaster: { value: null },
+      tPathtraced: { value: null },
+      uSeam: { value: 0.5 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tRaster;
+      uniform sampler2D tPathtraced;
+      uniform float uSeam;
+      varying vec2 vUv;
+      void main() {
+        vec4 raster = texture2D(tRaster, vUv);
+        vec4 pathtraced = texture2D(tPathtraced, vUv);
+        gl_FragColor = vUv.x < uSeam ? raster : pathtraced;
+      }
+    `,
+    depthTest: false,
+    depthWrite: false,
+  });
 
   public orbitControls!: OrbitControls;
   public transformControls!: TransformControls;
@@ -113,6 +149,7 @@ export default class PtRenderer {
     this.updateCameraProjectionUniforms();
 
     this.shaderCanvas.setDimensions(width, height);
+    this.resizeHybridTarget(width, height, pixelRatio);
     this.composer.setSize(width, height);
     this.composer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height);
@@ -168,6 +205,14 @@ export default class PtRenderer {
       }
     );
     this.composer = new EffectComposer(this.renderer, renderTarget);
+    this.hybridScene.add(
+      new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.hybridMaterial)
+    );
+    this.resizeHybridTarget(
+      window.innerWidth,
+      window.innerHeight,
+      Math.min(window.devicePixelRatio, 2)
+    );
     this.initializeComposerPasses();
 
     this.setupGizmo();
@@ -224,11 +269,14 @@ export default class PtRenderer {
     }
   }
 
-  public setPathtracingEnabled(enabled: boolean) {
-    this.settings.pathtracingEnabled = enabled;
-    this.ptPass.enabled = enabled;
-    this.renderPass.enabled = !enabled;
+  public setRenderMode(mode: PtSettings["renderMode"]) {
+    this.settings.renderMode = mode;
+    this.updateComposerMode();
     this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
+  }
+
+  public setHybridComparisonSeam(seam: number) {
+    this.hybridMaterial.uniforms.uSeam.value = THREE.MathUtils.clamp(seam, 0, 1);
   }
 
   public setFov(fov: number, invalidate = true) {
@@ -949,6 +997,7 @@ export default class PtRenderer {
       this.shaderCanvas.screenScene,
       this.shaderCanvas.screenCamera
     );
+    this.hybridPass = new RenderPass(this.hybridScene, this.hybridCamera);
     this.outlinePass = new OutlinePass(
       new THREE.Vector2(window.innerWidth * 2, window.innerHeight * 2),
       this.ptScene.scene,
@@ -958,17 +1007,17 @@ export default class PtRenderer {
     this.composer.setSize(window.innerWidth, window.innerHeight);
     this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-    this.renderPass.enabled = !this.settings.pathtracingEnabled;
     this.composer.addPass(this.renderPass);
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
     this.composer.addPass(this.ptPass);
-    this.ptPass.enabled = this.settings.pathtracingEnabled;
+    this.composer.addPass(this.hybridPass);
 
     this.composer.addPass(this.outlinePass);
 
     this.gammaCorrectionPass = new ShaderPass(GammaCorrectionShader);
     this.composer.addPass(this.gammaCorrectionPass);
+    this.updateComposerMode();
   }
 
   private updateComposerScene() {
@@ -979,8 +1028,20 @@ export default class PtRenderer {
     this.outlinePass.renderScene = this.ptScene.scene;
     this.outlinePass.renderCamera = this.camera;
 
-    this.renderPass.enabled = !this.settings.pathtracingEnabled;
-    this.ptPass.enabled = this.settings.pathtracingEnabled;
+    this.updateComposerMode();
+  }
+
+  private updateComposerMode() {
+    this.renderPass.enabled = this.settings.renderMode === "raster";
+    this.ptPass.enabled = this.settings.renderMode === "pathtraced";
+    this.hybridPass.enabled = this.settings.renderMode === "comparison";
+  }
+
+  private resizeHybridTarget(width: number, height: number, pixelRatio: number) {
+    this.hybridRasterTarget.setSize(
+      Math.max(1, Math.floor(width * pixelRatio)),
+      Math.max(1, Math.floor(height * pixelRatio))
+    );
   }
 
   public disposePostProcessing() {
@@ -1130,7 +1191,10 @@ export default class PtRenderer {
 
     this.orbitControls?.update();
 
-    if (!this.settings.pathtracingEnabled) {
+    const rasterVisible = this.settings.renderMode !== "pathtraced";
+    const pathtracedVisible = this.settings.renderMode !== "raster";
+
+    if (rasterVisible) {
       let hasEmissiveQuad = false;
       for (const quad of this.ptScene.getQuadMeshes()) {
         syncEmissiveQuadPreview(quad);
@@ -1145,7 +1209,7 @@ export default class PtRenderer {
       this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
     }
 
-    if (this.settings.pathtracingEnabled) {
+    if (pathtracedVisible) {
       this.camera.updateMatrixWorld();
       this.camera.updateProjectionMatrix();
 
@@ -1157,6 +1221,15 @@ export default class PtRenderer {
         .crossVectors(this.cameraRight, this.cameraForward)
         .normalize();
       this.shaderCanvas.render(this.renderer);
+    }
+
+    if (this.settings.renderMode === "comparison") {
+      this.renderer.setRenderTarget(this.hybridRasterTarget);
+      this.renderer.clear();
+      this.renderer.render(this.ptScene.scene, this.camera);
+      this.renderer.setRenderTarget(null);
+      this.hybridMaterial.uniforms.tRaster.value = this.hybridRasterTarget.texture;
+      this.hybridMaterial.uniforms.tPathtraced.value = this.shaderCanvas.outputTexture;
     }
 
     // transform controls
@@ -1210,6 +1283,11 @@ export default class PtRenderer {
     this.transformControls.dispose();
 
     this.shaderCanvas.dispose();
+    this.hybridRasterTarget.dispose();
+    this.hybridMaterial.dispose();
+    this.hybridScene.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.geometry.dispose();
+    });
     this.gpuScene.dispose();
     this.packedSpheres.texture.dispose();
     this.disposePackedSphereBvh();

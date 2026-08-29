@@ -21,6 +21,7 @@ import type {
   AccumulationFormat,
   PtSettings,
   PtState,
+  RenderMode,
   TransformMode,
   TransformSpace,
 } from "./PtState";
@@ -275,9 +276,14 @@ export default class PtActions {
     this.nextQuadName = scene.getQuadMeshes().length;
   }
 
-  public setPathtracingEnabled(enabled: boolean) {
-    this.renderer.setPathtracingEnabled(enabled);
-    this.updateSetting("pathtracingEnabled", enabled);
+  public setRenderMode(mode: RenderMode) {
+    this.renderer.setRenderMode(mode);
+    this.updateSetting("renderMode", mode);
+  }
+
+  /** Ephemeral comparison UI state; changing it does not invalidate accumulation. */
+  public setHybridComparisonSeam(seam: number) {
+    this.renderer.setHybridComparisonSeam(seam);
   }
 
   public setBackgroundColorTop(value: THREE.ColorRepresentation) {
@@ -1884,8 +1890,8 @@ export default class PtActions {
 
   private applySettings(settings: PtSettings) {
     const current = this.store.getState().settings;
-    if (current.pathtracingEnabled !== settings.pathtracingEnabled) {
-      this.setPathtracingEnabled(settings.pathtracingEnabled);
+    if (current.renderMode !== settings.renderMode) {
+      this.setRenderMode(settings.renderMode);
     }
     if (current.backgroundColorTop !== settings.backgroundColorTop) {
       this.setBackgroundColorTop(settings.backgroundColorTop);

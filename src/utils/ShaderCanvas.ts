@@ -26,6 +26,10 @@ export class ShaderCanvas {
 
   public accumulationTextureType: THREE.TextureDataType;
 
+  public get outputTexture() {
+    return this.screenMaterial.map;
+  }
+
   constructor({
     width,
     height,
