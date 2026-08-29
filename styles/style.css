@@ -123,6 +123,96 @@ body {
   left: 9px;
 }
 
+.hybrid-comparison-region {
+  position: fixed;
+  z-index: 20;
+  box-sizing: border-box;
+  border: 3px solid #bef264;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgb(24 24 27 / 55%), 0 0 18px rgb(190 242 100 / 28%);
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.hybrid-comparison-region:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.hybrid-comparison-region__label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 5px 8px;
+  color: #18181b;
+  background: #bef264;
+  border-radius: 5px;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 28%);
+  font: 700 10px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.hybrid-comparison-region__handle {
+  position: absolute;
+  display: block;
+}
+
+.hybrid-comparison-region__handle--n,
+.hybrid-comparison-region__handle--s {
+  right: 12px;
+  left: 12px;
+  height: 14px;
+  cursor: ns-resize;
+}
+
+.hybrid-comparison-region__handle--n { top: -8px; }
+.hybrid-comparison-region__handle--s { bottom: -8px; }
+
+.hybrid-comparison-region__handle--e,
+.hybrid-comparison-region__handle--w {
+  top: 12px;
+  bottom: 12px;
+  width: 14px;
+  cursor: ew-resize;
+}
+
+.hybrid-comparison-region__handle--e { right: -8px; }
+.hybrid-comparison-region__handle--w { left: -8px; }
+
+.hybrid-comparison-region__handle--ne,
+.hybrid-comparison-region__handle--se,
+.hybrid-comparison-region__handle--sw,
+.hybrid-comparison-region__handle--nw {
+  width: 18px;
+  height: 18px;
+}
+
+.hybrid-comparison-region__handle--ne {
+  top: -9px;
+  right: -9px;
+  cursor: nesw-resize;
+}
+
+.hybrid-comparison-region__handle--se {
+  right: -9px;
+  bottom: -9px;
+  cursor: nwse-resize;
+}
+
+.hybrid-comparison-region__handle--sw {
+  bottom: -9px;
+  left: -9px;
+  cursor: nesw-resize;
+}
+
+.hybrid-comparison-region__handle--nw {
+  top: -9px;
+  left: -9px;
+  cursor: nwse-resize;
+}
+
 #editor-root .editor-subpanel > .eui-number-field-row .eui-field-row__layout {
   grid-template-columns: minmax(0, 1fr) 48px;
 }

@@ -127,6 +127,20 @@ test("legacy path-tracing toggles migrate to the explicit render mode", () => {
   assert.equal(pathtraced.settings.renderMode, "pathtraced");
 });
 
+test("the hybrid region render mode persists", () => {
+  const defaults = createDefaultPtState();
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: PT_PREFERENCES_VERSION,
+    sceneKey: "RTIOW1Simple",
+    settings: { renderMode: "region", regionTracingMode: "fullFrame" },
+  });
+
+  const state = loadPtPreferences(storage, defaults, ["RTIOW1Simple"]);
+  assert.equal(state.settings.renderMode, "region");
+  assert.equal(state.settings.regionTracingMode, "fullFrame");
+});
+
 test("renamed RTIOW presets preserve existing saved scene selections", () => {
   const defaults = createDefaultPtState();
   const storage = new MemoryStorage();

@@ -281,9 +281,24 @@ export default class PtActions {
     this.updateSetting("renderMode", mode);
   }
 
+  public setRegionTracingMode(mode: PtSettings["regionTracingMode"]) {
+    this.renderer.setRegionTracingMode(mode);
+    this.updateSetting("regionTracingMode", mode);
+  }
+
   /** Ephemeral comparison UI state; changing it does not invalidate accumulation. */
   public setHybridComparisonSeam(seam: number) {
     this.renderer.setHybridComparisonSeam(seam);
+  }
+
+  /** Ephemeral ROI UI state; moving it resets the region's accumulation count. */
+  public setHybridRegion(left: number, top: number, width: number, height: number) {
+    this.renderer.setHybridRegion(left, top, width, height);
+  }
+
+  /** Pauses expensive full-frame sampling while the ROI overlay is manipulated. */
+  public setHybridRegionInteractionActive(active: boolean) {
+    this.renderer.setHybridRegionInteractionActive(active);
   }
 
   public setBackgroundColorTop(value: THREE.ColorRepresentation) {
@@ -1892,6 +1907,9 @@ export default class PtActions {
     const current = this.store.getState().settings;
     if (current.renderMode !== settings.renderMode) {
       this.setRenderMode(settings.renderMode);
+    }
+    if (current.regionTracingMode !== settings.regionTracingMode) {
+      this.setRegionTracingMode(settings.regionTracingMode);
     }
     if (current.backgroundColorTop !== settings.backgroundColorTop) {
       this.setBackgroundColorTop(settings.backgroundColorTop);

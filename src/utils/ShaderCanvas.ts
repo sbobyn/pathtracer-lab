@@ -109,7 +109,10 @@ export class ShaderCanvas {
     this.screenScene.add(screenQuad);
   }
 
-  public render(renderer: THREE.WebGLRenderer) {
+  public render(
+    renderer: THREE.WebGLRenderer,
+    region?: { left: number; bottom: number; width: number; height: number }
+  ) {
     if (
       this.maxAccumulationFrames > 0 &&
       this.material.uniforms.uFrameCount.value >= this.maxAccumulationFrames
@@ -119,6 +122,21 @@ export class ShaderCanvas {
 
     renderer.setRenderTarget(this.pongRenderTarget);
 
+    if (region) {
+      const targetWidth = Math.max(1, Math.floor(this.width * this.resolutionScale));
+      const targetHeight = Math.max(1, Math.floor(this.height * this.resolutionScale));
+      // WebGLRenderer.setScissor applies the renderer pixel ratio. Render
+      // targets are already expressed in physical pixels, so compensate here.
+      const pixelRatio = renderer.getPixelRatio();
+      renderer.setScissor(
+        Math.floor(region.left * targetWidth) / pixelRatio,
+        Math.floor(region.bottom * targetHeight) / pixelRatio,
+        Math.max(1, Math.ceil(region.width * targetWidth)) / pixelRatio,
+        Math.max(1, Math.ceil(region.height * targetHeight)) / pixelRatio
+      );
+      renderer.setScissorTest(true);
+    }
+
     this.material.uniforms.uTime.value = this.clock.getElapsedTime();
     this.material.uniforms.uFrameCount.value++;
     this.randomSequenceIndex++;
@@ -126,6 +144,7 @@ export class ShaderCanvas {
     this.material.uniforms.uAccumTexture.value = this.pingRenderTarget.texture;
 
     renderer.render(this.scene, this.canvasCamera);
+    if (region) renderer.setScissorTest(false);
     renderer.setRenderTarget(null);
     this.screenMaterial.map = this.pongRenderTarget.texture;
 

@@ -687,6 +687,7 @@ function RenderSettings({
             { value: "raster", label: "Raster" },
             { value: "pathtraced", label: "Path traced" },
             { value: "comparison", label: "Comparison" },
+            { value: "region", label: "Region" },
           ]}
           density="compact"
           layout="horizontal"
@@ -696,6 +697,23 @@ function RenderSettings({
             )
           }
       />
+      {settings.renderMode === "region" && (
+        <SelectField
+          label="ROI tracing"
+          value={settings.regionTracingMode}
+          options={[
+            { value: "roiOnly", label: "ROI only · faster" },
+            { value: "fullFrame", label: "Full frame · preserve" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) =>
+            commitSetting(actions, "Change ROI tracing strategy", () =>
+              actions.setRegionTracingMode(value as typeof settings.regionTracingMode)
+            )
+          }
+        />
+      )}
       <fieldset
         className="editor-controls-group"
         disabled={settings.renderMode === "raster"}
@@ -2160,7 +2178,9 @@ function RenderPanel({
               ? "Raster"
               : state.settings.renderMode === "comparison"
                 ? "Comparison"
-                : "Path tracing"
+                : state.settings.renderMode === "region"
+                  ? "Region"
+                  : "Path tracing"
           }
         </span>
         <span className="render-panel__chevron" aria-hidden="true">⌃</span>
@@ -2313,6 +2333,162 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
   );
 }
 
+type HybridRegionRect = { left: number; top: number; width: number; height: number };
+type HybridRegionEdge = "move" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+function HybridComparisonRegion({ actions }: { actions: PtActions }) {
+  const [region, setRegion] = useState<HybridRegionRect>({
+    left: 0.3,
+    top: 0.3,
+    width: 0.4,
+    height: 0.4,
+  });
+  const gesture = useRef<{
+    pointerId: number;
+    edge: HybridRegionEdge;
+    startX: number;
+    startY: number;
+    start: HybridRegionRect;
+  } | null>(null);
+  const hovering = useRef(false);
+  const focused = useRef(false);
+
+  useEffect(
+    () => () => actions.setHybridRegionInteractionActive(false),
+    [actions]
+  );
+
+  const applyRegion = (next: HybridRegionRect) => {
+    setRegion(next);
+    actions.setHybridRegion(next.left, next.top, next.width, next.height);
+  };
+
+  const updateGesture = (clientX: number, clientY: number) => {
+    const active = gesture.current;
+    if (!active) return;
+    const dx = (clientX - active.startX) / window.innerWidth;
+    const dy = (clientY - active.startY) / window.innerHeight;
+    const minimum = 0.12;
+    let { left, top, width, height } = active.start;
+
+    if (active.edge === "move") {
+      left = THREE.MathUtils.clamp(left + dx, 0, 1 - width);
+      top = THREE.MathUtils.clamp(top + dy, 0, 1 - height);
+    } else {
+      if (active.edge.includes("e")) width = THREE.MathUtils.clamp(width + dx, minimum, 1 - left);
+      if (active.edge.includes("s")) height = THREE.MathUtils.clamp(height + dy, minimum, 1 - top);
+      if (active.edge.includes("w")) {
+        const right = left + width;
+        left = THREE.MathUtils.clamp(left + dx, 0, right - minimum);
+        width = right - left;
+      }
+      if (active.edge.includes("n")) {
+        const bottom = top + height;
+        top = THREE.MathUtils.clamp(top + dy, 0, bottom - minimum);
+        height = bottom - top;
+      }
+    }
+    applyRegion({ left, top, width, height });
+  };
+
+  return (
+    <div
+      className="hybrid-comparison-region"
+      style={{
+        left: `${region.left * 100}%`,
+        top: `${region.top * 100}%`,
+        width: `${region.width * 100}%`,
+        height: `${region.height * 100}%`,
+      }}
+      role="group"
+      aria-label="Path-traced region; drag to move and use its edges to resize"
+      tabIndex={0}
+      onPointerEnter={() => {
+        hovering.current = true;
+        actions.setHybridRegionInteractionActive(true);
+      }}
+      onPointerLeave={() => {
+        hovering.current = false;
+        if (!gesture.current && !focused.current) {
+          actions.setHybridRegionInteractionActive(false);
+        }
+      }}
+      onFocus={() => {
+        focused.current = true;
+        actions.setHybridRegionInteractionActive(true);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        if (!hovering.current && !gesture.current) {
+          actions.setHybridRegionInteractionActive(false);
+        }
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        const target = event.target as HTMLElement;
+        const edge = (target.dataset.regionEdge ?? "move") as HybridRegionEdge;
+        gesture.current = {
+          pointerId: event.pointerId,
+          edge,
+          startX: event.clientX,
+          startY: event.clientY,
+          start: region,
+        };
+        actions.setHybridRegionInteractionActive(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }}
+      onPointerMove={(event) => {
+        if (gesture.current?.pointerId === event.pointerId) {
+          updateGesture(event.clientX, event.clientY);
+        }
+      }}
+      onPointerUp={(event) => {
+        if (gesture.current?.pointerId !== event.pointerId) return;
+        gesture.current = null;
+        if (!hovering.current && !focused.current) {
+          actions.setHybridRegionInteractionActive(false);
+        }
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => {
+        gesture.current = null;
+        if (!hovering.current && !focused.current) {
+          actions.setHybridRegionInteractionActive(false);
+        }
+      }}
+      onKeyDown={(event) => {
+        const step = event.shiftKey ? 0.005 : 0.02;
+        let left = region.left;
+        let top = region.top;
+        if (event.key === "ArrowLeft") left -= step;
+        else if (event.key === "ArrowRight") left += step;
+        else if (event.key === "ArrowUp") top -= step;
+        else if (event.key === "ArrowDown") top += step;
+        else return;
+        applyRegion({
+          ...region,
+          left: THREE.MathUtils.clamp(left, 0, 1 - region.width),
+          top: THREE.MathUtils.clamp(top, 0, 1 - region.height),
+        });
+        event.preventDefault();
+      }}
+    >
+      <span className="hybrid-comparison-region__label">
+        Path traced · {Math.round(region.width * region.height * 100)}%
+      </span>
+      {(["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const).map((edge) => (
+        <span
+          key={edge}
+          className={`hybrid-comparison-region__handle hybrid-comparison-region__handle--${edge}`}
+          data-region-edge={edge}
+          aria-hidden="true"
+        />
+      ))}
+    </div>
+  );
+}
+
 function EditorShell({ actions }: { actions: PtActions }) {
   const state = useSyncExternalStore(
     (listener) => actions.subscribe(listener),
@@ -2460,6 +2636,9 @@ function EditorShell({ actions }: { actions: PtActions }) {
     <>
     {state.settings.renderMode === "comparison" && (
       <HybridComparisonSeam actions={actions} />
+    )}
+    {state.settings.renderMode === "region" && (
+      <HybridComparisonRegion actions={actions} />
     )}
     <a
       className="editor-repository-link"

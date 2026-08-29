@@ -67,6 +67,8 @@ export default class PtRenderer {
       tRaster: { value: null },
       tPathtraced: { value: null },
       uSeam: { value: 0.5 },
+      uRegion: { value: new THREE.Vector4(0.3, 0.3, 0.7, 0.7) },
+      uRegionMode: { value: false },
     },
     vertexShader: `
       varying vec2 vUv;
@@ -79,16 +81,25 @@ export default class PtRenderer {
       uniform sampler2D tRaster;
       uniform sampler2D tPathtraced;
       uniform float uSeam;
+      uniform vec4 uRegion;
+      uniform bool uRegionMode;
       varying vec2 vUv;
       void main() {
         vec4 raster = texture2D(tRaster, vUv);
         vec4 pathtraced = texture2D(tPathtraced, vUv);
-        gl_FragColor = vUv.x < uSeam ? raster : pathtraced;
+        bool insideRegion =
+          vUv.x >= uRegion.x && vUv.y >= uRegion.y &&
+          vUv.x <= uRegion.z && vUv.y <= uRegion.w;
+        gl_FragColor = uRegionMode
+          ? (insideRegion ? pathtraced : raster)
+          : (vUv.x < uSeam ? raster : pathtraced);
       }
     `,
     depthTest: false,
     depthWrite: false,
   });
+  private readonly hybridRegion = new THREE.Vector4(0.3, 0.3, 0.7, 0.7);
+  private hybridRegionInteractionActive = false;
 
   public orbitControls!: OrbitControls;
   public transformControls!: TransformControls;
@@ -271,12 +282,42 @@ export default class PtRenderer {
 
   public setRenderMode(mode: PtSettings["renderMode"]) {
     this.settings.renderMode = mode;
+    this.hybridMaterial.uniforms.uRegionMode.value = mode === "region";
     this.updateComposerMode();
     this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
   }
 
+  public setRegionTracingMode(mode: PtSettings["regionTracingMode"]) {
+    if (this.settings.regionTracingMode === mode) return;
+    this.settings.regionTracingMode = mode;
+    this.shaderCanvas.resetAccumulation();
+  }
+
   public setHybridComparisonSeam(seam: number) {
     this.hybridMaterial.uniforms.uSeam.value = THREE.MathUtils.clamp(seam, 0, 1);
+  }
+
+  public setHybridRegion(left: number, top: number, width: number, height: number) {
+    const minX = THREE.MathUtils.clamp(left, 0, 1);
+    const maxX = THREE.MathUtils.clamp(left + width, minX, 1);
+    const maxY = 1 - THREE.MathUtils.clamp(top, 0, 1);
+    const minY = 1 - THREE.MathUtils.clamp(top + height, 0, 1);
+    const changed =
+      minX !== this.hybridRegion.x || minY !== this.hybridRegion.y ||
+      maxX !== this.hybridRegion.z || maxY !== this.hybridRegion.w;
+    this.hybridRegion.set(minX, minY, maxX, maxY);
+    this.hybridMaterial.uniforms.uRegion.value.copy(this.hybridRegion);
+    if (
+      changed &&
+      this.settings.renderMode === "region" &&
+      this.settings.regionTracingMode === "roiOnly"
+    ) {
+      this.shaderCanvas.resetAccumulation();
+    }
+  }
+
+  public setHybridRegionInteractionActive(active: boolean) {
+    this.hybridRegionInteractionActive = active;
   }
 
   public setFov(fov: number, invalidate = true) {
@@ -1032,9 +1073,11 @@ export default class PtRenderer {
   }
 
   private updateComposerMode() {
+    this.hybridMaterial.uniforms.uRegionMode.value = this.settings.renderMode === "region";
     this.renderPass.enabled = this.settings.renderMode === "raster";
     this.ptPass.enabled = this.settings.renderMode === "pathtraced";
-    this.hybridPass.enabled = this.settings.renderMode === "comparison";
+    this.hybridPass.enabled =
+      this.settings.renderMode === "comparison" || this.settings.renderMode === "region";
   }
 
   private resizeHybridTarget(width: number, height: number, pixelRatio: number) {
@@ -1209,7 +1252,12 @@ export default class PtRenderer {
       this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
     }
 
-    if (pathtracedVisible) {
+    const pauseFullFrameRegionTracing =
+      this.settings.renderMode === "region" &&
+      this.settings.regionTracingMode === "fullFrame" &&
+      this.hybridRegionInteractionActive;
+
+    if (pathtracedVisible && !pauseFullFrameRegionTracing) {
       this.camera.updateMatrixWorld();
       this.camera.updateProjectionMatrix();
 
@@ -1220,10 +1268,20 @@ export default class PtRenderer {
       this.cameraUp
         .crossVectors(this.cameraRight, this.cameraForward)
         .normalize();
-      this.shaderCanvas.render(this.renderer);
+      const region =
+        this.settings.renderMode === "region" &&
+        this.settings.regionTracingMode === "roiOnly"
+        ? {
+            left: this.hybridRegion.x,
+            bottom: this.hybridRegion.y,
+            width: this.hybridRegion.z - this.hybridRegion.x,
+            height: this.hybridRegion.w - this.hybridRegion.y,
+          }
+        : undefined;
+      this.shaderCanvas.render(this.renderer, region);
     }
 
-    if (this.settings.renderMode === "comparison") {
+    if (this.settings.renderMode === "comparison" || this.settings.renderMode === "region") {
       this.renderer.setRenderTarget(this.hybridRasterTarget);
       this.renderer.clear();
       this.renderer.render(this.ptScene.scene, this.camera);

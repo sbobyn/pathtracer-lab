@@ -2,7 +2,8 @@ export type AccumulationFormat = "rgba8" | "rgba16f" | "rgba32f";
 export type TransformMode = "translate" | "rotate" | "scale";
 export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
-export type RenderMode = "raster" | "pathtraced" | "comparison";
+export type RenderMode = "raster" | "pathtraced" | "comparison" | "region";
+export type RegionTracingMode = "fullFrame" | "roiOnly";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
 export type TriangleOverlayMode = "off" | "selected" | "all";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Principled" | "Unknown";
@@ -51,6 +52,7 @@ export interface PtSelectionMaterialState {
 /** Serializable render and camera preferences. */
 export interface PtSettings {
   renderMode: RenderMode;
+  regionTracingMode: RegionTracingMode;
   environmentMode: "gradient" | "map";
   environmentSource: string;
   environmentLabel: string;
@@ -151,6 +153,7 @@ export interface PtState {
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
   renderMode: "pathtraced",
+  regionTracingMode: "roiOnly",
   environmentMode: "gradient",
   environmentSource: "",
   environmentLabel: "Gradient",
