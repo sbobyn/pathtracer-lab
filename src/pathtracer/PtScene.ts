@@ -98,6 +98,7 @@ export default class PtScene {
 
     this.dirLight = new THREE.DirectionalLight(this.backgroundColorTop, 1.0);
     this.dirLight.position.set(0, 5, 0);
+    configureDirectionalShadow(this.dirLight);
     this.scene.add(this.dirLight);
 
     this.intersectGroup = new THREE.Group();
@@ -129,6 +130,7 @@ export default class PtScene {
       ) as PtSphereMesh;
       sphereMesh.position.copy(sphere.position);
       sphereMesh.scale.setScalar(sphere.radius);
+      configureRasterShadows(sphereMesh);
 
       sphereMesh.userData.pathTracer = {
         objectId: THREE.MathUtils.generateUUID(),
@@ -148,6 +150,7 @@ export default class PtScene {
       material.side = THREE.DoubleSide;
       const quadMesh = new THREE.Mesh(createQuadGeometry(), material) as PtQuadMesh;
       applyQuadTransform(quadMesh, quad);
+      configureRasterShadows(quadMesh);
       quadMesh.userData.pathTracer = {
         objectId: THREE.MathUtils.generateUUID(),
         objectName: `Quad ${i}`,
@@ -178,6 +181,10 @@ export default class PtScene {
   public setEnvironmentMap(source: string, label: string) {
     this.environmentSource = source;
     this.environmentLabel = label;
+    // HDR presets use black as a temporary loading fallback. Keep that
+    // presentation color from also blacking out the raster preview's direct
+    // light before the environment has loaded.
+    if (source) this.dirLight.color.set(0xffffff);
     this.environmentTexture = null;
     if (this.environmentDistribution) {
       disposeEnvironmentImportanceDistribution(this.environmentDistribution);
@@ -221,7 +228,13 @@ export default class PtScene {
     materialId: number,
     objectName: string
   ): PtTriangleMesh {
-    const mesh = new THREE.Mesh(geometry, this.getMaterial(materialId)) as PtTriangleMesh;
+    const material = this.getMaterial(materialId);
+    // The path tracer intersects triangles from either side and orients the
+    // hit normal against the ray. Match that contract in the raster preview.
+    material.side = THREE.DoubleSide;
+    material.needsUpdate = true;
+    const mesh = new THREE.Mesh(geometry, material) as PtTriangleMesh;
+    configureRasterShadows(mesh);
     mesh.userData.pathTracer = { objectId: THREE.MathUtils.generateUUID(), objectName, primitiveType: "triangleMesh" };
     this.triangleMeshGroup.add(mesh);
     this.triangleMeshGroup.updateMatrixWorld(true);
@@ -334,6 +347,7 @@ export default class PtScene {
     const mesh = new THREE.Mesh(this.sphereGeometry, material) as PtSphereMesh;
     mesh.position.copy(position);
     mesh.scale.setScalar(radius);
+    configureRasterShadows(mesh);
     mesh.userData.pathTracer = {
       objectId: THREE.MathUtils.generateUUID(),
       objectName,
@@ -358,6 +372,7 @@ export default class PtScene {
     mesh.position.copy(position);
     mesh.quaternion.copy(rotation);
     mesh.scale.set(width, height, 1);
+    configureRasterShadows(mesh);
     mesh.userData.pathTracer = {
       objectId: THREE.MathUtils.generateUUID(),
       objectName,
@@ -509,6 +524,41 @@ export function isPtTriangleMesh(object: THREE.Object3D): object is PtTriangleMe
   return object instanceof THREE.Mesh && object.userData.pathTracer?.primitiveType === "triangleMesh";
 }
 
+/**
+ * Approximate an emissive path-traced quad in the Three.js preview.
+ * RectAreaLight supplies broad preview illumination. Three.js rectangle lights
+ * do not cast shadows; a separate shadow proxy is intentionally deferred until
+ * it can handle the study scenes' zero-thickness quad geometry robustly.
+ */
+export function syncEmissiveQuadPreview(mesh: PtQuadMesh) {
+  const definition = getMaterialMetadata(mesh.material).materialDefinition;
+  const emission = definition.emission;
+  const color = emission.color.textureEnabled
+    ? previewColorInput(emission.color)
+    : new THREE.Color(0x000000);
+  const enabled = emission.strength > 0 && color.getHex() !== 0;
+  let group = mesh.children.find(
+    (child) => child.userData.pathTracerEmissiveQuadPreview === true
+  ) as THREE.Group | undefined;
+
+  if (!enabled) {
+    if (group) group.visible = false;
+    return;
+  }
+  if (!group) {
+    group = createEmissiveQuadPreview();
+    mesh.add(group);
+  }
+  group.visible = true;
+  const area = group.children.find(
+    (child): child is THREE.RectAreaLight => child instanceof THREE.RectAreaLight
+  );
+  if (area) {
+    area.color.copy(color);
+    area.intensity = emission.strength;
+  }
+}
+
 export function sphereRadius(mesh: PtSphereMesh): number {
   return mesh.geometry.parameters.radius * mesh.scale.x;
 }
@@ -596,6 +646,39 @@ function createPreviewMaterial(
 
 function previewColorInput(input: PtMaterial["definition"]["baseColor"]): THREE.Color {
   return texturePreviewColor(input.texture).clone().multiply(input.factor);
+}
+
+function configureRasterShadows(mesh: THREE.Mesh) {
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+}
+
+function configureDirectionalShadow(light: THREE.DirectionalLight) {
+  light.castShadow = true;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.camera.left = -20;
+  light.shadow.camera.right = 20;
+  light.shadow.camera.top = 20;
+  light.shadow.camera.bottom = -20;
+  light.shadow.camera.near = 0.1;
+  light.shadow.camera.far = 100;
+  light.shadow.bias = 0.0001;
+  light.shadow.normalBias = 0.015;
+  light.shadow.radius = 3;
+  light.shadow.blurSamples = 8;
+}
+
+function createEmissiveQuadPreview(): THREE.Group {
+  const group = new THREE.Group();
+  group.userData.pathTracerEmissiveQuadPreview = true;
+
+  // RectAreaLight emits along local -Z, while PtQuad's authored normal is +Z.
+  const area = new THREE.RectAreaLight(0xffffff, 1, 1, 1);
+  area.position.z = 0.01;
+  area.rotation.y = Math.PI;
+  group.add(area);
+
+  return group;
 }
 
 function createQuadGeometry() {

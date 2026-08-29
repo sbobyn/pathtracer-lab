@@ -15,7 +15,10 @@ import {
   LineSegments2,
   LineSegmentsGeometry,
 } from "three/examples/jsm/Addons.js";
-import PtScene, { type PtEditableObject } from "./PtScene";
+import PtScene, {
+  syncEmissiveQuadPreview,
+  type PtEditableObject,
+} from "./PtScene";
 import type { PtBvhTraversalState, PtSettings } from "./PtState";
 import type PtUniforms from "./PtUniforms";
 import {
@@ -189,6 +192,8 @@ export default class PtRenderer {
     }
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.autoClear = false;
   }
 
@@ -212,6 +217,7 @@ export default class PtRenderer {
     this.watchEnvironmentTexture();
     this.watchStaticAssets();
     this.camera = ptScene.camera;
+    this.renderer.shadowMap.needsUpdate = true;
     this.reset();
     if (invalidate) {
       this.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
@@ -921,6 +927,7 @@ export default class PtRenderer {
       // and BVH so wireframes and bounds describe the loaded asset.
       this.setupTriangleWireframes();
       this.setupBvhHelpers();
+      this.renderer.shadowMap.needsUpdate = true;
       this.staticSceneLoadedListener?.();
     }).catch((error) => console.error("Failed to load static glTF", error));
   }
@@ -1122,6 +1129,21 @@ export default class PtRenderer {
     this.renderer.clear();
 
     this.orbitControls?.update();
+
+    if (!this.settings.pathtracingEnabled) {
+      let hasEmissiveQuad = false;
+      for (const quad of this.ptScene.getQuadMeshes()) {
+        syncEmissiveQuadPreview(quad);
+        const preview = quad.children.find(
+          (child) => child.userData.pathTracerEmissiveQuadPreview === true
+        );
+        hasEmissiveQuad ||= preview?.visible === true;
+      }
+      // Emissive-quad studies use their aligned area-light approximation.
+      // Avoid layering the legacy preview sun and a second shadow projection
+      // over the same zero-thickness geometry.
+      this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
+    }
 
     if (this.settings.pathtracingEnabled) {
       this.camera.updateMatrixWorld();

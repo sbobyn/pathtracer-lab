@@ -71,6 +71,7 @@ function createAnalyticLightNode(
   if (previewLight instanceof THREE.DirectionalLight || previewLight instanceof THREE.SpotLight) {
     previewLight.target = target;
   }
+  configurePreviewShadow(previewLight);
   previewLight.userData.pathTracerLightPreview = true;
   node.add(previewLight);
 
@@ -113,6 +114,29 @@ function createAnalyticLightNode(
   }
   syncAnalyticLightPreview(node);
   return node;
+}
+
+function configurePreviewShadow(light: THREE.Light) {
+  if (!(light instanceof THREE.PointLight ||
+        light instanceof THREE.SpotLight ||
+        light instanceof THREE.DirectionalLight)) return;
+  light.castShadow = true;
+  light.shadow.mapSize.set(
+    light instanceof THREE.DirectionalLight ? 2048 : 1024,
+    light instanceof THREE.DirectionalLight ? 2048 : 1024
+  );
+  light.shadow.camera.near = 0.05;
+  light.shadow.camera.far = 100;
+  light.shadow.bias = 0.0001;
+  light.shadow.normalBias = 0.015;
+  light.shadow.radius = 3;
+  light.shadow.blurSamples = 8;
+  if (light instanceof THREE.DirectionalLight) {
+    light.shadow.camera.left = -20;
+    light.shadow.camera.right = 20;
+    light.shadow.camera.top = 20;
+    light.shadow.camera.bottom = -20;
+  }
 }
 
 export function syncAnalyticLightPreview(node: PtAnalyticLightNode) {

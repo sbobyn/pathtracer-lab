@@ -160,7 +160,9 @@ export default class PtApp {
       ptScene.backgroundColorBottom.set(initialState.settings.backgroundColorBottom);
     }
     ptScene.scene.background = ptScene.backgroundColorTop;
-    ptScene.dirLight.color = ptScene.backgroundColorTop;
+    ptScene.dirLight.color.copy(
+      ptScene.environmentSource ? new THREE.Color(0xffffff) : ptScene.backgroundColorTop
+    );
     if (initialState.settings.environmentMode === "map" && initialState.settings.environmentSource) {
       ptScene.setEnvironmentMap(
         initialState.settings.environmentSource,

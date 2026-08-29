@@ -12,12 +12,14 @@ import boxGltfUrl from "../assets/gltf/box/Box.glb?url";
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   if (
-    sceneKey === "PackedTrianglesStudy" ||
     sceneKey === "RTIOW1SphereBvhStudy" ||
+    sceneKey === "DamagedHelmetStudy"
+  ) return 0.25;
+  if (
+    sceneKey === "PackedTrianglesStudy" ||
     sceneKey === "GlTFSuzanneStudy" ||
-    sceneKey === "DamagedHelmetStudy" ||
     sceneKey === "PrincipledMaterialStudy"
-  ) return sceneKey === "RTIOW1SphereBvhStudy" ? 0.25 : 0.5;
+  ) return 0.5;
   return sceneKey === "CornellBox" ? 0.5 : fallback;
 }
 
@@ -125,6 +127,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
   DamagedHelmetStudy: () => {
     const materials = [
       PtMaterial.legacyLambert(new THREE.Color(0x777777)),
+      PtMaterial.legacyLambert(new THREE.Color(0x8a8985)),
     ];
     const camera = createFullScreenPerspectiveCamera({
       position: new THREE.Vector3(0, 0, 3.2),
@@ -132,14 +135,20 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       far: 10000,
     });
     camera.fov = 42;
-    const scene = new PtScene([], materials, camera);
+    const floor = new PtQuad(
+      new THREE.Vector3(-4, -1.01, 4),
+      new THREE.Vector3(8, 0, 0),
+      new THREE.Vector3(0, 0, -8),
+      1
+    );
+    const scene = new PtScene([], materials, camera, [floor]);
     const source = `${import.meta.env.BASE_URL}models/damaged-helmet/DamagedHelmet.glb`;
     void scene.loadStaticGltf(source, 0, "Khronos glTF Damaged Helmet");
     scene.backgroundColorTop.set(0x000000);
     scene.backgroundColorBottom.set(0x000000);
     scene.scene.background = scene.backgroundColorTop;
     const environment = builtinEnvironments.find(
-      (candidate) => candidate.id === "relax-inn-seaview-suite"
+      (candidate) => candidate.id === "meadow"
     );
     if (environment) scene.setEnvironmentMap(environment.source, environment.label);
     return scene;
