@@ -2334,7 +2334,7 @@ function CreationMenu({
 }
 
 function HybridComparisonSeam({ actions }: { actions: PtActions }) {
-  const [seam, setSeam] = useState(0.5);
+  const [seam, setSeam] = useState(() => actions.getHybridComparisonSeam());
   const draggingPointer = useRef<number | null>(null);
   const hovering = useRef(false);
   const focused = useRef(false);

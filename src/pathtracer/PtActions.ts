@@ -329,6 +329,10 @@ export default class PtActions {
     this.renderer.setHybridComparisonSeam(seam);
   }
 
+  public getHybridComparisonSeam() {
+    return this.renderer.getHybridComparisonSeam();
+  }
+
   public setHybridComparisonInteractionActive(active: boolean) {
     this.renderer.setHybridInteractionActive(active);
   }

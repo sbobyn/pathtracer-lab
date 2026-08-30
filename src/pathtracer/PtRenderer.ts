@@ -381,6 +381,7 @@ export default class PtRenderer {
     this.uniforms.uObjectMaskEnabled.value = objectMasked;
     this.shaderCanvas.setStencilMaskEnabled(objectMasked);
     this.updateComposerMode();
+    this.cameraDebugDirty = true;
     this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
   }
 
@@ -400,6 +401,7 @@ export default class PtRenderer {
     this.hybridMaterial.uniforms.uSelectedObjectIdCount.value = index;
     this.hybridMaterial.uniforms.uObjectSelectionActive.value = index > 0;
     this.uniforms.uObjectMaskHasSelection.value = index > 0;
+    this.cameraDebugDirty = true;
     if (
       this.settings.renderMode === "selectedObject" ||
       this.settings.renderMode === "selectedObjectComparison"
@@ -411,12 +413,14 @@ export default class PtRenderer {
   public setRegionTracingMode(mode: PtSettings["regionTracingMode"]) {
     if (this.settings.regionTracingMode === mode) return;
     this.settings.regionTracingMode = mode;
+    this.cameraDebugDirty = true;
     this.shaderCanvas.resetAccumulation();
   }
 
   public setComparisonTracingMode(mode: PtSettings["comparisonTracingMode"]) {
     if (this.settings.comparisonTracingMode === mode) return;
     this.settings.comparisonTracingMode = mode;
+    this.cameraDebugDirty = true;
     this.shaderCanvas.resetAccumulation();
   }
 
@@ -425,6 +429,7 @@ export default class PtRenderer {
     const changed = next !== this.hybridSeam;
     this.hybridSeam = next;
     this.hybridMaterial.uniforms.uSeam.value = next;
+    if (changed) this.cameraDebugDirty = true;
     if (
       changed &&
       (this.settings.renderMode === "comparison" ||
@@ -433,6 +438,10 @@ export default class PtRenderer {
     ) {
       this.shaderCanvas.resetAccumulation();
     }
+  }
+
+  public getHybridComparisonSeam() {
+    return this.hybridSeam;
   }
 
   public setHybridRegion(left: number, top: number, width: number, height: number) {
@@ -445,6 +454,7 @@ export default class PtRenderer {
       maxX !== this.hybridRegion.z || maxY !== this.hybridRegion.w;
     this.hybridRegion.set(minX, minY, maxX, maxY);
     this.hybridMaterial.uniforms.uRegion.value.copy(this.hybridRegion);
+    if (changed) this.cameraDebugDirty = true;
     if (
       changed &&
       this.settings.renderMode === "region" &&
@@ -923,6 +933,46 @@ export default class PtRenderer {
     const points: THREE.Vector3[] = [];
     const colors: number[] = [];
     const rayTargets = this.ptScene.scene.children.filter((object) => object.visible);
+    const traceableObjectIds = new Map<THREE.Object3D, string>();
+    for (const mesh of traceableMeshes) {
+      const objectId = mesh.userData.pathTracer?.objectId as string | undefined;
+      if (objectId) traceableObjectIds.set(mesh, objectId);
+    }
+    const selectedPrimaryHit = (hit: THREE.Intersection | undefined) => {
+      let object: THREE.Object3D | null = hit?.object ?? null;
+      while (object) {
+        const objectId = traceableObjectIds.get(object);
+        if (objectId) return this.selectedObjectIds.has(objectId);
+        object = object.parent;
+      }
+      return false;
+    };
+    const launchesPrimaryRay = (
+      u: number,
+      v: number,
+      primaryHit: THREE.Intersection | undefined
+    ) => {
+      switch (this.settings.renderMode) {
+        case "raster":
+          return false;
+        case "comparison":
+          return this.settings.comparisonTracingMode === "fullFrame" || u >= this.hybridSeam;
+        case "region":
+          return this.settings.regionTracingMode === "fullFrame" || (
+            u >= this.hybridRegion.x && u <= this.hybridRegion.z &&
+            v >= this.hybridRegion.y && v <= this.hybridRegion.w
+          );
+        case "selectedObject":
+          return selectedPrimaryHit(primaryHit);
+        case "selectedObjectComparison":
+          return selectedPrimaryHit(primaryHit) && (
+            this.settings.comparisonTracingMode === "fullFrame" || u >= this.hybridSeam
+          );
+        case "pathtraced":
+        default:
+          return true;
+      }
+    };
     const { columns, rows } = this.cameraDebugRayGrid;
     let primaryRayIndex = 0;
     for (let row = 0; row < rows; row += 1) {
@@ -932,6 +982,13 @@ export default class PtRenderer {
         raycaster.setFromCamera(new THREE.Vector2(x, y), diagramCamera);
         let origin = raycaster.ray.origin.clone();
         let direction = raycaster.ray.direction.clone();
+        raycaster.far = diagramRange;
+        const primaryHit = raycaster.intersectObjects(rayTargets, true)[0];
+        const u = (x + 1) * 0.5;
+        const v = (y + 1) * 0.5;
+        const sampleIndex = primaryRayIndex;
+        primaryRayIndex += 1;
+        if (!launchesPrimaryRay(u, v, primaryHit)) continue;
         for (let depth = 0; depth < this.cameraDebugMaxDepth; depth += 1) {
           raycaster.set(origin, direction);
           raycaster.far = diagramRange;
@@ -945,13 +1002,12 @@ export default class PtRenderer {
           const scattered = this.scatterCameraDebugRay(
             direction,
             hit,
-            primaryRayIndex * 11 + depth * 101
+            sampleIndex * 11 + depth * 101
           );
           if (!scattered) break;
           direction = scattered;
           origin = end.clone().addScaledVector(direction, 0.001);
         }
-        primaryRayIndex += 1;
       }
     }
     const rayGeometry = new THREE.BufferGeometry().setFromPoints(points);
