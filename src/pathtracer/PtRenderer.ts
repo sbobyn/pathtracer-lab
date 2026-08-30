@@ -69,17 +69,14 @@ export default class PtRenderer {
   });
   private readonly objectIdMaterials = new Map<string, THREE.ShaderMaterial>();
   private readonly objectIdColors = new Map<string, THREE.Vector3>();
-  private readonly objectMaskDepthMaterial = new THREE.MeshBasicMaterial({
-    colorWrite: false,
-    depthWrite: true,
-    depthTest: true,
-    side: THREE.DoubleSide,
-  });
   private readonly objectMaskStencilMaterial = new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: false,
-    depthTest: true,
-    depthFunc: THREE.EqualDepth,
+    // The object-ID composite is authoritative for final visible-surface
+    // selection and occlusion. Avoid a separate depth-equality prepass here:
+    // transformed analytic sphere/quad proxies can fail exact depth replay
+    // even though their object-ID silhouettes are correct.
+    depthTest: false,
     side: THREE.DoubleSide,
     stencilWrite: true,
     stencilRef: 1,
@@ -102,6 +99,7 @@ export default class PtRenderer {
       },
       uSelectedObjectIdCount: { value: 0 },
       uObjectMode: { value: false },
+      uObjectComparisonMode: { value: false },
       uObjectSelectionActive: { value: false },
     },
     vertexShader: `
@@ -121,6 +119,7 @@ export default class PtRenderer {
       uniform vec3 uSelectedObjectIdColors[32];
       uniform int uSelectedObjectIdCount;
       uniform bool uObjectMode;
+      uniform bool uObjectComparisonMode;
       uniform bool uObjectSelectionActive;
       varying vec2 vUv;
       void main() {
@@ -138,7 +137,11 @@ export default class PtRenderer {
             uSelectedObjectIdColors[i]
           ) <= (0.5 / 255.0);
         }
-        gl_FragColor = uObjectMode
+        gl_FragColor = uObjectComparisonMode
+          ? (uObjectSelectionActive && selectedObject && vUv.x >= uSeam
+              ? pathtraced
+              : raster)
+          : uObjectMode
           ? (uObjectSelectionActive && selectedObject ? pathtraced : raster)
           : uRegionMode
             ? (insideRegion ? pathtraced : raster)
@@ -368,11 +371,15 @@ export default class PtRenderer {
   }
 
   public setRenderMode(mode: PtSettings["renderMode"]) {
+    const objectMasked =
+      mode === "selectedObject" || mode === "selectedObjectComparison";
     this.settings.renderMode = mode;
     this.hybridMaterial.uniforms.uRegionMode.value = mode === "region";
     this.hybridMaterial.uniforms.uObjectMode.value = mode === "selectedObject";
-    this.uniforms.uObjectMaskEnabled.value = mode === "selectedObject";
-    this.shaderCanvas.setStencilMaskEnabled(mode === "selectedObject");
+    this.hybridMaterial.uniforms.uObjectComparisonMode.value =
+      mode === "selectedObjectComparison";
+    this.uniforms.uObjectMaskEnabled.value = objectMasked;
+    this.shaderCanvas.setStencilMaskEnabled(objectMasked);
     this.updateComposerMode();
     this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
   }
@@ -393,7 +400,10 @@ export default class PtRenderer {
     this.hybridMaterial.uniforms.uSelectedObjectIdCount.value = index;
     this.hybridMaterial.uniforms.uObjectSelectionActive.value = index > 0;
     this.uniforms.uObjectMaskHasSelection.value = index > 0;
-    if (this.settings.renderMode === "selectedObject") {
+    if (
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison"
+    ) {
       this.shaderCanvas.resetAccumulation();
     }
   }
@@ -417,7 +427,8 @@ export default class PtRenderer {
     this.hybridMaterial.uniforms.uSeam.value = next;
     if (
       changed &&
-      this.settings.renderMode === "comparison" &&
+      (this.settings.renderMode === "comparison" ||
+        this.settings.renderMode === "selectedObjectComparison") &&
       this.settings.comparisonTracingMode === "pathtracedSide"
     ) {
       this.shaderCanvas.resetAccumulation();
@@ -1399,7 +1410,11 @@ export default class PtRenderer {
       uEnvironmentIntensity: { value: this.settings.environmentIntensity },
       uEnvironmentLightingIntensity: { value: this.settings.environmentLightingIntensity },
       uEnableDoF: { value: this.settings.enableDepthOfField },
-      uObjectMaskEnabled: { value: this.settings.renderMode === "selectedObject" },
+      uObjectMaskEnabled: {
+        value:
+          this.settings.renderMode === "selectedObject" ||
+          this.settings.renderMode === "selectedObjectComparison",
+      },
       uObjectMaskHasSelection: { value: false },
     };
     return uniforms;
@@ -1610,16 +1625,21 @@ export default class PtRenderer {
   }
 
   private updateComposerMode() {
+    const objectMasked =
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison";
     this.hybridMaterial.uniforms.uRegionMode.value = this.settings.renderMode === "region";
     this.hybridMaterial.uniforms.uObjectMode.value = this.settings.renderMode === "selectedObject";
-    this.uniforms.uObjectMaskEnabled.value = this.settings.renderMode === "selectedObject";
-    this.shaderCanvas.setStencilMaskEnabled(this.settings.renderMode === "selectedObject");
+    this.hybridMaterial.uniforms.uObjectComparisonMode.value =
+      this.settings.renderMode === "selectedObjectComparison";
+    this.uniforms.uObjectMaskEnabled.value = objectMasked;
+    this.shaderCanvas.setStencilMaskEnabled(objectMasked);
     this.renderPass.enabled = this.settings.renderMode === "raster";
     this.ptPass.enabled = this.settings.renderMode === "pathtraced";
     this.hybridPass.enabled =
       this.settings.renderMode === "comparison" ||
       this.settings.renderMode === "region" ||
-      this.settings.renderMode === "selectedObject";
+      objectMasked;
   }
 
   private resizeHybridTarget(width: number, height: number, pixelRatio: number) {
@@ -1727,19 +1747,12 @@ export default class PtRenderer {
     this.ptScene.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       restored.push({ mesh: object, material: object.material, visible: object.visible });
-      if (traceable.has(object) && object.visible) {
-        object.material = this.objectMaskDepthMaterial;
-      } else {
-        object.visible = false;
-      }
+      const objectId = traceable.get(object);
+      object.visible = object.visible && Boolean(
+        objectId && this.selectedObjectIds.has(objectId)
+      );
+      if (object.visible) object.material = this.objectMaskStencilMaterial;
     });
-    renderer.render(this.ptScene.scene, this.camera);
-
-    for (const entry of restored) {
-      const objectId = traceable.get(entry.mesh);
-      entry.mesh.visible = entry.visible && Boolean(objectId && this.selectedObjectIds.has(objectId));
-      if (entry.mesh.visible) entry.mesh.material = this.objectMaskStencilMaterial;
-    }
     renderer.render(this.ptScene.scene, this.camera);
 
     for (const entry of restored) {
@@ -1919,13 +1932,18 @@ export default class PtRenderer {
       this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
     }
 
-    if (this.settings.renderMode === "selectedObject") {
+    if (
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison"
+    ) {
       this.renderObjectIds();
     }
 
     const pauseFullFrameHybridTracing = this.hybridRegionInteractionActive && (
       (this.settings.renderMode === "region" && this.settings.regionTracingMode === "fullFrame") ||
-      (this.settings.renderMode === "comparison" && this.settings.comparisonTracingMode === "fullFrame")
+      ((this.settings.renderMode === "comparison" ||
+        this.settings.renderMode === "selectedObjectComparison") &&
+        this.settings.comparisonTracingMode === "fullFrame")
     );
 
     if (
@@ -1960,11 +1978,20 @@ export default class PtRenderer {
               width: 1 - this.hybridSeam,
               height: 1,
             }
+          : this.settings.renderMode === "selectedObjectComparison" &&
+              this.settings.comparisonTracingMode === "pathtracedSide"
+            ? {
+                left: this.hybridSeam,
+                bottom: 0,
+                width: 1 - this.hybridSeam,
+                height: 1,
+              }
           : undefined;
       this.shaderCanvas.render(
         this.renderer,
         region,
-        this.settings.renderMode === "selectedObject"
+        this.settings.renderMode === "selectedObject" ||
+          this.settings.renderMode === "selectedObjectComparison"
           ? (renderer) => this.renderSelectedObjectStencil(renderer)
           : undefined
       );
@@ -1973,7 +2000,8 @@ export default class PtRenderer {
     if (
       this.settings.renderMode === "comparison" ||
       this.settings.renderMode === "region" ||
-      this.settings.renderMode === "selectedObject"
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison"
     ) {
       this.renderer.setRenderTarget(this.hybridRasterTarget);
       this.renderer.clear();
@@ -2059,7 +2087,6 @@ export default class PtRenderer {
     for (const material of this.objectIdMaterials.values()) material.dispose();
     this.objectIdMaterials.clear();
     this.objectIdColors.clear();
-    this.objectMaskDepthMaterial.dispose();
     this.objectMaskStencilMaterial.dispose();
     this.hybridMaterial.dispose();
     this.hybridScene.traverse((object) => {

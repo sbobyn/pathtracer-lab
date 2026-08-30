@@ -166,6 +166,23 @@ test("the optimized seam tracing strategy persists", () => {
   assert.equal(state.settings.comparisonTracingMode, "pathtracedSide");
 });
 
+test("the selected-object comparison render mode persists", () => {
+  const defaults = createDefaultPtState();
+  const storage = new MemoryStorage();
+  storage.value = JSON.stringify({
+    version: PT_PREFERENCES_VERSION,
+    sceneKey: "RTIOW1Simple",
+    settings: {
+      renderMode: "selectedObjectComparison",
+      comparisonTracingMode: "fullFrame",
+    },
+  });
+
+  const state = loadPtPreferences(storage, defaults, ["RTIOW1Simple"]);
+  assert.equal(state.settings.renderMode, "selectedObjectComparison");
+  assert.equal(state.settings.comparisonTracingMode, "fullFrame");
+});
+
 test("renamed RTIOW presets preserve existing saved scene selections", () => {
   const defaults = createDefaultPtState();
   const storage = new MemoryStorage();

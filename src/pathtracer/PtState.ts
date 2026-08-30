@@ -2,7 +2,13 @@ export type AccumulationFormat = "rgba8" | "rgba16f" | "rgba32f";
 export type TransformMode = "translate" | "rotate" | "scale";
 export type TransformSpace = "global" | "local";
 export type IntegratorMode = "bsdf" | "direct" | "mis";
-export type RenderMode = "raster" | "pathtraced" | "comparison" | "region" | "selectedObject";
+export type RenderMode =
+  | "raster"
+  | "pathtraced"
+  | "comparison"
+  | "region"
+  | "selectedObject"
+  | "selectedObjectComparison";
 export type RegionTracingMode = "fullFrame" | "roiOnly";
 export type ComparisonTracingMode = "fullFrame" | "pathtracedSide";
 export type CameraProjectionMode = "perspective" | "orthographic";

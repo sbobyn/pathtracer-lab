@@ -30,7 +30,14 @@ const accumulationFormats = new Set(["rgba8", "rgba16f", "rgba32f"]);
 const transformModes = new Set(["translate", "rotate", "scale"]);
 const transformSpaces = new Set(["global", "local"]);
 const integratorModes = new Set(["bsdf", "direct", "mis"]);
-const renderModes = new Set(["raster", "pathtraced", "comparison", "region", "selectedObject"]);
+const renderModes = new Set([
+  "raster",
+  "pathtraced",
+  "comparison",
+  "region",
+  "selectedObject",
+  "selectedObjectComparison",
+]);
 const regionTracingModes = new Set(["fullFrame", "roiOnly"]);
 const comparisonTracingModes = new Set(["fullFrame", "pathtracedSide"]);
 const triangleTraversalModes = new Set(["bvh", "bruteForce"]);

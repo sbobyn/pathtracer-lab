@@ -689,6 +689,7 @@ function RenderSettings({
             { value: "comparison", label: "Comparison" },
             { value: "region", label: "Region" },
             { value: "selectedObject", label: "Selected object" },
+            { value: "selectedObjectComparison", label: "Selected comparison" },
           ]}
           density="compact"
           layout="horizontal"
@@ -715,7 +716,8 @@ function RenderSettings({
           }
         />
       )}
-      {settings.renderMode === "comparison" && (
+      {(settings.renderMode === "comparison" ||
+        settings.renderMode === "selectedObjectComparison") && (
         <SelectField
           label="Comparison tracing"
           value={settings.comparisonTracingMode}
@@ -2238,6 +2240,8 @@ function RenderPanel({
                   ? "Region"
                   : state.settings.renderMode === "selectedObject"
                     ? "Selected object"
+                  : state.settings.renderMode === "selectedObjectComparison"
+                    ? "Selected comparison"
                   : "Path tracing"
           }
         </span>
@@ -2734,7 +2738,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
       fov={state.settings.fov}
       orthographicHeight={state.settings.orthographicHeight}
     />
-    {state.settings.renderMode === "comparison" && (
+    {(state.settings.renderMode === "comparison" ||
+      state.settings.renderMode === "selectedObjectComparison") && (
       <HybridComparisonSeam actions={actions} />
     )}
     {state.settings.renderMode === "region" && (
