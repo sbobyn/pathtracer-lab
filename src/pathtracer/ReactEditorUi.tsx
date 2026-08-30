@@ -2690,6 +2690,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
 
   return (
     <>
+    <CameraRayDebugViewport actions={actions} fov={state.settings.fov} />
     {state.settings.renderMode === "comparison" && (
       <HybridComparisonSeam actions={actions} />
     )}
@@ -2810,6 +2811,146 @@ function EditorShell({ actions }: { actions: PtActions }) {
       />
     )}
     </>
+  );
+}
+
+function CameraRayDebugViewport({ actions, fov }: { actions: PtActions; fov: number }) {
+  const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
+  const [rayDensity, setRayDensity] = useState<"sparse" | "medium" | "dense">("sparse");
+  const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(1);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const orbitSurfaceRef = useRef<HTMLDivElement>(null);
+  const rayGrid = rayDensity === "sparse"
+    ? { columns: 5, rows: 3 }
+    : rayDensity === "dense"
+      ? { columns: 15, rows: 5 }
+      : { columns: 9, rows: 5 };
+
+  useEffect(() => {
+    actions.setCameraDebugRayGrid(rayGrid.columns, rayGrid.rows);
+  }, [actions, rayDensity]);
+
+  useEffect(() => {
+    actions.setCameraDebugMaxDepth(rayDepth);
+  }, [actions, rayDepth]);
+
+  useLayoutEffect(() => {
+    const element = viewportRef.current;
+    if (!element || collapsed) {
+      actions.setCameraDebugViewport(null);
+      actions.setCameraDebugViewEnabled(false);
+      return;
+    }
+    actions.setCameraDebugViewEnabled(true);
+    const update = () => {
+      const bounds = element.getBoundingClientRect();
+      actions.setCameraDebugViewport({
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      });
+    };
+    update();
+    actions.attachCameraDebugControls(orbitSurfaceRef.current);
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      actions.attachCameraDebugControls(null);
+      actions.setCameraDebugViewport(null);
+    };
+  }, [actions, collapsed]);
+
+  return (
+    <aside className="camera-ray-debug" data-collapsed={collapsed} aria-label="Camera and primary ray debug view">
+      <button
+        className="camera-ray-debug__header"
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((current) => !current)}
+      >
+        <span>Camera rays</span>
+        <span className="camera-ray-debug__chevron" aria-hidden="true">⌃</span>
+      </button>
+      {!collapsed && (
+        <div ref={viewportRef} className="camera-ray-debug__viewport">
+          <div
+            ref={orbitSurfaceRef}
+            className="camera-ray-debug__orbit-surface"
+            aria-label="Orbit the camera ray debug view"
+          />
+          <div className="camera-ray-debug__depth" aria-label="Representative ray depth">
+            <span>Depth</span>
+            {([1, 2, 3] as const).map((depth) => (
+              <button
+                key={depth}
+                type="button"
+                aria-pressed={rayDepth === depth}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setRayDepth(depth)}
+              >
+                {depth}
+              </button>
+            ))}
+          </div>
+          <div className="camera-ray-debug__density" aria-label="Representative ray density">
+            {(["sparse", "medium", "dense"] as const).map((density) => (
+              <button
+                key={density}
+                type="button"
+                aria-pressed={rayDensity === density}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setRayDensity(density)}
+              >
+                {density === "sparse" ? "15" : density === "medium" ? "45" : "75"}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="camera-ray-debug__reset"
+              title="Reset debug camera"
+              aria-label="Reset debug camera"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => actions.resetCameraDebugView()}
+            >
+              ↺
+            </button>
+          </div>
+          <button
+            type="button"
+            className="camera-ray-debug__legend-toggle"
+            aria-label="Toggle debug view legend"
+            aria-expanded={legendOpen}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setLegendOpen((open) => !open)}
+          >
+            ?
+          </button>
+          {legendOpen && <div className="camera-ray-debug__color-key" aria-label="Debug view color legend">
+            <div>
+              <span className="camera-ray-debug__key-title">Rays</span>
+              <span><i style={{ background: "#a3e635" }} />hit 1</span>
+              <span><i style={{ background: "#38bdf8" }} />hit 2</span>
+              <span><i style={{ background: "#c084fc" }} />hit 3</span>
+              <span><i style={{ background: "#f59e0b" }} />miss</span>
+            </div>
+            <div>
+              <span className="camera-ray-debug__key-title">Outlines</span>
+              <span><i style={{ background: "#c084fc" }} />sphere</span>
+              <span><i style={{ background: "#38bdf8" }} />quad</span>
+              <span><i style={{ background: "#94a3b8" }} />mesh</span>
+            </div>
+          </div>}
+          <span className="camera-ray-debug__camera-label">
+            FOV {Math.round(fov)}°
+          </span>
+        </div>
+      )}
+    </aside>
   );
 }
 

@@ -158,6 +158,17 @@ export default class PtRenderer {
   private gizmo!: THREE.Object3D;
   private gizmoScene!: THREE.Scene;
   private readonly debugOverlayScene = new THREE.Scene();
+  private readonly cameraDebugScene = new THREE.Scene();
+  private readonly cameraDebugCamera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
+  private cameraDebugGroup = new THREE.Group();
+  private cameraDebugViewport: { left: number; top: number; width: number; height: number } | null = null;
+  private cameraDebugEnabled = true;
+  private cameraDebugDirty = true;
+  private cameraDebugRayGrid = { columns: 5, rows: 3 };
+  private cameraDebugMaxDepth = 1;
+  private cameraDebugControls: OrbitControls | null = null;
+  private cameraDebugUserControlled = false;
+  private cameraDebugInteractionActive = false;
   private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
   private readonly triangleWireframeOverrides = new Map<string, boolean>();
   private readonly bvhHelpers: Array<{ helper: LineSegments2; depth: number; kind: "triangle" | "sphere" }> = [];
@@ -281,6 +292,7 @@ export default class PtRenderer {
     this.setupGizmo();
     this.setupTriangleWireframes();
     this.setupBvhHelpers();
+    this.setupCameraDebugView();
 
     // Set Render Loop
 
@@ -306,6 +318,7 @@ export default class PtRenderer {
   }
 
   setScene(ptScene: PtScene, invalidate = true) {
+    this.cameraDebugUserControlled = false;
     this.gpuScene.dispose();
     this.packedSpheres.texture.dispose();
     this.disposePackedSphereBvh();
@@ -543,6 +556,7 @@ export default class PtRenderer {
   }
 
   public invalidate(level: PtInvalidationLevel, reason: string) {
+    this.cameraDebugDirty = true;
     if (level >= PtInvalidationLevel.Geometry && this.bvhTraversalState) {
       this.setBvhTraversalVisualization(null);
       this.bvhTraversalInvalidated?.();
@@ -565,6 +579,338 @@ export default class PtRenderer {
     // Higher levels intentionally share today's reset consequence while
     // preserving distinct future upload, BVH refit/rebuild, and compile paths.
     this.shaderCanvas.resetAccumulation();
+  }
+
+  public setCameraDebugViewEnabled(enabled: boolean) {
+    this.cameraDebugEnabled = enabled;
+  }
+
+  public setCameraDebugViewport(
+    viewport: { left: number; top: number; width: number; height: number } | null
+  ) {
+    this.cameraDebugViewport = viewport;
+  }
+
+  public setCameraDebugRayGrid(columns: number, rows: number) {
+    this.cameraDebugRayGrid = {
+      columns: Math.max(1, Math.round(columns)),
+      rows: Math.max(1, Math.round(rows)),
+    };
+    this.cameraDebugDirty = true;
+  }
+
+  public setCameraDebugMaxDepth(depth: number) {
+    this.cameraDebugMaxDepth = THREE.MathUtils.clamp(Math.round(depth), 1, 3);
+    this.cameraDebugDirty = true;
+  }
+
+  private debugRandom(seed: number) {
+    const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+    return value - Math.floor(value);
+  }
+
+  private scatterCameraDebugRay(
+    incident: THREE.Vector3,
+    hit: THREE.Intersection,
+    seed: number
+  ) {
+    const object = hit.object as THREE.Mesh;
+    const outwardNormal = (hit.face?.normal.clone() ?? new THREE.Vector3(0, 1, 0))
+      .transformDirection(object.matrixWorld);
+    const entering = outwardNormal.dot(incident) < 0;
+    const normal = entering ? outwardNormal : outwardNormal.clone().negate();
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const material = materials[hit.face?.materialIndex ?? 0] as THREE.MeshStandardMaterial | undefined;
+    const metallic = material && "metalness" in material ? material.metalness : 0;
+    const roughness = material && "roughness" in material ? material.roughness : 1;
+    const transmission = material && "transmission" in material
+      ? Number((material as THREE.MeshPhysicalMaterial).transmission)
+      : 0;
+    if (
+      material &&
+      "emissive" in material &&
+      material.emissive.getHex() !== 0 &&
+      material.emissiveIntensity > 0
+    ) return null;
+
+    const reflected = incident.clone().reflect(normal).normalize();
+    if (transmission > 0.05) {
+      const ior = Math.max(1.0001, Number((material as THREE.MeshPhysicalMaterial).ior) || 1.5);
+      const eta = entering ? 1 / ior : ior;
+      const cosTheta = Math.min(1, -incident.dot(normal));
+      const sinThetaSquared = Math.max(0, 1 - cosTheta * cosTheta);
+      const cannotRefract = eta * eta * sinThetaSquared > 1;
+      const r0 = ((1 - ior) / (1 + ior)) ** 2;
+      const reflectance = r0 + (1 - r0) * ((1 - cosTheta) ** 5);
+      if (cannotRefract || this.debugRandom(seed) < reflectance) return reflected;
+      const perpendicular = incident.clone().addScaledVector(normal, cosTheta).multiplyScalar(eta);
+      const parallel = normal.clone().multiplyScalar(
+        -Math.sqrt(Math.max(0, 1 - perpendicular.lengthSq()))
+      );
+      return perpendicular.add(parallel).normalize();
+    }
+
+    const u1 = this.debugRandom(seed + 1);
+    const u2 = this.debugRandom(seed + 2);
+    const radius = Math.sqrt(u1);
+    const angle = Math.PI * 2 * u2;
+    const tangent = Math.abs(normal.y) < 0.999
+      ? new THREE.Vector3(0, 1, 0).cross(normal).normalize()
+      : new THREE.Vector3(1, 0, 0);
+    const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+    const diffuse = normal.clone().multiplyScalar(Math.sqrt(1 - u1))
+      .addScaledVector(tangent, radius * Math.cos(angle))
+      .addScaledVector(bitangent, radius * Math.sin(angle))
+      .normalize();
+    return metallic > 0.5
+      ? reflected.lerp(diffuse, THREE.MathUtils.clamp(roughness * roughness, 0, 1)).normalize()
+      : diffuse;
+  }
+
+  public attachCameraDebugControls(element: HTMLElement | null) {
+    this.cameraDebugControls?.dispose();
+    this.cameraDebugControls = null;
+    this.cameraDebugInteractionActive = false;
+    if (!element) return;
+    const controls = new OrbitControls(this.cameraDebugCamera, element);
+    controls.enableDamping = false;
+    controls.screenSpacePanning = true;
+    controls.addEventListener("start", () => {
+      this.cameraDebugUserControlled = true;
+      this.cameraDebugInteractionActive = true;
+    });
+    controls.addEventListener("end", () => {
+      this.cameraDebugInteractionActive = false;
+    });
+    this.cameraDebugControls = controls;
+  }
+
+  public resetCameraDebugView() {
+    this.cameraDebugUserControlled = false;
+    this.cameraDebugDirty = true;
+  }
+
+  private setupCameraDebugView() {
+    this.cameraDebugScene.background = new THREE.Color(0x11151b);
+    this.cameraDebugScene.add(new THREE.HemisphereLight(0xdbeafe, 0x273244, 2.2));
+    const key = new THREE.DirectionalLight(0xffffff, 2.5);
+    key.position.set(4, 7, 5);
+    this.cameraDebugScene.add(key);
+    this.cameraDebugScene.add(this.cameraDebugGroup);
+  }
+
+  private rebuildCameraDebugView() {
+    this.cameraDebugGroup.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const material = mesh.material;
+      if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+      else material?.dispose?.();
+    });
+    this.cameraDebugScene.remove(this.cameraDebugGroup);
+    this.cameraDebugGroup = new THREE.Group();
+    this.cameraDebugScene.add(this.cameraDebugGroup);
+
+    this.camera.updateMatrixWorld(true);
+    const traceableMeshes = [
+      ...this.ptScene.getSphereMeshes(),
+      ...this.ptScene.getQuadMeshes(),
+      ...this.ptScene.getTriangleMeshes(),
+    ];
+    for (const mesh of traceableMeshes.slice(0, 48)) {
+      if (!mesh.visible) continue;
+      mesh.updateWorldMatrix(true, false);
+      const primitiveType = mesh.userData.pathTracer.primitiveType;
+      const color = primitiveType === "sphere"
+        ? 0xc084fc
+        : primitiveType === "quad"
+          ? 0x38bdf8
+          : 0x94a3b8;
+      let outlineGeometry: THREE.BufferGeometry;
+      if (primitiveType === "sphere") {
+        const proxy = new THREE.SphereGeometry(1, 14, 9);
+        outlineGeometry = new THREE.WireframeGeometry(proxy);
+        proxy.dispose();
+      } else {
+        outlineGeometry = new THREE.EdgesGeometry(
+          mesh.geometry,
+          primitiveType === "triangleMesh" ? 1 : 24
+        );
+      }
+      const outline = new THREE.LineSegments(
+        outlineGeometry,
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.46 })
+      );
+      outline.matrixAutoUpdate = false;
+      outline.matrix.copy(mesh.matrixWorld);
+      this.cameraDebugGroup.add(outline);
+    }
+
+    const diagramCamera = this.camera.clone();
+    diagramCamera.near = Math.max(0.01, this.camera.near);
+    const cameraViewDistance = Math.max(
+      1,
+      diagramCamera.position.distanceTo(this.orbitControls.target)
+    );
+    const diagramRange = cameraViewDistance * 3;
+    // The educational frustum should end just beyond the scene. Copying the
+    // production camera's very distant far plane makes the useful diagram a
+    // nearly invisible speck.
+    diagramCamera.far = Math.max(diagramCamera.near * 10, diagramRange);
+    diagramCamera.updateProjectionMatrix();
+    diagramCamera.updateMatrixWorld(true);
+    const cameraMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(0.035, cameraViewDistance * 0.025), 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0x60a5fa, depthTest: false })
+    );
+    cameraMarker.position.copy(diagramCamera.position);
+    cameraMarker.renderOrder = 4;
+    this.cameraDebugGroup.add(cameraMarker);
+
+    const forward = new THREE.Vector3();
+    diagramCamera.getWorldDirection(forward);
+    const planeDistance = Math.max(cameraViewDistance * 0.12, diagramCamera.near * 4);
+    const planeHeight = 2 * Math.tan(THREE.MathUtils.degToRad(diagramCamera.fov * 0.5)) * planeDistance;
+    const planeWidth = planeHeight * diagramCamera.aspect;
+    const imagePlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(planeWidth, planeHeight),
+      new THREE.MeshBasicMaterial({
+        map: this.shaderCanvas.outputTexture,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.78,
+      })
+    );
+    imagePlane.position.copy(diagramCamera.position).addScaledVector(forward, planeDistance);
+    imagePlane.quaternion.copy(diagramCamera.quaternion);
+    this.cameraDebugGroup.add(imagePlane);
+
+    const viewportLines: THREE.Vector3[] = [];
+    const gridColumns = 8;
+    const gridRows = 6;
+    for (let column = 0; column <= gridColumns; column += 1) {
+      const x = THREE.MathUtils.lerp(-planeWidth / 2, planeWidth / 2, column / gridColumns);
+      viewportLines.push(
+        new THREE.Vector3(x, -planeHeight / 2, 0),
+        new THREE.Vector3(x, planeHeight / 2, 0)
+      );
+    }
+    for (let row = 0; row <= gridRows; row += 1) {
+      const y = THREE.MathUtils.lerp(-planeHeight / 2, planeHeight / 2, row / gridRows);
+      viewportLines.push(
+        new THREE.Vector3(-planeWidth / 2, y, 0),
+        new THREE.Vector3(planeWidth / 2, y, 0)
+      );
+    }
+    const viewportGrid = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(viewportLines),
+      new THREE.LineBasicMaterial({
+        color: 0xe2e8f0,
+        transparent: true,
+        opacity: 0.75,
+        depthTest: false,
+      })
+    );
+    viewportGrid.position.copy(imagePlane.position);
+    viewportGrid.quaternion.copy(imagePlane.quaternion);
+    viewportGrid.translateZ(0.001);
+    viewportGrid.renderOrder = 2;
+    this.cameraDebugGroup.add(viewportGrid);
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.far = diagramRange;
+    const points: THREE.Vector3[] = [];
+    const colors: number[] = [];
+    const rayTargets = this.ptScene.scene.children.filter((object) => object.visible);
+    const { columns, rows } = this.cameraDebugRayGrid;
+    let primaryRayIndex = 0;
+    for (let row = 0; row < rows; row += 1) {
+      const y = rows === 1 ? 0 : THREE.MathUtils.lerp(-0.72, 0.72, row / (rows - 1));
+      for (let column = 0; column < columns; column += 1) {
+        const x = columns === 1 ? 0 : THREE.MathUtils.lerp(-0.8, 0.8, column / (columns - 1));
+        raycaster.setFromCamera(new THREE.Vector2(x, y), diagramCamera);
+        let origin = raycaster.ray.origin.clone();
+        let direction = raycaster.ray.direction.clone();
+        for (let depth = 0; depth < this.cameraDebugMaxDepth; depth += 1) {
+          raycaster.set(origin, direction);
+          raycaster.far = diagramRange;
+          const hit = raycaster.intersectObjects(rayTargets, true)[0];
+          const end = hit?.point ?? raycaster.ray.at(diagramRange, new THREE.Vector3());
+          points.push(origin.clone(), end.clone());
+          const bounceColors = [0xa3e635, 0x38bdf8, 0xc084fc];
+          const color = new THREE.Color(hit ? bounceColors[depth] : 0xf59e0b);
+          colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+          if (!hit) break;
+          const scattered = this.scatterCameraDebugRay(
+            direction,
+            hit,
+            primaryRayIndex * 11 + depth * 101
+          );
+          if (!scattered) break;
+          direction = scattered;
+          origin = end.clone().addScaledVector(direction, 0.001);
+        }
+        primaryRayIndex += 1;
+      }
+    }
+    const rayGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    rayGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    this.cameraDebugGroup.add(new THREE.LineSegments(
+      rayGeometry,
+      new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+      })
+    ));
+
+    // Keep the observer camera in a stable camera-relative pose. Deriving its
+    // framing from hit endpoints causes visible jumps whenever a sample ray
+    // crosses a silhouette and changes discontinuously between hit and miss.
+    const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(diagramCamera.quaternion);
+    const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(diagramCamera.quaternion);
+    const overviewCenter = diagramCamera.position.clone().addScaledVector(forward, diagramRange * 0.42);
+    if (!this.cameraDebugUserControlled) {
+      this.cameraDebugCamera.position
+        .copy(diagramCamera.position)
+        .addScaledVector(cameraRight, diagramRange * 0.72)
+        .addScaledVector(cameraUp, diagramRange * 0.44)
+        .addScaledVector(forward, -diagramRange * 0.08);
+      this.cameraDebugCamera.lookAt(overviewCenter);
+      this.cameraDebugControls?.target.copy(overviewCenter);
+      this.cameraDebugControls?.update();
+    }
+    this.cameraDebugCamera.near = Math.max(0.01, diagramRange / 100);
+    this.cameraDebugCamera.far = diagramRange * 4;
+    this.cameraDebugCamera.updateProjectionMatrix();
+    this.cameraDebugDirty = false;
+  }
+
+  private renderCameraDebugView() {
+    const viewport = this.cameraDebugViewport;
+    if (!this.cameraDebugEnabled || !viewport || viewport.width < 2 || viewport.height < 2) return;
+    if (this.cameraDebugDirty) this.rebuildCameraDebugView();
+
+    const canvasHeight = this.canvas.clientHeight;
+    // WebGLRenderer's viewport/scissor API accepts logical CSS pixels and
+    // applies its pixel ratio internally for the default framebuffer.
+    const left = Math.round(viewport.left);
+    const bottom = Math.round(canvasHeight - viewport.top - viewport.height);
+    const width = Math.round(viewport.width);
+    const height = Math.round(viewport.height);
+    this.cameraDebugCamera.aspect = width / height;
+    this.cameraDebugCamera.updateProjectionMatrix();
+
+    this.renderer.setScissorTest(true);
+    this.renderer.setViewport(left, bottom, width, height);
+    this.renderer.setScissor(left, bottom, width, height);
+    this.renderer.clear(true, true, false);
+    this.renderer.render(this.cameraDebugScene, this.cameraDebugCamera);
+    this.renderer.setScissorTest(false);
+    const fullSize = this.renderer.getSize(new THREE.Vector2());
+    this.renderer.setViewport(0, 0, fullSize.x, fullSize.y);
+    this.renderer.setScissor(0, 0, fullSize.x, fullSize.y);
   }
 
   public getInvalidationHistory(): readonly PtInvalidationEvent[] {
@@ -1455,6 +1801,7 @@ export default class PtRenderer {
     this.renderer.clear();
 
     this.orbitControls?.update();
+    this.cameraDebugControls?.update();
 
     const rasterVisible = this.settings.renderMode !== "pathtraced";
     const pathtracedVisible = this.settings.renderMode !== "raster";
@@ -1483,7 +1830,11 @@ export default class PtRenderer {
       (this.settings.renderMode === "comparison" && this.settings.comparisonTracingMode === "fullFrame")
     );
 
-    if (pathtracedVisible && !pauseFullFrameHybridTracing) {
+    if (
+      pathtracedVisible &&
+      !pauseFullFrameHybridTracing &&
+      !this.cameraDebugInteractionActive
+    ) {
       this.camera.updateMatrixWorld();
       this.camera.updateProjectionMatrix();
 
@@ -1544,6 +1895,7 @@ export default class PtRenderer {
     this.renderer.render(this.debugOverlayScene, this.camera);
     this.renderer.clearDepth();
     this.renderer.render(this.gizmoScene, this.camera);
+    this.renderCameraDebugView();
 
   };
 
@@ -1573,6 +1925,8 @@ export default class PtRenderer {
 
     this.orbitControls.removeEventListener("change", this.handleOrbitChange);
     this.orbitControls.dispose();
+    this.cameraDebugControls?.dispose();
+    this.cameraDebugControls = null;
 
     this.transformControls.removeEventListener(
       "change",
@@ -1618,6 +1972,13 @@ export default class PtRenderer {
     this.bvhTraversalRay = this.disposeDebugLine(this.bvhTraversalRay);
     this.bvhTraversalTriangle = this.disposeDebugLine(this.bvhTraversalTriangle);
     this.bvhTraversalHit = this.disposeDebugLine(this.bvhTraversalHit);
+    this.cameraDebugGroup.traverse((object) => {
+      const renderable = object as THREE.Mesh;
+      renderable.geometry?.dispose?.();
+      const material = renderable.material;
+      if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+      else material?.dispose?.();
+    });
     this.disposePostProcessing();
     this.renderer.dispose();
   }

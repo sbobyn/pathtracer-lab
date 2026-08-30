@@ -129,6 +129,32 @@ export default class PtActions {
     return this.store.getState();
   }
 
+  public setCameraDebugViewEnabled(enabled: boolean) {
+    this.renderer.setCameraDebugViewEnabled(enabled);
+  }
+
+  public setCameraDebugViewport(
+    viewport: { left: number; top: number; width: number; height: number } | null
+  ) {
+    this.renderer.setCameraDebugViewport(viewport);
+  }
+
+  public setCameraDebugRayGrid(columns: number, rows: number) {
+    this.renderer.setCameraDebugRayGrid(columns, rows);
+  }
+
+  public setCameraDebugMaxDepth(depth: number) {
+    this.renderer.setCameraDebugMaxDepth(depth);
+  }
+
+  public attachCameraDebugControls(element: HTMLElement | null) {
+    this.renderer.attachCameraDebugControls(element);
+  }
+
+  public resetCameraDebugView() {
+    this.renderer.resetCameraDebugView();
+  }
+
   public getTriangleBvhStats() {
     return this.renderer.getTriangleBvhStats();
   }

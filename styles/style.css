@@ -381,6 +381,255 @@ body {
   border-color: #bef264;
 }
 
+.camera-ray-debug {
+  position: fixed;
+  z-index: 10;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, calc(100vw - 32px));
+  overflow: hidden;
+  color: #e4e4e7;
+  /* The Three.js inset is drawn into the shared canvas behind this shell. */
+  background: transparent;
+  border: 1px solid #52525b;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 32%);
+  pointer-events: auto;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.camera-ray-debug__header {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 11px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 9px;
+  color: inherit;
+  background: rgb(32 36 43 / 96%);
+  border: 0;
+  border-bottom: 1px solid #3f3f46;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.camera-ray-debug[data-collapsed="true"] {
+  width: 170px;
+}
+
+.camera-ray-debug[data-collapsed="true"] .camera-ray-debug__header {
+  border-bottom: 0;
+}
+
+.camera-ray-debug__chevron {
+  color: #a1a1aa;
+  transition: transform 140ms ease;
+}
+
+.camera-ray-debug[data-collapsed="true"] .camera-ray-debug__chevron {
+  transform: rotate(180deg);
+}
+
+.camera-ray-debug__viewport {
+  position: relative;
+  height: 230px;
+  background: transparent;
+}
+
+.camera-ray-debug__orbit-surface {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.camera-ray-debug__orbit-surface:active {
+  cursor: grabbing;
+}
+
+.camera-ray-debug__camera-label {
+  position: absolute;
+  left: 8px;
+  bottom: 7px;
+  padding: 3px 6px;
+  color: #d4d4d8;
+  background: rgb(9 12 17 / 76%);
+  border: 1px solid rgb(113 113 122 / 55%);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+  pointer-events: none;
+}
+
+.camera-ray-debug__color-key {
+  position: absolute;
+  z-index: 1;
+  right: 39px;
+  bottom: 7px;
+  display: grid;
+  gap: 3px;
+  padding: 5px 7px;
+  color: #d4d4d8;
+  background: rgb(9 12 17 / 78%);
+  border: 1px solid rgb(113 113 122 / 55%);
+  border-radius: 5px;
+  font-size: 8px;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+.camera-ray-debug__legend-toggle {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  bottom: 7px;
+  width: 23px;
+  height: 23px;
+  padding: 0;
+  color: #a1a1aa;
+  background: rgb(9 12 17 / 78%);
+  border: 1px solid rgb(113 113 122 / 70%);
+  border-radius: 50%;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.camera-ray-debug__legend-toggle:hover,
+.camera-ray-debug__legend-toggle[aria-expanded="true"] {
+  color: #18181b;
+  background: #bef264;
+  border-color: #bef264;
+}
+
+.camera-ray-debug__color-key > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.camera-ray-debug__color-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.camera-ray-debug__color-key .camera-ray-debug__key-title {
+  min-width: 37px;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+.camera-ray-debug__color-key i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 22%);
+}
+
+.camera-ray-debug__density {
+  position: absolute;
+  z-index: 1;
+  top: 7px;
+  right: 7px;
+  display: flex;
+  overflow: hidden;
+  background: rgb(9 12 17 / 76%);
+  border: 1px solid rgb(113 113 122 / 55%);
+  border-radius: 5px;
+  pointer-events: auto;
+}
+
+.camera-ray-debug__depth {
+  position: absolute;
+  z-index: 1;
+  top: 7px;
+  left: 7px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  color: #a1a1aa;
+  background: rgb(9 12 17 / 76%);
+  border: 1px solid rgb(113 113 122 / 55%);
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+
+.camera-ray-debug__depth span {
+  padding: 3px 6px;
+  border-right: 1px solid rgb(113 113 122 / 45%);
+}
+
+.camera-ray-debug__depth button {
+  min-width: 24px;
+  padding: 3px 5px;
+  color: #a1a1aa;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid rgb(113 113 122 / 45%);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.camera-ray-debug__depth button:last-child {
+  border-right: 0;
+}
+
+.camera-ray-debug__depth button[aria-pressed="true"] {
+  color: #18181b;
+  background: #bef264;
+}
+
+.camera-ray-debug__density button {
+  min-width: 27px;
+  padding: 3px 5px;
+  color: #a1a1aa;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid rgb(113 113 122 / 45%);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.camera-ray-debug__density button:last-child {
+  border-right: 0;
+}
+
+.camera-ray-debug__density button[aria-pressed="true"] {
+  color: #18181b;
+  background: #bef264;
+}
+
+.camera-ray-debug__density .camera-ray-debug__reset {
+  min-width: 29px;
+  color: #d4d4d8;
+  font-size: 13px;
+}
+
+.camera-ray-debug__density .camera-ray-debug__reset:hover {
+  color: #18181b;
+  background: #e4e4e7;
+}
+
 .editor-left-stack {
   left: 16px;
   justify-items: start;
