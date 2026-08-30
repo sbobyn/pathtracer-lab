@@ -456,6 +456,60 @@ body {
   cursor: grabbing;
 }
 
+.camera-ray-debug__bvh-controls {
+  position: absolute;
+  z-index: 2;
+  top: 35px;
+  right: 7px;
+  display: flex;
+  overflow: hidden;
+  background: rgb(9 12 17 / 82%);
+  border: 1px solid rgb(113 113 122 / 55%);
+  border-radius: 5px;
+}
+
+.camera-ray-debug__bvh-controls button {
+  min-height: 23px;
+  padding: 3px 7px;
+  color: #d4d4d8;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid rgb(113 113 122 / 45%);
+  font: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.camera-ray-debug__bvh-controls button:last-child {
+  border-right: 0;
+}
+
+.camera-ray-debug__bvh-controls button[aria-pressed="true"] {
+  color: #18181b;
+  background: #bef264;
+}
+
+.camera-ray-debug__bvh-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.camera-ray-debug__bvh-depth {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  color: #a1a1aa;
+  border-right: 1px solid rgb(113 113 122 / 45%);
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.camera-ray-debug__bvh-depth[aria-disabled="true"] {
+  opacity: 0.35;
+}
+
 .camera-ray-debug__camera-label {
   position: absolute;
   left: 8px;

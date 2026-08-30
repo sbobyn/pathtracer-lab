@@ -2873,10 +2873,16 @@ function CameraRayDebugViewport({
   fov: number;
   orthographicHeight: number;
 }) {
+  const maxBvhDepth = Math.max(
+    actions.getTriangleBvhStats().maxDepth,
+    actions.getSphereBvhStats().maxDepth
+  );
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
   const [rayDensity, setRayDensity] = useState<"sparse" | "medium" | "dense">("sparse");
   const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(1);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [bvhEnabled, setBvhEnabled] = useState(true);
+  const [bvhDepth, setBvhDepth] = useState(() => Math.min(2, maxBvhDepth));
   const viewportRef = useRef<HTMLDivElement>(null);
   const orbitSurfaceRef = useRef<HTMLDivElement>(null);
   const rayGrid = rayDensity === "sparse"
@@ -2886,12 +2892,22 @@ function CameraRayDebugViewport({
       : { columns: 9, rows: 5 };
 
   useEffect(() => {
+    actions.setCameraDebugBvhEnabled(bvhEnabled);
+  }, [actions, bvhEnabled]);
+
+  useEffect(() => {
     actions.setCameraDebugRayGrid(rayGrid.columns, rayGrid.rows);
   }, [actions, rayDensity]);
 
   useEffect(() => {
     actions.setCameraDebugMaxDepth(rayDepth);
   }, [actions, rayDepth]);
+
+  useEffect(() => {
+    const validDepth = Math.min(bvhDepth, maxBvhDepth);
+    if (validDepth !== bvhDepth) setBvhDepth(validDepth);
+    actions.setCameraDebugBvhDepth(validDepth);
+  }, [actions, bvhDepth, maxBvhDepth]);
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -2978,6 +2994,28 @@ function CameraRayDebugViewport({
               ↺
             </button>
           </div>
+          <div className="camera-ray-debug__bvh-controls">
+            <button
+              type="button"
+              aria-pressed={bvhEnabled}
+              title={bvhEnabled ? "Hide BVH bounds" : "Show BVH bounds"}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setBvhEnabled((enabled) => !enabled)}
+            >BVH</button>
+            <button
+              type="button"
+              disabled={!bvhEnabled || bvhDepth <= 0}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setBvhDepth((depth) => Math.max(0, depth - 1))}
+            >−</button>
+            <span className="camera-ray-debug__bvh-depth" aria-disabled={!bvhEnabled}>Depth {bvhDepth}</span>
+            <button
+              type="button"
+              disabled={!bvhEnabled || bvhDepth >= maxBvhDepth}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setBvhDepth((depth) => Math.min(maxBvhDepth, depth + 1))}
+            >+</button>
+          </div>
           <button
             type="button"
             className="camera-ray-debug__legend-toggle"
@@ -3001,6 +3039,12 @@ function CameraRayDebugViewport({
               <span><i style={{ background: "#c084fc" }} />sphere</span>
               <span><i style={{ background: "#38bdf8" }} />quad</span>
               <span><i style={{ background: "#94a3b8" }} />mesh</span>
+            </div>
+            <div>
+              <span className="camera-ray-debug__key-title">BVH</span>
+              <span><i style={{ background: "#c084fc" }} />sphere node</span>
+              <span><i style={{ background: "#38bdf8" }} />mesh node</span>
+              <span><i style={{ background: "#4ade80" }} />leaf</span>
             </div>
           </div>}
           <span className="camera-ray-debug__camera-label">

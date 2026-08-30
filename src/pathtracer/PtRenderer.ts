@@ -169,6 +169,8 @@ export default class PtRenderer {
   private cameraDebugDirty = true;
   private cameraDebugRayGrid = { columns: 5, rows: 3 };
   private cameraDebugMaxDepth = 1;
+  private cameraDebugBvhEnabled = true;
+  private cameraDebugBvhDepth = 2;
   private cameraDebugControls: OrbitControls | null = null;
   private cameraDebugUserControlled = false;
   private cameraDebugInteractionActive = false;
@@ -788,6 +790,19 @@ export default class PtRenderer {
     this.cameraDebugDirty = true;
   }
 
+  public setCameraDebugBvhDepth(depth: number) {
+    const next = Math.max(0, Math.round(depth));
+    if (this.cameraDebugBvhDepth === next) return;
+    this.cameraDebugBvhDepth = next;
+    this.cameraDebugDirty = true;
+  }
+
+  public setCameraDebugBvhEnabled(enabled: boolean) {
+    if (this.cameraDebugBvhEnabled === enabled) return;
+    this.cameraDebugBvhEnabled = enabled;
+    this.cameraDebugDirty = true;
+  }
+
   private setupCameraDebugView() {
     this.cameraDebugScene.background = new THREE.Color(0x11151b);
     this.cameraDebugScene.add(new THREE.HemisphereLight(0xdbeafe, 0x273244, 2.2));
@@ -1021,6 +1036,39 @@ export default class PtRenderer {
         depthTest: false,
       })
     ));
+
+    const hierarchyNodes = this.cameraDebugBvhEnabled ? [
+        ...describeSphereBvh(this.gpuScene.sphereBvh).map((description) => ({
+          description,
+          node: this.gpuScene.sphereBvh.nodes[description.index]!,
+          kind: "sphere" as const,
+        })),
+        ...describeTriangleBvh(this.gpuScene.triangleBvh).map((description) => ({
+          description,
+          node: this.gpuScene.triangleBvh.nodes[description.index]!,
+          kind: "triangle" as const,
+        })),
+    ] : [];
+    for (const { description, node, kind } of hierarchyNodes) {
+        if (description.depth > this.cameraDebugBvhDepth) continue;
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(this.boxEdgePositions(node.boundsMin, node.boundsMax), 3)
+        );
+        const color = kind === "sphere"
+          ? (description.leaf ? 0xfbbf24 : 0xc084fc)
+          : (description.leaf ? 0x4ade80 : 0x38bdf8);
+        this.cameraDebugGroup.add(new THREE.LineSegments(
+          geometry,
+          new THREE.LineBasicMaterial({
+            color,
+            transparent: true,
+            opacity: description.depth === this.cameraDebugBvhDepth ? 0.68 : 0.3,
+            depthTest: false,
+          })
+        ));
+    }
 
     // Keep the observer camera in a stable camera-relative pose. Deriving its
     // framing from hit endpoints causes visible jumps whenever a sample ray

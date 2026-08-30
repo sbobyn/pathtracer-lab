@@ -194,6 +194,14 @@ export default class PtActions {
     this.store.update((state) => ({ ...state, bvhTraversal: traversal }));
   }
 
+  public setCameraDebugBvhDepth(depth: number) {
+    this.renderer.setCameraDebugBvhDepth(depth);
+  }
+
+  public setCameraDebugBvhEnabled(enabled: boolean) {
+    this.renderer.setCameraDebugBvhEnabled(enabled);
+  }
+
   public setBvhTraversalStep(step: number) {
     const current = this.store.getState().bvhTraversal;
     if (current.events.length === 0) return;
