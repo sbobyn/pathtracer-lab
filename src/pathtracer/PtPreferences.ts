@@ -37,6 +37,7 @@ const triangleTraversalModes = new Set(["bvh", "bruteForce"]);
 const triangleOverlayModes = new Set(["off", "selected", "all"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
 const environmentModes = new Set(["gradient", "map"]);
+const cameraProjectionModes = new Set(["perspective", "orthographic"]);
 const colorPattern = /^#[0-9a-f]{6}$/i;
 const renamedSceneKeys: Record<string, string> = {
   Part1Simple: "RTIOW1Simple",
@@ -93,6 +94,10 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   if (typeof candidate.backgroundColorTop === "string" && colorPattern.test(candidate.backgroundColorTop)) settings.backgroundColorTop = candidate.backgroundColorTop;
   if (typeof candidate.backgroundColorBottom === "string" && colorPattern.test(candidate.backgroundColorBottom)) settings.backgroundColorBottom = candidate.backgroundColorBottom;
   settings.fov = finiteNumber(candidate.fov, 10, 120) ?? settings.fov;
+  if (cameraProjectionModes.has(candidate.cameraProjectionMode as string)) {
+    settings.cameraProjectionMode = candidate.cameraProjectionMode as PtSettings["cameraProjectionMode"];
+  }
+  settings.orthographicHeight = finiteNumber(candidate.orthographicHeight, 0.05, 1000) ?? settings.orthographicHeight;
   settings.numSamples = integer(candidate.numSamples, 1, 20) ?? settings.numSamples;
   settings.maxRayDepth = integer(candidate.maxRayDepth, 1, 20) ?? settings.maxRayDepth;
   if (integratorModes.has(candidate.integratorMode as string)) settings.integratorMode = candidate.integratorMode as PtSettings["integratorMode"];

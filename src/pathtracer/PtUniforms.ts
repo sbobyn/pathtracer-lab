@@ -12,6 +12,8 @@ export default interface PtUniforms {
       halfHeight: number;
       focusDistance: number;
       aperture: number;
+      orthographic: boolean;
+      near: number;
     };
   };
   uWorld: {

@@ -202,16 +202,30 @@ export class ShaderCanvas {
   }
 
   private updateRenderTargets() {
-    const scaledW = this.width * this.resolutionScale;
-    const scaledH = this.height * this.resolutionScale;
+    const scaledW = Math.max(1, Math.floor(this.width * this.resolutionScale));
+    const scaledH = Math.max(1, Math.floor(this.height * this.resolutionScale));
 
     this.material.uniforms.uResolution.value.set(
-      Math.floor(scaledW),
-      Math.floor(scaledH)
+      scaledW,
+      scaledH
     );
-    this.pingRenderTarget.setSize(scaledW, scaledH);
-    this.pongRenderTarget.setSize(scaledW, scaledH);
+    this.resizeRenderTarget(this.pingRenderTarget, scaledW, scaledH);
+    this.resizeRenderTarget(this.pongRenderTarget, scaledW, scaledH);
+  }
 
+  private resizeRenderTarget(
+    target: THREE.WebGLRenderTarget,
+    width: number,
+    height: number
+  ) {
+    target.setSize(width, height);
+    // WebGLRenderTarget.setSize reallocates its texture but preserves the
+    // target's previous viewport/scissor rectangles. Keeping those stale
+    // rectangles after a browser resize renders into only part of the new
+    // accumulation texture, stretching the result and leaving an empty band.
+    target.viewport.set(0, 0, width, height);
+    target.scissor.set(0, 0, width, height);
+    target.scissorTest = false;
   }
 
   public resetAccumulation() {

@@ -263,6 +263,10 @@ export default class PtActions {
     this.renderer.outlinePass.selectedObjects = [];
     this.renderer.setScene(scene, false);
     this.renderer.setFov(scene.camera.fov, false);
+    this.renderer.setCameraProjectionMode(
+      this.store.getState().settings.cameraProjectionMode,
+      false
+    );
     this.renderer.setDepthOfFieldEnabled(false, false);
     this.renderer.setNumSamples(1, false);
     const resolutionScale = resolutionScaleForPreset(
@@ -442,6 +446,38 @@ export default class PtActions {
     this.updateSetting("fov", fov);
   }
 
+  public setCameraProjectionMode(mode: PtSettings["cameraProjectionMode"]) {
+    let orthographicHeight = this.store.getState().settings.orthographicHeight;
+    if (mode === "orthographic") {
+      const viewDistance = this.renderer.camera.position.distanceTo(
+        this.renderer.orbitControls.target
+      );
+      orthographicHeight = Math.max(
+        0.05,
+        2 * viewDistance * Math.tan(
+          THREE.MathUtils.degToRad(this.store.getState().settings.fov) / 2
+        )
+      );
+      this.renderer.setOrthographicHeight(orthographicHeight, false);
+    }
+    this.renderer.setCameraProjectionMode(mode);
+    this.store.update((state) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        cameraProjectionMode: mode,
+        orthographicHeight,
+        enableDepthOfField:
+          mode === "orthographic" ? false : state.settings.enableDepthOfField,
+      },
+    }));
+  }
+
+  public setOrthographicHeight(height: number) {
+    this.renderer.setOrthographicHeight(height);
+    this.updateSetting("orthographicHeight", height);
+  }
+
   public setNumSamples(samples: number) {
     this.renderer.setNumSamples(samples);
     this.updateSetting("numSamples", samples);
@@ -505,8 +541,10 @@ export default class PtActions {
   }
 
   public setDepthOfFieldEnabled(enabled: boolean) {
-    this.renderer.setDepthOfFieldEnabled(enabled);
-    this.updateSetting("enableDepthOfField", enabled);
+    const effectiveEnabled =
+      enabled && this.store.getState().settings.cameraProjectionMode !== "orthographic";
+    this.renderer.setDepthOfFieldEnabled(effectiveEnabled);
+    this.updateSetting("enableDepthOfField", effectiveEnabled);
   }
 
   public setAperture(aperture: number) {
@@ -2004,7 +2042,13 @@ export default class PtActions {
     if (current.environmentLightingEnabled !== settings.environmentLightingEnabled) {
       this.setEnvironmentLightingEnabled(settings.environmentLightingEnabled);
     }
+    if (current.cameraProjectionMode !== settings.cameraProjectionMode) {
+      this.setCameraProjectionMode(settings.cameraProjectionMode);
+    }
     if (current.fov !== settings.fov) this.setFov(settings.fov);
+    if (current.orthographicHeight !== settings.orthographicHeight) {
+      this.setOrthographicHeight(settings.orthographicHeight);
+    }
     if (current.numSamples !== settings.numSamples) {
       this.setNumSamples(settings.numSamples);
     }

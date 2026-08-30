@@ -1,4 +1,4 @@
-struct Camera { vec3 position; vec3 forward; vec3 up; vec3 right; float halfWidth; float halfHeight; float focusDistance; float aperture; };
+struct Camera { vec3 position; vec3 forward; vec3 up; vec3 right; float halfWidth; float halfHeight; float focusDistance; float aperture; float near; bool orthographic; };
 struct Ray { vec3 origin; vec3 direction; };
 struct Sphere { vec3 position; float radius; int materialId; int uvMapping; };
 struct Quad { vec3 q; vec3 u; vec3 v; vec3 normal; int materialId; };

@@ -180,6 +180,8 @@ export default class PtApp {
       ptScene,
       { ...initialState.settings }
     );
+    this.ptRenderer.setOrthographicHeight(initialState.settings.orthographicHeight, false);
+    this.ptRenderer.setCameraProjectionMode(initialState.settings.cameraProjectionMode, false);
     this.actions = new PtActions(store, this.ptRenderer, () => {
       clearPtPreferences(window.localStorage);
       window.location.reload();
