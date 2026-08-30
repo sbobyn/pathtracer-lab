@@ -2745,6 +2745,13 @@ function EditorShell({ actions }: { actions: PtActions }) {
     {state.settings.renderMode === "region" && (
       <HybridComparisonRegion actions={actions} />
     )}
+    {(state.settings.renderMode === "selectedObject" ||
+      state.settings.renderMode === "selectedObjectComparison") &&
+      state.selection.objectId === null && (
+        <div className="selected-object-empty-notice" role="status">
+          Select an object to path trace <span>— no objects selected</span>
+        </div>
+      )}
     <a
       className="editor-repository-link"
       href="https://github.com/sbobyn/pathtracer-lab"
