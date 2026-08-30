@@ -1,8 +1,16 @@
 Ray sampleCameraRay(vec2 uv, vec2 sampleSeed) {
+    vec3 imageOffset =
+        uv.x * uCamera.halfWidth * uCamera.right
+        + uv.y * uCamera.halfHeight * uCamera.up;
+    if (uCamera.orthographic) {
+        return Ray(
+            uCamera.position + imageOffset + uCamera.near * uCamera.forward,
+            normalize(uCamera.forward)
+        );
+    }
     vec3 pixelDirection = normalize(
         uCamera.forward
-            + uv.x * uCamera.halfWidth * uCamera.right
-            + uv.y * uCamera.halfHeight * uCamera.up
+            + imageOffset
     );
     vec3 pixelSample = uCamera.position + pixelDirection * uCamera.focusDistance;
     vec3 defocusOffset = vec3(0.0);

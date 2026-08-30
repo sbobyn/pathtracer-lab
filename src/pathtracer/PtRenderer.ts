@@ -42,7 +42,7 @@ function integratorModeValue(mode: PtSettings["integratorMode"]): number {
 
 export default class PtRenderer {
   public ptScene: PtScene;
-  public camera: THREE.PerspectiveCamera;
+  public camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   private renderer!: THREE.WebGLRenderer;
   private clock: THREE.Clock;
 
@@ -209,26 +209,48 @@ export default class PtRenderer {
   private worldUp!: THREE.Vector3;
 
   private canvas: HTMLCanvasElement;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
+  private viewportPixelRatio = 0;
   private invalidationSequence = 0;
   private readonly invalidationHistory: PtInvalidationEvent[] = [];
 
   private readonly handleResize = () => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+    this.syncViewportSize();
+  };
 
-    this.camera.aspect = width / height;
+  private syncViewportSize() {
+    // The canvas's CSS box is the authoritative viewport. macOS window-manager
+    // shortcuts can update that box before (or without) useful innerWidth and
+    // resize-event values. Measuring it also avoids coupling rendering to the
+    // browser chrome or devtools layout.
+    const bounds = this.canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(bounds.width));
+    const height = Math.max(1, Math.round(bounds.height));
+    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+    if (
+      width === this.viewportWidth &&
+      height === this.viewportHeight &&
+      pixelRatio === this.viewportPixelRatio
+    ) return;
+
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+    this.viewportPixelRatio = pixelRatio;
+
+    this.updateCameraAspect(width / height);
     this.camera.updateProjectionMatrix();
     this.updateCameraProjectionUniforms();
 
     this.shaderCanvas.setDimensions(width, height);
     this.resizeHybridTarget(width, height, pixelRatio);
-    this.composer.setSize(width, height);
     this.composer.setPixelRatio(pixelRatio);
-    this.renderer.setSize(width, height);
+    this.composer.setSize(width, height);
     this.renderer.setPixelRatio(pixelRatio);
+    // CSS owns the displayed size; only resize the WebGL drawing buffer here.
+    this.renderer.setSize(width, height, false);
     this.invalidate(PtInvalidationLevel.Camera, "viewport resized");
-  };
+  }
 
   private readonly handleOrbitChange = () => {
     this.invalidate(PtInvalidationLevel.Camera, "orbit camera changed");
@@ -310,8 +332,8 @@ export default class PtRenderer {
     if (!this.renderer.capabilities.isWebGL2) {
       throw new Error("The packed scene-data path requires WebGL2");
     }
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.autoClear = false;
@@ -431,11 +453,62 @@ export default class PtRenderer {
 
   public setFov(fov: number, invalidate = true) {
     this.settings.fov = fov;
-    this.camera.fov = fov;
-    this.camera.updateProjectionMatrix();
+    if (this.camera instanceof THREE.PerspectiveCamera) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
     this.updateCameraProjectionUniforms();
     if (invalidate) {
       this.invalidate(PtInvalidationLevel.Camera, "camera field of view changed");
+    }
+  }
+
+  public setOrthographicHeight(height: number, invalidate = true) {
+    this.settings.orthographicHeight = Math.max(0.05, height);
+    if (this.camera instanceof THREE.OrthographicCamera) {
+      this.updateCameraAspect(this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight));
+      this.camera.updateProjectionMatrix();
+    }
+    this.updateCameraProjectionUniforms();
+    if (invalidate) {
+      this.invalidate(PtInvalidationLevel.Camera, "orthographic view height changed");
+    }
+  }
+
+  public setCameraProjectionMode(
+    mode: PtSettings["cameraProjectionMode"],
+    invalidate = true
+  ) {
+    if (
+      this.settings.cameraProjectionMode === mode &&
+      ((mode === "perspective" && this.camera instanceof THREE.PerspectiveCamera) ||
+        (mode === "orthographic" && this.camera instanceof THREE.OrthographicCamera))
+    ) return;
+    const previous = this.camera;
+    const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    const next = mode === "orthographic"
+      ? new THREE.OrthographicCamera(-1, 1, 1, -1, previous.near, previous.far)
+      : new THREE.PerspectiveCamera(this.settings.fov, aspect, previous.near, previous.far);
+    next.position.copy(previous.position);
+    next.quaternion.copy(previous.quaternion);
+    next.up.copy(previous.up);
+    next.updateMatrixWorld(true);
+    this.camera = next;
+    this.uniforms.uCamera.value.position = this.camera.position;
+    this.settings.cameraProjectionMode = mode;
+    if (mode === "orthographic") {
+      this.settings.enableDepthOfField = false;
+      this.uniforms.uEnableDoF.value = false;
+    }
+    this.updateCameraAspect(aspect);
+    this.camera.updateProjectionMatrix();
+    this.orbitControls.object = this.camera;
+    this.transformControls.camera = this.camera;
+    this.renderPass.camera = this.camera;
+    this.outlinePass.renderCamera = this.camera;
+    this.updateCameraProjectionUniforms();
+    if (invalidate) {
+      this.invalidate(PtInvalidationLevel.Camera, `camera projection changed to ${mode}`);
     }
   }
 
@@ -498,8 +571,9 @@ export default class PtRenderer {
   }
 
   public setDepthOfFieldEnabled(enabled: boolean, invalidate = true) {
-    this.settings.enableDepthOfField = enabled;
-    this.uniforms.uEnableDoF.value = enabled;
+    const effectiveEnabled = enabled && this.settings.cameraProjectionMode !== "orthographic";
+    this.settings.enableDepthOfField = effectiveEnabled;
+    this.uniforms.uEnableDoF.value = effectiveEnabled;
     if (invalidate) {
       this.invalidate(PtInvalidationLevel.Camera, "depth of field toggled");
     }
@@ -547,6 +621,9 @@ export default class PtRenderer {
       .sub(this.orbitControls.target)
       .normalize();
     const distance = Math.max(1.5, radius * 4);
+    if (this.camera instanceof THREE.OrthographicCamera) {
+      this.setOrthographicHeight(Math.max(0.05, radius * 2.5), false);
+    }
     this.orbitControls.target.copy(center);
     this.camera.position
       .copy(center)
@@ -759,19 +836,32 @@ export default class PtRenderer {
     diagramCamera.far = Math.max(diagramCamera.near * 10, diagramRange);
     diagramCamera.updateProjectionMatrix();
     diagramCamera.updateMatrixWorld(true);
-    const cameraMarker = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.max(0.035, cameraViewDistance * 0.025), 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0x60a5fa, depthTest: false })
-    );
-    cameraMarker.position.copy(diagramCamera.position);
-    cameraMarker.renderOrder = 4;
-    this.cameraDebugGroup.add(cameraMarker);
+    if (diagramCamera instanceof THREE.PerspectiveCamera) {
+      const cameraMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(0.035, cameraViewDistance * 0.025), 12, 8),
+        new THREE.MeshBasicMaterial({ color: 0x60a5fa, depthTest: false })
+      );
+      cameraMarker.position.copy(diagramCamera.position);
+      cameraMarker.renderOrder = 4;
+      this.cameraDebugGroup.add(cameraMarker);
+    }
 
     const forward = new THREE.Vector3();
     diagramCamera.getWorldDirection(forward);
-    const planeDistance = Math.max(cameraViewDistance * 0.12, diagramCamera.near * 4);
-    const planeHeight = 2 * Math.tan(THREE.MathUtils.degToRad(diagramCamera.fov * 0.5)) * planeDistance;
-    const planeWidth = planeHeight * diagramCamera.aspect;
+    // Perspective rays originate at the camera and pass through an illustrative
+    // image plane in front of it. Orthographic rays instead originate across
+    // the camera's near plane, so draw the viewport at that exact plane. Using
+    // the perspective diagram distance for both projections made orthographic
+    // rays look detached from the viewport even though their directions were
+    // otherwise correct.
+    const planeDistance = diagramCamera instanceof THREE.OrthographicCamera
+      ? diagramCamera.near
+      : Math.max(cameraViewDistance * 0.12, diagramCamera.near * 4);
+    const diagramAspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    const planeHeight = diagramCamera instanceof THREE.OrthographicCamera
+      ? this.settings.orthographicHeight
+      : 2 * Math.tan(THREE.MathUtils.degToRad(diagramCamera.fov * 0.5)) * planeDistance;
+    const planeWidth = planeHeight * diagramAspect;
     const imagePlane = new THREE.Mesh(
       new THREE.PlaneGeometry(planeWidth, planeHeight),
       new THREE.MeshBasicMaterial({
@@ -1232,9 +1322,10 @@ export default class PtRenderer {
   }
 
   private createUniforms(): PtUniforms {
-    const verticalFov = THREE.MathUtils.degToRad(this.camera.fov);
-    const halfHeight = Math.tan(verticalFov / 2);
-    const halfWidth = halfHeight * this.camera.aspect;
+    const halfHeight = this.camera instanceof THREE.OrthographicCamera
+      ? this.settings.orthographicHeight / 2
+      : Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+    const halfWidth = halfHeight * (this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight));
 
     const uniforms: PtUniforms = {
       uCamera: {
@@ -1247,6 +1338,8 @@ export default class PtRenderer {
           halfHeight: halfHeight,
           focusDistance: this.settings.focusDistance,
           aperture: this.settings.aperture,
+          orthographic: this.settings.cameraProjectionMode === "orthographic",
+          near: this.camera.near,
         },
       },
       uWorld: {
@@ -1530,14 +1623,14 @@ export default class PtRenderer {
   }
 
   private resizeHybridTarget(width: number, height: number, pixelRatio: number) {
-    this.hybridRasterTarget.setSize(
-      Math.max(1, Math.floor(width * pixelRatio)),
-      Math.max(1, Math.floor(height * pixelRatio))
-    );
-    this.objectIdTarget.setSize(
-      Math.max(1, Math.floor(width * pixelRatio)),
-      Math.max(1, Math.floor(height * pixelRatio))
-    );
+    const targetWidth = Math.max(1, Math.floor(width * pixelRatio));
+    const targetHeight = Math.max(1, Math.floor(height * pixelRatio));
+    for (const target of [this.hybridRasterTarget, this.objectIdTarget]) {
+      target.setSize(targetWidth, targetHeight);
+      target.viewport.set(0, 0, targetWidth, targetHeight);
+      target.scissor.set(0, 0, targetWidth, targetHeight);
+      target.scissorTest = false;
+    }
   }
 
   private objectIdColor(objectId: string) {
@@ -1798,6 +1891,11 @@ export default class PtRenderer {
   }
 
   private readonly renderLoop = () => {
+    // Some window managers apply snapping/fullscreen changes without a useful
+    // resize-event sequence. Polling these three scalar values once per frame
+    // makes the drawing buffer follow the real browser viewport in that case,
+    // while the equality guard keeps the steady-state cost negligible.
+    this.syncViewportSize();
     this.renderer.clear();
 
     this.orbitControls?.update();
@@ -1912,10 +2010,26 @@ export default class PtRenderer {
   }
 
   private updateCameraProjectionUniforms() {
-    const verticalFov = THREE.MathUtils.degToRad(this.camera.fov);
-    const halfHeight = Math.tan(verticalFov / 2);
+    const halfHeight = this.camera instanceof THREE.OrthographicCamera
+      ? this.settings.orthographicHeight / 2
+      : Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
     this.uniforms.uCamera.value.halfHeight = halfHeight;
-    this.uniforms.uCamera.value.halfWidth = halfHeight * this.camera.aspect;
+    const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    this.uniforms.uCamera.value.halfWidth = halfHeight * aspect;
+    this.uniforms.uCamera.value.orthographic = this.camera instanceof THREE.OrthographicCamera;
+    this.uniforms.uCamera.value.near = this.camera.near;
+  }
+
+  private updateCameraAspect(aspect: number) {
+    if (this.camera instanceof THREE.PerspectiveCamera) {
+      this.camera.aspect = aspect;
+      return;
+    }
+    const halfHeight = this.settings.orthographicHeight / 2;
+    this.camera.left = -halfHeight * aspect;
+    this.camera.right = halfHeight * aspect;
+    this.camera.top = halfHeight;
+    this.camera.bottom = -halfHeight;
   }
 
   public dispose() {

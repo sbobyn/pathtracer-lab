@@ -1074,6 +1074,22 @@ function CameraSettings({
     <PersistentDetails className="editor-panel" storageKey="camera">
       <summary id="camera-settings-title">Camera</summary>
       <div className="editor-panel__content">
+      <SelectField
+        label="Projection"
+        value={settings.cameraProjectionMode}
+        options={[
+          { value: "perspective", label: "Perspective" },
+          { value: "orthographic", label: "Orthographic" },
+        ]}
+        density="compact"
+        layout="horizontal"
+        onChange={(value) =>
+          commitSetting(actions, "Change camera projection", () =>
+            actions.setCameraProjectionMode(value as typeof settings.cameraProjectionMode)
+          )
+        }
+      />
+      {settings.cameraProjectionMode === "perspective" ? (
       <SettingsNumberField
         actions={actions}
         label="Field of view"
@@ -1094,6 +1110,27 @@ function CameraSettings({
         }}
         setValue={(value) => actions.setFov(value)}
       />
+      ) : (
+        <SettingsNumberField
+          actions={actions}
+          label="View height"
+          historyLabel="Change orthographic view height"
+          value={settings.orthographicHeight}
+          min={0.05}
+          max={100}
+          step={0.1}
+          precisionStep={0.01}
+          snapInterval={0.5}
+          sensitivity={0.05}
+          help={{
+            meaning: "Controls the vertical world-space span visible through the orthographic camera.",
+            math: "Orthographic rays start at different positions across this rectangle but share one forward direction.",
+            lookFor: "Parallel edges remain parallel and objects do not shrink with distance.",
+            performance: "Projection does not change the ray count; scene framing can still alter average path cost.",
+          }}
+          setValue={(value) => actions.setOrthographicHeight(value)}
+        />
+      )}
       <HelpedControl label="Depth of field" content={{
         meaning: "Samples rays across a finite lens instead of sending every ray through one camera point.",
         math: "Each ray starts at a random aperture position and aims toward the focal plane.",
@@ -1102,6 +1139,7 @@ function CameraSettings({
       }}><CheckboxField
           label="Depth of field"
           checked={settings.enableDepthOfField}
+          disabled={settings.cameraProjectionMode === "orthographic"}
           density="compact"
           layout="horizontal"
           onChange={(checked) =>
@@ -1112,7 +1150,7 @@ function CameraSettings({
       /></HelpedControl>
       <fieldset
         className="editor-controls-group"
-        disabled={!settings.enableDepthOfField}
+        disabled={!settings.enableDepthOfField || settings.cameraProjectionMode === "orthographic"}
       >
         <SettingsNumberField
           actions={actions}
@@ -2690,7 +2728,12 @@ function EditorShell({ actions }: { actions: PtActions }) {
 
   return (
     <>
-    <CameraRayDebugViewport actions={actions} fov={state.settings.fov} />
+    <CameraRayDebugViewport
+      actions={actions}
+      projectionMode={state.settings.cameraProjectionMode}
+      fov={state.settings.fov}
+      orthographicHeight={state.settings.orthographicHeight}
+    />
     {state.settings.renderMode === "comparison" && (
       <HybridComparisonSeam actions={actions} />
     )}
@@ -2814,7 +2857,17 @@ function EditorShell({ actions }: { actions: PtActions }) {
   );
 }
 
-function CameraRayDebugViewport({ actions, fov }: { actions: PtActions; fov: number }) {
+function CameraRayDebugViewport({
+  actions,
+  projectionMode,
+  fov,
+  orthographicHeight,
+}: {
+  actions: PtActions;
+  projectionMode: PtState["settings"]["cameraProjectionMode"];
+  fov: number;
+  orthographicHeight: number;
+}) {
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
   const [rayDensity, setRayDensity] = useState<"sparse" | "medium" | "dense">("sparse");
   const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(1);
@@ -2946,7 +2999,9 @@ function CameraRayDebugViewport({ actions, fov }: { actions: PtActions; fov: num
             </div>
           </div>}
           <span className="camera-ray-debug__camera-label">
-            FOV {Math.round(fov)}°
+            {projectionMode === "orthographic"
+              ? `Ortho height ${orthographicHeight.toFixed(2)}`
+              : `FOV ${Math.round(fov)}°`}
           </span>
         </div>
       )}

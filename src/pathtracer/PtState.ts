@@ -5,6 +5,7 @@ export type IntegratorMode = "bsdf" | "direct" | "mis";
 export type RenderMode = "raster" | "pathtraced" | "comparison" | "region" | "selectedObject";
 export type RegionTracingMode = "fullFrame" | "roiOnly";
 export type ComparisonTracingMode = "fullFrame" | "pathtracedSide";
+export type CameraProjectionMode = "perspective" | "orthographic";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
 export type TriangleOverlayMode = "off" | "selected" | "all";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Principled" | "Unknown";
@@ -66,6 +67,8 @@ export interface PtSettings {
   backgroundColorTop: string;
   backgroundColorBottom: string;
   fov: number;
+  cameraProjectionMode: CameraProjectionMode;
+  orthographicHeight: number;
   numSamples: number;
   maxRayDepth: number;
   integratorMode: IntegratorMode;
@@ -168,6 +171,8 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   backgroundColorTop: "#bcdaff",
   backgroundColorBottom: "#ffffff",
   fov: 75,
+  cameraProjectionMode: "perspective",
+  orthographicHeight: 4,
   numSamples: 1,
   maxRayDepth: 10,
   integratorMode: "bsdf",
