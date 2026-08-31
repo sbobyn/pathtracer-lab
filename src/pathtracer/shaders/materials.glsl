@@ -41,13 +41,30 @@ Surface evaluateSurface(Material material, Hit hit) {
         ? sampleTexture(material.metallicRoughnessTextureId, hit) : vec3(1.0);
     vec3 emissionTexture = (material.textureEnableMask & 4) != 0
         ? sampleTexture(material.emissionTextureId, hit) : vec3(0.0);
+    float transmissionTexture = (material.textureEnableMask & 8) != 0
+        ? sampleTexture(material.transmissionTextureId, hit).r : 1.0;
+    float thicknessTexture = (material.textureEnableMask & 16) != 0
+        ? sampleTexture(material.thicknessTextureId, hit).g : 1.0;
     return Surface(
         material.baseColorFactor * baseColorTexture,
         material.emissionFactor * emissionTexture,
         hit.shadingNormal,
         clamp(material.roughness * metallicRoughness.g, 0.045, 1.0),
-        clamp(material.metallic * metallicRoughness.b, 0.0, 1.0)
+        clamp(material.metallic * metallicRoughness.b, 0.0, 1.0),
+        clamp(material.transmission * transmissionTexture, 0.0, 1.0),
+        max(material.thickness * thicknessTexture, 0.0)
     );
+}
+
+vec3 volumeAttenuation(Material material, float distanceInMedium) {
+    if (isinf(material.attenuationDistance)) return vec3(1.0);
+    float safeDistance = max(material.attenuationDistance, 1e-6);
+    vec3 safeColor = max(material.attenuationColor, vec3(1e-6));
+    return exp(log(safeColor) * max(distanceInMedium, 0.0) / safeDistance);
+}
+
+float principledTransmissionProbability(Surface surface) {
+    return clamp(surface.transmission * (1.0 - surface.metallic), 0.0, 1.0);
 }
 
 float dielectricF0(float ior) {
@@ -93,7 +110,8 @@ float bsdfPdf(Material material, Surface surface, vec3 viewDirection, vec3 outgo
     float alpha = surface.roughness * surface.roughness;
     float diffusePdf = noL / PI;
     float specularPdf = ggxDistribution(noH, alpha) * noH / max(4.0 * voH, 1e-8);
-    return mix(diffusePdf, specularPdf, principledSpecularProbability(material, surface));
+    float surfacePdf = mix(diffusePdf, specularPdf, principledSpecularProbability(material, surface));
+    return (1.0 - principledTransmissionProbability(surface)) * surfacePdf;
 }
 
 vec3 evaluateBsdf(Material material, Surface surface, vec3 viewDirection, vec3 outgoingDirection) {
@@ -113,7 +131,7 @@ vec3 evaluateBsdf(Material material, Surface surface, vec3 viewDirection, vec3 o
     float masking = smithG1(noV, alpha) * smithG1(noL, alpha);
     vec3 specular = fresnel * distribution * masking / max(4.0 * noV * noL, 1e-8);
     vec3 diffuse = surface.baseColor * (vec3(1.0) - fresnel) * (1.0 - surface.metallic) / PI;
-    return diffuse + specular;
+    return (1.0 - principledTransmissionProbability(surface)) * (diffuse + specular);
 }
 
 vec3 sampleGgxReflection(vec3 viewDirection, vec3 normal, float alpha, vec2 seed) {
@@ -137,6 +155,7 @@ BsdfSample sampleBsdf(Ray incomingRay, Hit hit, Material material, Surface surfa
     result.weight = vec3(0.0);
     result.pdf = 0.0;
     result.delta = false;
+    result.transmitted = false;
     result.valid = false;
 
     if (material.model == 0) {
@@ -157,11 +176,31 @@ BsdfSample sampleBsdf(Ray incomingRay, Hit hit, Material material, Surface surfa
         result.direction = scatterDielectric(incomingRay, hit, surface.shadingNormal, seed);
         result.weight = surface.baseColor;
         result.delta = true;
+        result.transmitted = dot(result.direction, surface.shadingNormal) < 0.0;
         result.valid = true;
         return result;
     }
     if (material.model == 4) {
         vec3 viewDirection = normalize(-incomingRay.direction);
+        float chooseTransmission = principledTransmissionProbability(surface);
+        if (hash12(seed + vec2(71.3, 19.7)) < chooseTransmission) {
+            float ratio = surface.thickness > 0.0
+                ? (hit.frontFace ? 1.0 / material.ior : material.ior)
+                : 1.0;
+            vec3 unitDirection = normalize(incomingRay.direction);
+            float cosTheta = min(dot(-unitDirection, surface.shadingNormal), 1.0);
+            float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+            bool cannotRefract = ratio * sinTheta > 1.0;
+            bool useReflection = reflectance(cosTheta, material.ior) > hash12(seed + vec2(43.1, 83.7));
+            result.direction = cannotRefract || useReflection
+                ? reflect(unitDirection, surface.shadingNormal)
+                : refract(unitDirection, surface.shadingNormal, ratio);
+            result.weight = vec3(1.0);
+            result.delta = true;
+            result.transmitted = !cannotRefract && !useReflection;
+            result.valid = true;
+            return result;
+        }
         float chooseSpecular = principledSpecularProbability(material, surface);
         result.direction = hash12(seed + vec2(13.7, 29.3)) < chooseSpecular
             ? sampleGgxReflection(viewDirection, surface.shadingNormal, surface.roughness * surface.roughness, seed)

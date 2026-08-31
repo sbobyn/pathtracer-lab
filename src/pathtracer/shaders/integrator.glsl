@@ -5,9 +5,17 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
     vec3 previousOrigin = ray.origin;
     float previousBsdfPdf = 0.0;
     bool previousWasNonDelta = false;
+    int mediumStack[4];
+    int mediumDepth = 0;
     for (int depth = 0; depth < uMaxRayDepth; depth++) {
         bool didHit = hitWorld(world, ray, Interval(1e-3, 1e4), hit);
         if (didHit) {
+            if (mediumDepth > 0) {
+                throughput *= volumeAttenuation(
+                    readMaterial(mediumStack[mediumDepth - 1]),
+                    hit.t
+                );
+            }
             Material material = readMaterial(hit.materialId);
             Surface surface = evaluateSurface(material, hit);
             vec3 emission = emitted(material, surface, hit);
@@ -47,6 +55,19 @@ vec3 rayColor(Ray ray, World world, vec2 seed) {
             previousWasNonDelta = !bsdfSample.delta;
             previousBsdfPdf = bsdfSample.pdf;
             throughput *= bsdfSample.weight;
+            if (bsdfSample.transmitted && surface.thickness > 0.0) {
+                if (hit.frontFace) {
+                    if (mediumDepth < 4) {
+                        mediumStack[mediumDepth] = hit.materialId;
+                        mediumDepth += 1;
+                    }
+                } else if (
+                    mediumDepth > 0 &&
+                    mediumStack[mediumDepth - 1] == hit.materialId
+                ) {
+                    mediumDepth -= 1;
+                }
+            }
         } else {
             vec3 unitDirection = normalize(ray.direction);
             bool sampleEnvironment = uEnvironmentEnabled && (
