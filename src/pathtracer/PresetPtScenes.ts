@@ -113,6 +113,16 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 40;
     const scene = new PtScene([], materials, camera, [floor]);
+    // The HDR environment provides most of the material response, but it
+    // cannot cast a conventional Three.js shadow. Give Suzanne a deliberate
+    // raster-only key/fill balance so its floor shadow remains readable.
+    scene.ambientLight.intensity = 0.12;
+    scene.dirLight.intensity = 3;
+    scene.dirLight.shadow.camera.left = -5;
+    scene.dirLight.shadow.camera.right = 5;
+    scene.dirLight.shadow.camera.top = 5;
+    scene.dirLight.shadow.camera.bottom = -5;
+    scene.dirLight.shadow.camera.updateProjectionMatrix();
     const source = `${import.meta.env.BASE_URL}models/suzanne/Suzanne.gltf`;
     void scene.loadStaticGltf(source, 0, "Khronos glTF Suzanne");
     scene.backgroundColorTop.set(0x000000);

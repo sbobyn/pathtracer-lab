@@ -10,6 +10,62 @@ export interface EnvironmentImportanceDistribution {
   totalWeight: number;
 }
 
+/** Direction toward the brightest pooled region of an equirectangular HDR. */
+export function dominantEnvironmentDirection(
+  texture: THREE.DataTexture,
+  rotationDegrees = 0
+): THREE.Vector3 {
+  const image = texture.image as unknown as {
+    data: Float32Array | Uint16Array | Uint8Array;
+    width: number;
+    height: number;
+  };
+  const width = Math.min(image.width, MAX_DISTRIBUTION_WIDTH);
+  const height = Math.min(image.height, MAX_DISTRIBUTION_HEIGHT);
+  const channels = image.data.length / (image.width * image.height);
+  if (!Number.isInteger(channels) || channels < 3) {
+    throw new TypeError("Environment texture must contain at least RGB channels");
+  }
+  const luminance = new Float64Array(width * height);
+  const counts = new Uint32Array(width * height);
+  for (let sourceY = 0; sourceY < image.height; sourceY++) {
+    const targetY = Math.min(height - 1, Math.floor(sourceY * height / image.height));
+    for (let sourceX = 0; sourceX < image.width; sourceX++) {
+      const targetX = Math.min(width - 1, Math.floor(sourceX * width / image.width));
+      const offset = (sourceY * image.width + sourceX) * channels;
+      const target = targetY * width + targetX;
+      luminance[target] += Math.max(
+        0,
+        0.2126 * readChannel(image.data, offset, texture.type) +
+        0.7152 * readChannel(image.data, offset + 1, texture.type) +
+        0.0722 * readChannel(image.data, offset + 2, texture.type)
+      );
+      counts[target]++;
+    }
+  }
+  let brightest = 0;
+  let brightestValue = -Infinity;
+  for (let index = 0; index < luminance.length; index++) {
+    const average = counts[index] > 0 ? luminance[index] / counts[index] : 0;
+    if (average > brightestValue) {
+      brightest = index;
+      brightestValue = average;
+    }
+  }
+  const x = brightest % width;
+  const y = Math.floor(brightest / width);
+  const u = (x + 0.5) / width;
+  const v = 1 - (y + 0.5) / height;
+  const theta = (1 - v) * Math.PI;
+  const longitude = 2 * Math.PI * (u - 0.5) - THREE.MathUtils.degToRad(rotationDegrees);
+  const sinTheta = Math.sin(theta);
+  return new THREE.Vector3(
+    Math.cos(longitude) * sinTheta,
+    Math.cos(theta),
+    Math.sin(longitude) * sinTheta
+  ).normalize();
+}
+
 /**
  * Builds a two-level CDF over an equirectangular HDR image. Pixel luminance is
  * multiplied by the row's spherical solid angle, so poles do not receive the

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { configureRasterRenderer } from "./RasterPreviewQuality";
 import { ShaderCanvas } from "../utils/ShaderCanvas";
 import fragShader from "./shaders/main.fs";
 import {
@@ -277,6 +278,7 @@ export default class PtRenderer {
     this.camera = ptScene.camera;
 
     this.settings = settings;
+    this.applySceneEnvironmentSettings();
     this.objectIdTarget.texture.colorSpace = THREE.NoColorSpace;
     this.fallbackImageTexture.needsUpdate = true;
     this.fallbackEnvironmentDistribution.needsUpdate = true;
@@ -339,8 +341,7 @@ export default class PtRenderer {
     }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    configureRasterRenderer(this.renderer);
     this.renderer.autoClear = false;
   }
 
@@ -354,6 +355,7 @@ export default class PtRenderer {
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
     this.ptScene = ptScene;
+    this.applySceneEnvironmentSettings();
     this.gpuScene = this.sceneCompiler.compile(ptScene);
     this.packedSpheres = packSphereTexture(this.gpuScene.spheres, this.renderer.capabilities.maxTextureSize);
     this.packedSphereBvh = packSphereBvh(this.gpuScene.sphereBvh, this.renderer.capabilities.maxTextureSize);
@@ -1634,6 +1636,18 @@ export default class PtRenderer {
     this.ptScene.setEnvironmentMap(source, label);
     this.watchEnvironmentTexture();
     this.invalidate(PtInvalidationLevel.Settings, "environment source changed");
+  }
+
+  private applySceneEnvironmentSettings() {
+    const rotation = THREE.MathUtils.degToRad(this.settings.environmentRotation);
+    this.ptScene.scene.backgroundRotation.y = rotation;
+    this.ptScene.scene.environmentRotation.y = rotation;
+    this.ptScene.scene.backgroundIntensity = this.settings.environmentIntensity;
+    this.ptScene.scene.environmentIntensity =
+      this.settings.environmentLightingIntensity;
+    this.ptScene.syncEnvironmentShadowDirection(
+      this.settings.environmentRotation
+    );
   }
 
   private watchEnvironmentTexture() {

@@ -1,11 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { buildEnvironmentImportanceDistribution } from "../src/pathtracer/EnvironmentImportanceDistribution.ts";
+import {
+  buildEnvironmentImportanceDistribution,
+  dominantEnvironmentDirection,
+} from "../src/pathtracer/EnvironmentImportanceDistribution.ts";
 
 function texture(data: Float32Array, width: number, height: number) {
   return new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
 }
+
+test("dominant environment direction follows the brightest texel and rotation", () => {
+  const data = new Float32Array(4 * 2 * 4);
+  data.fill(0);
+  for (let pixel = 0; pixel < 8; pixel++) data[pixel * 4 + 3] = 1;
+  const bright = (1 * 4 + 2) * 4;
+  data[bright] = data[bright + 1] = data[bright + 2] = 100;
+  const map = texture(data, 4, 2);
+  const direction = dominantEnvironmentDirection(map);
+  assert.ok(Math.abs(direction.x - 0.5) < 1e-6);
+  assert.ok(Math.abs(direction.y + Math.SQRT1_2) < 1e-6);
+  assert.ok(Math.abs(direction.z - 0.5) < 1e-6);
+  const rotated = dominantEnvironmentDirection(map, 90);
+  assert.ok(Math.abs(rotated.x - 0.5) < 1e-6);
+  assert.ok(Math.abs(rotated.z + 0.5) < 1e-6);
+});
 
 test("environment distribution normalizes its marginal and conditional CDFs", () => {
   const distribution = buildEnvironmentImportanceDistribution(texture(new Float32Array([

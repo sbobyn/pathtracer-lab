@@ -101,6 +101,9 @@ export class ShaderCanvas {
 
     this.screenMaterial = new THREE.MeshBasicMaterial({
       map: this.pongRenderTarget.texture,
+      // The path tracer owns its radiometric response. Renderer tone mapping
+      // is reserved for the conventional raster preview.
+      toneMapped: false,
     });
     const screenQuad = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 2),

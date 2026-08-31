@@ -413,6 +413,7 @@ export default class PtActions {
     this.renderer.ptScene.scene.environmentRotation.y = THREE.MathUtils.degToRad(value);
     this.renderer.settings.environmentRotation = value;
     this.renderer.uniforms.uEnvironmentRotation.value = value;
+    this.renderer.ptScene.syncEnvironmentShadowDirection(value);
     this.renderer.invalidate(PtInvalidationLevel.Settings, "environment rotation changed");
     this.updateSetting("environmentRotation", value);
   }
