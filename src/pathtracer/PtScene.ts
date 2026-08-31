@@ -547,8 +547,8 @@ export function isPtTriangleMesh(object: THREE.Object3D): object is PtTriangleMe
 
 /**
  * Approximate an emissive path-traced quad in the Three.js preview.
- * RectAreaLight supplies broad preview illumination while a small grid of
- * aligned spotlights approximates the soft shadows Three.js area lights lack.
+ * RectAreaLight supplies broad preview illumination while one aligned,
+ * filtered spotlight supplies the shadow map Three.js area lights lack.
  */
 export function syncEmissiveQuadPreview(mesh: PtQuadMesh) {
   const definition = getMaterialMetadata(mesh.material).materialDefinition;
@@ -586,9 +586,7 @@ export function syncEmissiveQuadPreview(mesh: PtQuadMesh) {
   );
   for (const shadowProxy of shadowProxies) {
     shadowProxy.color.copy(color);
-    // Split the emitter's contribution across the samples. Their overlapping
-    // shadow maps create a useful raster approximation of an area penumbra.
-    shadowProxy.intensity = emission.strength * 0.55;
+    shadowProxy.intensity = emission.strength * 1.2;
   }
 }
 
@@ -693,36 +691,27 @@ function createEmissiveQuadPreview(): THREE.Group {
   area.rotation.y = Math.PI;
   group.add(area);
 
-  // The authored quad normal is local +Z. Sample the rectangle near its four
-  // quadrants and aim each light along +Z. A shared target keeps the rig
-  // stable when the authored quad is transformed.
+  // The authored quad normal is local +Z. A centered proxy avoids the visibly
+  // duplicated wall shadows produced by multiple discrete shadow maps.
   const target = new THREE.Object3D();
   target.position.z = 2;
   group.add(target);
-  for (const [x, y] of [
-    [-0.3, -0.3],
-    [0.3, -0.3],
-    [-0.3, 0.3],
-    [0.3, 0.3],
-  ]) {
-    const shadowProxy = new THREE.SpotLight(
-      0xffffff,
-      1,
-      0,
-      THREE.MathUtils.degToRad(58),
-      0.65,
-      2
-    );
-    shadowProxy.position.set(x, y, -0.03);
-    shadowProxy.target = target;
-    shadowProxy.userData.pathTracerEmissiveShadowProxy = true;
-    configureRasterLightShadow(shadowProxy);
-    // Four modest maps cost the same texel budget as one 2048² map and give
-    // the rectangle enough spatial extent to create visibly soft edges.
-    shadowProxy.shadow.mapSize.set(1024, 1024);
-    shadowProxy.shadow.camera.far = 20;
-    group.add(shadowProxy);
-  }
+  const shadowProxy = new THREE.SpotLight(
+    0xffffff,
+    1,
+    0,
+    THREE.MathUtils.degToRad(58),
+    0.65,
+    2
+  );
+  shadowProxy.position.set(0, 0, -0.03);
+  shadowProxy.target = target;
+  shadowProxy.userData.pathTracerEmissiveShadowProxy = true;
+  configureRasterLightShadow(shadowProxy);
+  shadowProxy.shadow.mapSize.set(2048, 2048);
+  shadowProxy.shadow.radius = 5;
+  shadowProxy.shadow.camera.far = 20;
+  group.add(shadowProxy);
 
   return group;
 }
