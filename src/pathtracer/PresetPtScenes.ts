@@ -223,7 +223,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       new PtSphere(new THREE.Vector3(-1.15, 0, 0), 0.8, 1),
       // Hollow reference: glass outer boundary and concentric air cavity.
       new PtSphere(new THREE.Vector3(1.15, 0, 0), 0.8, 1),
-      new PtSphere(new THREE.Vector3(1.15, 0, 0), 0.62, 2),
+      new PtSphere(new THREE.Vector3(1.15, 0, 0), 0.74, 2),
       // Colored objects behind the glass make lensing differences obvious.
       new PtSphere(new THREE.Vector3(-1.15, -0.38, -2), 0.42, 3),
       new PtSphere(new THREE.Vector3(1.15, -0.38, -2), 0.42, 4),
@@ -234,7 +234,26 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       far: 10000,
     });
     camera.fov = 34;
-    return createRtiowGroundScene(spheres, materials, camera, -0.8, 6);
+    const scene = createRtiowGroundScene(spheres, materials, camera, -0.8, 6);
+    const previewSpheres = scene.getSphereMeshes();
+    const solidGlass = previewSpheres[0].material;
+    const hollowGlass = solidGlass.clone();
+    if (
+      solidGlass instanceof THREE.MeshPhysicalMaterial &&
+      hollowGlass instanceof THREE.MeshPhysicalMaterial
+    ) {
+      solidGlass.thickness = 1.6;
+      // Three.js cannot track the nested glass/air medium. Its closest native
+      // representation is a transmissive shell whose optical thickness is the
+      // distance between the authored outer and inner radii.
+      hollowGlass.thickness = 0.8 - 0.74;
+      hollowGlass.needsUpdate = true;
+      previewSpheres[1].material = hollowGlass;
+    }
+    // Keep the reciprocal-IOR cavity in the analytic scene for path tracing,
+    // but do not draw it as a second overlapping physical material in raster.
+    previewSpheres[2].material.visible = false;
+    return scene;
   },
 
   RTIOW1Final: () => {
