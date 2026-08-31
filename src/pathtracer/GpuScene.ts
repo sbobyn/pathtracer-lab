@@ -52,12 +52,19 @@ export interface GpuMaterial {
   baseColorTextureId: number;
   emissionTextureId: number;
   metallicRoughnessTextureId: number;
+  transmissionTextureId: number;
+  thicknessTextureId: number;
   textureEnableMask: number;
   baseColorFactor: THREE.Color;
   emissionFactor: THREE.Color;
   roughness: number;
   metallic: number;
   ior: number;
+  transmission: number;
+  thickness: number;
+  attenuationColor: THREE.Color;
+  attenuationDistance: number;
+  dispersion: number;
   emissionStrength: number;
   emissionTwoSided: boolean;
 }

@@ -41,6 +41,19 @@ export interface PtMaterialDefinition {
   metallicRoughnessTexture: PtTexture;
   metallicRoughnessTextureEnabled: boolean;
   ior: number;
+  transmission: {
+    factor: number;
+    texture: PtTexture;
+    textureEnabled: boolean;
+  };
+  volume: {
+    thickness: number;
+    thicknessTexture: PtTexture;
+    thicknessTextureEnabled: boolean;
+    attenuationColor: THREE.Color;
+    attenuationDistance: number;
+  };
+  dispersion: number;
   emission: {
     color: PtColorInput;
     strength: number;
@@ -56,6 +69,15 @@ export interface PtMaterialOptions {
   metallicRoughnessTexture?: PtTexture;
   metallicRoughnessTextureEnabled?: boolean;
   ior?: number;
+  transmission?: number;
+  transmissionTexture?: PtTexture;
+  transmissionTextureEnabled?: boolean;
+  thickness?: number;
+  thicknessTexture?: PtTexture;
+  thicknessTextureEnabled?: boolean;
+  attenuationColor?: THREE.Color;
+  attenuationDistance?: number;
+  dispersion?: number;
   emissionColor?: PtColorSource;
   emissionStrength?: number;
   emissionTwoSided?: boolean;
@@ -146,6 +168,21 @@ export default class PtMaterial {
         options.metallicRoughnessTexture ?? constantTexture(0xffffff),
       metallicRoughnessTextureEnabled: options.metallicRoughnessTextureEnabled ?? true,
       ior: options.ior ?? 0,
+      transmission: {
+        factor: options.transmission ?? 0,
+        texture: options.transmissionTexture ?? constantTexture(0xffffff),
+        textureEnabled:
+          options.transmissionTextureEnabled ?? options.transmissionTexture !== undefined,
+      },
+      volume: {
+        thickness: options.thickness ?? 0,
+        thicknessTexture: options.thicknessTexture ?? constantTexture(0xffffff),
+        thicknessTextureEnabled:
+          options.thicknessTextureEnabled ?? options.thicknessTexture !== undefined,
+        attenuationColor: options.attenuationColor?.clone() ?? new THREE.Color(1, 1, 1),
+        attenuationDistance: options.attenuationDistance ?? Infinity,
+      },
+      dispersion: options.dispersion ?? 0,
       emission: {
         color: colorInput(options.emissionColor ?? new THREE.Color(0, 0, 0)),
         strength: options.emissionStrength ?? 0,

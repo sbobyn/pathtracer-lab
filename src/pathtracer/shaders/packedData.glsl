@@ -1,6 +1,6 @@
 const int TRIANGLE_TEXELS = 8;
 const int SPHERE_TEXELS = 2;
-const int MATERIAL_TEXELS = 4;
+const int MATERIAL_TEXELS = 7;
 const int TEXTURE_TEXELS = 3;
 
 vec4 readPackedTexel(sampler2D dataTexture, vec2 dataSize, int linearIndex) {
@@ -26,9 +26,15 @@ Material readMaterial(int materialIndex) {
     vec4 baseColor = readPackedTexel(uMaterialData, uMaterialDataSize, base + 1);
     vec4 emission = readPackedTexel(uMaterialData, uMaterialDataSize, base + 2);
     vec4 flags = readPackedTexel(uMaterialData, uMaterialDataSize, base + 3);
+    vec4 transmission = readPackedTexel(uMaterialData, uMaterialDataSize, base + 4);
+    vec4 attenuation = readPackedTexel(uMaterialData, uMaterialDataSize, base + 5);
+    vec4 volume = readPackedTexel(uMaterialData, uMaterialDataSize, base + 6);
     return Material(
-        int(round(surface.x)), int(round(surface.y)), int(round(surface.z)), int(round(flags.y)), int(round(flags.w)),
-        baseColor.rgb, emission.rgb, surface.w, flags.z, baseColor.w, emission.w, flags.x > 0.5
+        int(round(surface.x)), int(round(surface.y)), int(round(surface.z)), int(round(flags.y)),
+        int(round(transmission.x)), int(round(transmission.z)), int(round(flags.w)),
+        baseColor.rgb, emission.rgb, attenuation.rgb,
+        surface.w, flags.z, baseColor.w, transmission.y, transmission.w,
+        volume.x, attenuation.w, emission.w, flags.x > 0.5
     );
 }
 

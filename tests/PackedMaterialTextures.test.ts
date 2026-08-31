@@ -4,21 +4,31 @@ import * as THREE from "three";
 import { packMaterialTexture, packTextureTexture } from "../src/pathtracer/PackedMaterialTextures.ts";
 import type { GpuMaterial, GpuTexture } from "../src/pathtracer/GpuScene.ts";
 
-test("material packing preserves semantic factors in the extensible four-texel layout", () => {
+test("material packing preserves transmission and volume in the extensible layout", () => {
   const material: GpuMaterial = {
     model: 3, baseColorTextureId: 4, emissionTextureId: 5, roughness: 0.25, ior: 1.5,
     metallicRoughnessTextureId: 6, metallic: 0.75, textureEnableMask: 7,
+    transmissionTextureId: 8, transmission: 0.6,
+    thicknessTextureId: 9, thickness: 0.25,
+    attenuationColor: new THREE.Color(0.8, 0.9, 1),
+    attenuationDistance: 4, dispersion: 0.2,
     baseColorFactor: new THREE.Color(0.25, 0.5, 0.75),
     emissionFactor: new THREE.Color(1, 0.125, 0),
     emissionStrength: 7, emissionTwoSided: true,
   };
   const packed = packMaterialTexture([material], 64);
-  assert.deepEqual(Array.from(packed.texture.image.data as Float32Array).slice(0, 16), [
+  assert.deepEqual(
+    Array.from(packed.texture.image.data as Float32Array).slice(0, 28),
+    Array.from(new Float32Array([
     3, 4, 5, 0.25,
     0.25, 0.5, 0.75, 1.5,
     1, 0.125, 0, 7,
     1, 6, 0.75, 7,
-  ]);
+    8, 0.6, 9, 0.25,
+    0.8, 0.9, 1, 0.2,
+    4, 0, 0, 0,
+    ]))
+  );
   packed.texture.dispose();
 });
 

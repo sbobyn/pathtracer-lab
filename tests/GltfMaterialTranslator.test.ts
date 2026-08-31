@@ -37,8 +37,27 @@ test("glTF standard materials retain continuous metallic-roughness semantics", (
 });
 
 test("glTF physical materials preserve authored IOR", () => {
-  const source = new THREE.MeshPhysicalMaterial({ ior: 1.33 });
-  assert.equal(translateStaticGltfMaterial(source).definition.ior, 1.33);
+  const transmissionMap = new THREE.Texture();
+  const thicknessMap = new THREE.Texture();
+  const source = new THREE.MeshPhysicalMaterial({
+    ior: 1.33,
+    transmission: 0.8,
+    transmissionMap,
+    thickness: 0.4,
+    thicknessMap,
+    attenuationColor: new THREE.Color(0.7, 0.85, 1),
+    attenuationDistance: 2.5,
+    dispersion: 0.1,
+  });
+  const translated = translateStaticGltfMaterial(source).definition;
+  assert.equal(translated.ior, 1.33);
+  assert.equal(translated.transmission.factor, 0.8);
+  assert.equal(translated.transmission.texture.type, PtTextureType.Image);
+  assert.equal(translated.volume.thickness, 0.4);
+  assert.equal(translated.volume.thicknessTexture.type, PtTextureType.Image);
+  assert.ok(translated.volume.attenuationColor.equals(source.attenuationColor));
+  assert.equal(translated.volume.attenuationDistance, 2.5);
+  assert.equal(translated.dispersion, 0.1);
 });
 
 test("unsupported UV sets and texture transforms fail explicitly", () => {

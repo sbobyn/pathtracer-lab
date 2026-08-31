@@ -75,6 +75,30 @@ test("principled materials preserve continuous metallic-roughness inputs", () =>
   assert.equal(material.definition.metallicRoughnessTexture, dataTexture);
 });
 
+test("principled materials preserve transmissive volume semantics", () => {
+  const transmissionTexture = checkerTexture(0xffffff, 0x000000, 2);
+  const thicknessTexture = checkerTexture(0x00ff00, 0x000000, 2);
+  const material = PtMaterial.principledMetallicRoughness({
+    transmission: 0.8,
+    transmissionTexture,
+    thickness: 0.35,
+    thicknessTexture,
+    attenuationColor: new THREE.Color(0.7, 0.85, 1),
+    attenuationDistance: 2.5,
+    dispersion: 0.12,
+  });
+
+  assert.equal(material.definition.transmission.factor, 0.8);
+  assert.equal(material.definition.transmission.texture, transmissionTexture);
+  assert.equal(material.definition.transmission.textureEnabled, true);
+  assert.equal(material.definition.volume.thickness, 0.35);
+  assert.equal(material.definition.volume.thicknessTexture, thicknessTexture);
+  assert.equal(material.definition.volume.thicknessTextureEnabled, true);
+  assert.ok(material.definition.volume.attenuationColor.equals(new THREE.Color(0.7, 0.85, 1)));
+  assert.equal(material.definition.volume.attenuationDistance, 2.5);
+  assert.equal(material.definition.dispersion, 0.12);
+});
+
 test("the positional constructor remains a temporary legacy adapter", () => {
   const material = new PtMaterial(
     PtMaterialType.Metal,

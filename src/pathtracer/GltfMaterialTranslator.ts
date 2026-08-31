@@ -11,6 +11,10 @@ export function translateStaticGltfMaterial(material: THREE.Material): PtMateria
   validateTexture(material.metalnessMap, "metallic-roughness");
   validateTexture(material.roughnessMap, "metallic-roughness");
   validateTexture(material.emissiveMap, "emission");
+  if (material instanceof THREE.MeshPhysicalMaterial) {
+    validateTexture(material.transmissionMap, "transmission");
+    validateTexture(material.thicknessMap, "volume thickness");
+  }
   const baseColor = material.map
     ? {
         factor: material.color.clone(),
@@ -30,6 +34,7 @@ export function translateStaticGltfMaterial(material: THREE.Material): PtMateria
         textureEnabled: true,
       }
     : material.emissive.clone();
+  const physical = material instanceof THREE.MeshPhysicalMaterial ? material : null;
   return PtMaterial.principledMetallicRoughness({
     baseColor,
     metallic: material.metalness,
@@ -37,7 +42,18 @@ export function translateStaticGltfMaterial(material: THREE.Material): PtMateria
     metallicRoughnessTexture: metallicRoughnessMap
       ? imageTexture(textureSource(metallicRoughnessMap), 0xffffff, metallicRoughnessMap)
       : undefined,
-    ior: material instanceof THREE.MeshPhysicalMaterial ? material.ior : 1.5,
+    ior: physical?.ior ?? 1.5,
+    transmission: physical?.transmission ?? 0,
+    transmissionTexture: physical?.transmissionMap
+      ? imageTexture(textureSource(physical.transmissionMap), 0xffffff, physical.transmissionMap)
+      : undefined,
+    thickness: physical?.thickness ?? 0,
+    thicknessTexture: physical?.thicknessMap
+      ? imageTexture(textureSource(physical.thicknessMap), 0xffffff, physical.thicknessMap)
+      : undefined,
+    attenuationColor: physical?.attenuationColor,
+    attenuationDistance: physical?.attenuationDistance,
+    dispersion: physical?.dispersion ?? 0,
     emissionColor,
     emissionStrength: material.emissiveIntensity,
     emissionTwoSided: material.side === THREE.DoubleSide,

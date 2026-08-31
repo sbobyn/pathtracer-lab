@@ -5,7 +5,7 @@ struct Quad { vec3 q; vec3 u; vec3 v; vec3 normal; int materialId; };
 struct Triangle { vec3 a; vec3 b; vec3 c; vec3 normalA; vec3 normalB; vec3 normalC; vec2 uvA; vec2 uvB; vec2 uvC; int materialId; };
 struct Light { int kind; int primitiveType; int primitiveIndex; int materialId; float area; bool emissionTwoSided; vec3 position; vec3 direction; vec3 color; float intensity; float angularDiameter; float innerConeCos; float outerConeCos; };
 struct World { Quad quads[MAX_QUADS]; };
-struct Material { int model; int baseColorTextureId; int emissionTextureId; int metallicRoughnessTextureId; int textureEnableMask; vec3 baseColorFactor; vec3 emissionFactor; float roughness; float metallic; float ior; float emissionStrength; bool emissionTwoSided; };
+struct Material { int model; int baseColorTextureId; int emissionTextureId; int metallicRoughnessTextureId; int transmissionTextureId; int thicknessTextureId; int textureEnableMask; vec3 baseColorFactor; vec3 emissionFactor; vec3 attenuationColor; float roughness; float metallic; float ior; float transmission; float thickness; float attenuationDistance; float dispersion; float emissionStrength; bool emissionTwoSided; };
 struct Surface { vec3 baseColor; vec3 emission; vec3 shadingNormal; float roughness; float metallic; };
 struct BsdfSample { vec3 direction; vec3 weight; float pdf; bool delta; bool valid; };
 struct Texture { int type; vec3 colorA; vec3 colorB; float scale; float turbulence; int imageId; };

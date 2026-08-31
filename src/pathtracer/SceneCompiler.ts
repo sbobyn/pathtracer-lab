@@ -152,11 +152,27 @@ export default class SceneCompiler {
         imageTextures,
         imageTextureIds
       ));
+      const transmissionTextureId = textures.length;
+      textures.push(this.compileTexture(
+        metadata.materialDefinition.transmission.texture,
+        material,
+        imageTextures,
+        imageTextureIds
+      ));
+      const thicknessTextureId = textures.length;
+      textures.push(this.compileTexture(
+        metadata.materialDefinition.volume.thicknessTexture,
+        material,
+        imageTextures,
+        imageTextureIds
+      ));
       return compileGpuMaterial(
         metadata.materialDefinition,
         baseColorTextureId,
         emissionTextureId,
-        metallicRoughnessTextureId
+        metallicRoughnessTextureId,
+        transmissionTextureId,
+        thicknessTextureId
       );
     });
     if (imageTextures.length > MAX_WEBGL_IMAGE_TEXTURES) {
