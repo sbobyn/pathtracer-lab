@@ -35,6 +35,11 @@ export const presetPtSceneInfo: Record<string, PresetPtSceneInfo> = {
     implementation: "Analytic sphere intersections feed the original legacy scattering models, providing a stable baseline as the renderer architecture evolves.",
     concepts: "Diffuse rays sample a hemisphere, metals reflect with optional fuzz, and dielectrics choose reflection or refraction using total internal reflection and Schlick reflectance.",
   },
+  RTIOW1HollowGlassStudy: {
+    purpose: "Compares a solid glass sphere with a hollow glass shell using the dielectric construction from Ray Tracing in One Weekend.",
+    implementation: "The solid reference has one air-to-glass boundary. The hollow reference adds a concentric inner sphere whose relative IOR is air divided by glass, creating a glass-to-air cavity boundary.",
+    concepts: "A hollow dielectric is a geometry-and-medium problem, not only a surface setting: rays refract at the outer glass boundary, enter the air cavity, re-enter glass, and finally return to the surrounding air.",
+  },
   RTIOW1Final: {
     purpose: "Preserves the randomized final scene from the first RTIOW book and tests many sphere/material combinations.",
     implementation: "Procedurally creates a field of diffuse, metal, and glass spheres plus three large reference spheres using the legacy material adapters.",
