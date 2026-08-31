@@ -649,7 +649,13 @@ function createPreviewMaterial(
     const emissionMap = material.definition.emission.color.textureEnabled
       ? createPreviewTexture(material.definition.emission.color.texture)
       : null;
-    previewMaterial = new THREE.MeshStandardMaterial({
+    const transmissionMap = material.definition.transmission.textureEnabled
+      ? createPreviewTexture(material.definition.transmission.texture, false)
+      : null;
+    const thicknessMap = material.definition.volume.thicknessTextureEnabled
+      ? createPreviewTexture(material.definition.volume.thicknessTexture, false)
+      : null;
+    const materialOptions = {
       color: previewColor,
       map: previewMap,
       metalness: material.definition.metallic,
@@ -665,7 +671,21 @@ function createPreviewMaterial(
         : new THREE.Color(0x000000),
       emissiveMap: emissionMap,
       emissiveIntensity: material.definition.emission.strength,
-    });
+    };
+    previewMaterial = material.definition.transmission.factor > 0
+      ? new THREE.MeshPhysicalMaterial({
+          ...materialOptions,
+          ior: material.definition.ior,
+          transmission: material.definition.transmission.factor,
+          transmissionMap,
+          thickness: material.definition.volume.thickness,
+          thicknessMap,
+          attenuationColor: material.definition.volume.attenuationColor,
+          attenuationDistance: material.definition.volume.attenuationDistance,
+          dispersion: material.definition.dispersion,
+          transparent: true,
+        })
+      : new THREE.MeshStandardMaterial(materialOptions);
   } else if (material.type === PtMaterialType.Emissive) {
     previewMaterial = new THREE.MeshBasicMaterial({
       color: previewColor,

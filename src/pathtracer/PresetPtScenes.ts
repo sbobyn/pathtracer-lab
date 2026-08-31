@@ -25,6 +25,84 @@ export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
 }
 
 export const PresetPtScenes: { [key: string]: () => PtScene } = {
+  TransmissionVolumeStudy: () => {
+    const backdrop = PtMaterial.legacyLambert(checkerTexture(0xf2f4f7, 0x172033, 3));
+    const neutralGround = PtMaterial.legacyLambert(new THREE.Color(0.32, 0.36, 0.43));
+    const glass = (options: {
+      ior?: number;
+      roughness?: number;
+      thickness?: number;
+      attenuationColor?: THREE.Color;
+      attenuationDistance?: number;
+    } = {}) => PtMaterial.principledMetallicRoughness({
+      baseColor: new THREE.Color(1, 1, 1),
+      metallic: 0,
+      roughness: options.roughness ?? 0,
+      ior: options.ior ?? 1.5,
+      transmission: 1,
+      thickness: options.thickness ?? 1.2,
+      attenuationColor: options.attenuationColor,
+      attenuationDistance: options.attenuationDistance,
+    });
+    const materials = [
+      backdrop,
+      neutralGround,
+      PtMaterial.principledMetallicRoughness({
+        baseColor: new THREE.Color(0.78, 0.83, 0.9),
+        roughness: 0.05,
+        metallic: 0,
+        ior: 1.5,
+      }),
+      glass({ thickness: 0 }),
+      glass(),
+      glass({ roughness: 0.25 }),
+      glass({ ior: 2.0 }),
+      glass({
+        attenuationColor: new THREE.Color(0.18, 0.62, 0.95),
+        attenuationDistance: 1.2,
+      }),
+    ];
+    const spheres = [
+      // Top row: opaque dielectric surface, thin wall, smooth volume,
+      // rough volume, and higher IOR. All other inputs are held constant.
+      new PtSphere(new THREE.Vector3(-3.0, 0.7, 0), 0.58, 2),
+      new PtSphere(new THREE.Vector3(-1.5, 0.7, 0), 0.58, 3),
+      new PtSphere(new THREE.Vector3(0, 0.7, 0), 0.58, 4),
+      new PtSphere(new THREE.Vector3(1.5, 0.7, 0), 0.58, 5),
+      new PtSphere(new THREE.Vector3(3.0, 0.7, 0), 0.58, 6),
+      // Bottom row: identical absorbing glass with increasing chord length.
+      // Their bottoms share the same ground plane so size is the only change.
+      new PtSphere(new THREE.Vector3(-1.65, -0.7, 0), 0.3, 7),
+      new PtSphere(new THREE.Vector3(0, -0.5, 0), 0.5, 7),
+      new PtSphere(new THREE.Vector3(1.85, -0.25, 0), 0.75, 7),
+    ];
+    const quads = [
+      new PtQuad(
+        new THREE.Vector3(-5, -1, -2.2),
+        new THREE.Vector3(10, 0, 0),
+        new THREE.Vector3(0, 4.2, 0),
+        0
+      ),
+      new PtQuad(
+        new THREE.Vector3(-5, -1, 2.5),
+        new THREE.Vector3(10, 0, 0),
+        new THREE.Vector3(0, 0, -5),
+        1
+      ),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 0.2, 7.6),
+      lookAt: new THREE.Vector3(0, 0, 0),
+      far: 10000,
+    });
+    camera.fov = 34;
+    const scene = new PtScene(spheres, materials, camera, quads);
+    scene.backgroundColorTop.set(0xd6e8ff);
+    scene.backgroundColorBottom.set(0xffffff);
+    scene.scene.background = scene.backgroundColorTop;
+    return scene;
+  },
+
   PrincipledMaterialStudy: () => {
     const metallicValues = [0, 0.5, 1];
     const roughnessValues = [0.05, 0.25, 0.5, 0.75, 1];
@@ -713,6 +791,7 @@ export const presetPtSceneOrder = [
   "GlTFSimpleMeshesStudy",
   "DamagedHelmetStudy",
   "PrincipledMaterialStudy",
+  "TransmissionVolumeStudy",
   "RTIOW1SphereBvhStudy",
 ] as const;
 

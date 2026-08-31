@@ -5,6 +5,11 @@ export type PresetPtSceneInfo = {
 };
 
 export const presetPtSceneInfo: Record<string, PresetPtSceneInfo> = {
+  TransmissionVolumeStudy: {
+    purpose: "Provides controlled visual references for thin-wall transmission, solid refraction, rough glass, IOR, and Beer–Lambert volume absorption.",
+    implementation: "The top row holds geometry and lighting constant while varying opaque/thin/solid/rough/high-IOR behavior. The bottom row uses one absorbing material on increasingly large spheres so only the distance traveled through the medium changes.",
+    concepts: "Thin walls transmit without entering a medium. Solid boundaries refract and track nested media. Beer–Lambert transmittance is exponential: after one attenuation distance, white light becomes the authored attenuation color.",
+  },
   PrincipledMaterialStudy: {
     purpose: "Compares continuous metallic and roughness values under the same studio illumination.",
     implementation: "A grid of principled spheres varies metallic by row and roughness by column while keeping base color, geometry, camera, and HDR fixed.",
