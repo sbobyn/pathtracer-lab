@@ -194,6 +194,14 @@ export default class PtActions {
     this.store.update((state) => ({ ...state, bvhTraversal: traversal }));
   }
 
+  public setCameraDebugBvhDepth(depth: number) {
+    this.renderer.setCameraDebugBvhDepth(depth);
+  }
+
+  public setCameraDebugBvhEnabled(enabled: boolean) {
+    this.renderer.setCameraDebugBvhEnabled(enabled);
+  }
+
   public setBvhTraversalStep(step: number) {
     const current = this.store.getState().bvhTraversal;
     if (current.events.length === 0) return;
@@ -329,6 +337,10 @@ export default class PtActions {
     this.renderer.setHybridComparisonSeam(seam);
   }
 
+  public getHybridComparisonSeam() {
+    return this.renderer.getHybridComparisonSeam();
+  }
+
   public setHybridComparisonInteractionActive(active: boolean) {
     this.renderer.setHybridInteractionActive(active);
   }
@@ -401,6 +413,7 @@ export default class PtActions {
     this.renderer.ptScene.scene.environmentRotation.y = THREE.MathUtils.degToRad(value);
     this.renderer.settings.environmentRotation = value;
     this.renderer.uniforms.uEnvironmentRotation.value = value;
+    this.renderer.ptScene.syncEnvironmentShadowDirection(value);
     this.renderer.invalidate(PtInvalidationLevel.Settings, "environment rotation changed");
     this.updateSetting("environmentRotation", value);
   }

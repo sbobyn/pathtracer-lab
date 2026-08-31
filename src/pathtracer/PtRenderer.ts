@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { configureRasterRenderer } from "./RasterPreviewQuality";
 import { ShaderCanvas } from "../utils/ShaderCanvas";
 import fragShader from "./shaders/main.fs";
 import {
@@ -69,17 +70,14 @@ export default class PtRenderer {
   });
   private readonly objectIdMaterials = new Map<string, THREE.ShaderMaterial>();
   private readonly objectIdColors = new Map<string, THREE.Vector3>();
-  private readonly objectMaskDepthMaterial = new THREE.MeshBasicMaterial({
-    colorWrite: false,
-    depthWrite: true,
-    depthTest: true,
-    side: THREE.DoubleSide,
-  });
   private readonly objectMaskStencilMaterial = new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: false,
-    depthTest: true,
-    depthFunc: THREE.EqualDepth,
+    // The object-ID composite is authoritative for final visible-surface
+    // selection and occlusion. Avoid a separate depth-equality prepass here:
+    // transformed analytic sphere/quad proxies can fail exact depth replay
+    // even though their object-ID silhouettes are correct.
+    depthTest: false,
     side: THREE.DoubleSide,
     stencilWrite: true,
     stencilRef: 1,
@@ -102,6 +100,7 @@ export default class PtRenderer {
       },
       uSelectedObjectIdCount: { value: 0 },
       uObjectMode: { value: false },
+      uObjectComparisonMode: { value: false },
       uObjectSelectionActive: { value: false },
     },
     vertexShader: `
@@ -121,6 +120,7 @@ export default class PtRenderer {
       uniform vec3 uSelectedObjectIdColors[32];
       uniform int uSelectedObjectIdCount;
       uniform bool uObjectMode;
+      uniform bool uObjectComparisonMode;
       uniform bool uObjectSelectionActive;
       varying vec2 vUv;
       void main() {
@@ -138,7 +138,11 @@ export default class PtRenderer {
             uSelectedObjectIdColors[i]
           ) <= (0.5 / 255.0);
         }
-        gl_FragColor = uObjectMode
+        gl_FragColor = uObjectComparisonMode
+          ? (uObjectSelectionActive && selectedObject && vUv.x >= uSeam
+              ? pathtraced
+              : raster)
+          : uObjectMode
           ? (uObjectSelectionActive && selectedObject ? pathtraced : raster)
           : uRegionMode
             ? (insideRegion ? pathtraced : raster)
@@ -166,6 +170,8 @@ export default class PtRenderer {
   private cameraDebugDirty = true;
   private cameraDebugRayGrid = { columns: 5, rows: 3 };
   private cameraDebugMaxDepth = 1;
+  private cameraDebugBvhEnabled = true;
+  private cameraDebugBvhDepth = 2;
   private cameraDebugControls: OrbitControls | null = null;
   private cameraDebugUserControlled = false;
   private cameraDebugInteractionActive = false;
@@ -272,6 +278,7 @@ export default class PtRenderer {
     this.camera = ptScene.camera;
 
     this.settings = settings;
+    this.applySceneEnvironmentSettings();
     this.objectIdTarget.texture.colorSpace = THREE.NoColorSpace;
     this.fallbackImageTexture.needsUpdate = true;
     this.fallbackEnvironmentDistribution.needsUpdate = true;
@@ -334,8 +341,7 @@ export default class PtRenderer {
     }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    configureRasterRenderer(this.renderer);
     this.renderer.autoClear = false;
   }
 
@@ -349,6 +355,7 @@ export default class PtRenderer {
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
     this.ptScene = ptScene;
+    this.applySceneEnvironmentSettings();
     this.gpuScene = this.sceneCompiler.compile(ptScene);
     this.packedSpheres = packSphereTexture(this.gpuScene.spheres, this.renderer.capabilities.maxTextureSize);
     this.packedSphereBvh = packSphereBvh(this.gpuScene.sphereBvh, this.renderer.capabilities.maxTextureSize);
@@ -368,12 +375,17 @@ export default class PtRenderer {
   }
 
   public setRenderMode(mode: PtSettings["renderMode"]) {
+    const objectMasked =
+      mode === "selectedObject" || mode === "selectedObjectComparison";
     this.settings.renderMode = mode;
     this.hybridMaterial.uniforms.uRegionMode.value = mode === "region";
     this.hybridMaterial.uniforms.uObjectMode.value = mode === "selectedObject";
-    this.uniforms.uObjectMaskEnabled.value = mode === "selectedObject";
-    this.shaderCanvas.setStencilMaskEnabled(mode === "selectedObject");
+    this.hybridMaterial.uniforms.uObjectComparisonMode.value =
+      mode === "selectedObjectComparison";
+    this.uniforms.uObjectMaskEnabled.value = objectMasked;
+    this.shaderCanvas.setStencilMaskEnabled(objectMasked);
     this.updateComposerMode();
+    this.cameraDebugDirty = true;
     this.invalidate(PtInvalidationLevel.Settings, "render mode changed");
   }
 
@@ -393,7 +405,11 @@ export default class PtRenderer {
     this.hybridMaterial.uniforms.uSelectedObjectIdCount.value = index;
     this.hybridMaterial.uniforms.uObjectSelectionActive.value = index > 0;
     this.uniforms.uObjectMaskHasSelection.value = index > 0;
-    if (this.settings.renderMode === "selectedObject") {
+    this.cameraDebugDirty = true;
+    if (
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison"
+    ) {
       this.shaderCanvas.resetAccumulation();
     }
   }
@@ -401,12 +417,14 @@ export default class PtRenderer {
   public setRegionTracingMode(mode: PtSettings["regionTracingMode"]) {
     if (this.settings.regionTracingMode === mode) return;
     this.settings.regionTracingMode = mode;
+    this.cameraDebugDirty = true;
     this.shaderCanvas.resetAccumulation();
   }
 
   public setComparisonTracingMode(mode: PtSettings["comparisonTracingMode"]) {
     if (this.settings.comparisonTracingMode === mode) return;
     this.settings.comparisonTracingMode = mode;
+    this.cameraDebugDirty = true;
     this.shaderCanvas.resetAccumulation();
   }
 
@@ -415,13 +433,19 @@ export default class PtRenderer {
     const changed = next !== this.hybridSeam;
     this.hybridSeam = next;
     this.hybridMaterial.uniforms.uSeam.value = next;
+    if (changed) this.cameraDebugDirty = true;
     if (
       changed &&
-      this.settings.renderMode === "comparison" &&
+      (this.settings.renderMode === "comparison" ||
+        this.settings.renderMode === "selectedObjectComparison") &&
       this.settings.comparisonTracingMode === "pathtracedSide"
     ) {
       this.shaderCanvas.resetAccumulation();
     }
+  }
+
+  public getHybridComparisonSeam() {
+    return this.hybridSeam;
   }
 
   public setHybridRegion(left: number, top: number, width: number, height: number) {
@@ -434,6 +458,7 @@ export default class PtRenderer {
       maxX !== this.hybridRegion.z || maxY !== this.hybridRegion.w;
     this.hybridRegion.set(minX, minY, maxX, maxY);
     this.hybridMaterial.uniforms.uRegion.value.copy(this.hybridRegion);
+    if (changed) this.cameraDebugDirty = true;
     if (
       changed &&
       this.settings.renderMode === "region" &&
@@ -767,6 +792,19 @@ export default class PtRenderer {
     this.cameraDebugDirty = true;
   }
 
+  public setCameraDebugBvhDepth(depth: number) {
+    const next = Math.max(0, Math.round(depth));
+    if (this.cameraDebugBvhDepth === next) return;
+    this.cameraDebugBvhDepth = next;
+    this.cameraDebugDirty = true;
+  }
+
+  public setCameraDebugBvhEnabled(enabled: boolean) {
+    if (this.cameraDebugBvhEnabled === enabled) return;
+    this.cameraDebugBvhEnabled = enabled;
+    this.cameraDebugDirty = true;
+  }
+
   private setupCameraDebugView() {
     this.cameraDebugScene.background = new THREE.Color(0x11151b);
     this.cameraDebugScene.add(new THREE.HemisphereLight(0xdbeafe, 0x273244, 2.2));
@@ -912,6 +950,46 @@ export default class PtRenderer {
     const points: THREE.Vector3[] = [];
     const colors: number[] = [];
     const rayTargets = this.ptScene.scene.children.filter((object) => object.visible);
+    const traceableObjectIds = new Map<THREE.Object3D, string>();
+    for (const mesh of traceableMeshes) {
+      const objectId = mesh.userData.pathTracer?.objectId as string | undefined;
+      if (objectId) traceableObjectIds.set(mesh, objectId);
+    }
+    const selectedPrimaryHit = (hit: THREE.Intersection | undefined) => {
+      let object: THREE.Object3D | null = hit?.object ?? null;
+      while (object) {
+        const objectId = traceableObjectIds.get(object);
+        if (objectId) return this.selectedObjectIds.has(objectId);
+        object = object.parent;
+      }
+      return false;
+    };
+    const launchesPrimaryRay = (
+      u: number,
+      v: number,
+      primaryHit: THREE.Intersection | undefined
+    ) => {
+      switch (this.settings.renderMode) {
+        case "raster":
+          return false;
+        case "comparison":
+          return this.settings.comparisonTracingMode === "fullFrame" || u >= this.hybridSeam;
+        case "region":
+          return this.settings.regionTracingMode === "fullFrame" || (
+            u >= this.hybridRegion.x && u <= this.hybridRegion.z &&
+            v >= this.hybridRegion.y && v <= this.hybridRegion.w
+          );
+        case "selectedObject":
+          return selectedPrimaryHit(primaryHit);
+        case "selectedObjectComparison":
+          return selectedPrimaryHit(primaryHit) && (
+            this.settings.comparisonTracingMode === "fullFrame" || u >= this.hybridSeam
+          );
+        case "pathtraced":
+        default:
+          return true;
+      }
+    };
     const { columns, rows } = this.cameraDebugRayGrid;
     let primaryRayIndex = 0;
     for (let row = 0; row < rows; row += 1) {
@@ -921,6 +999,13 @@ export default class PtRenderer {
         raycaster.setFromCamera(new THREE.Vector2(x, y), diagramCamera);
         let origin = raycaster.ray.origin.clone();
         let direction = raycaster.ray.direction.clone();
+        raycaster.far = diagramRange;
+        const primaryHit = raycaster.intersectObjects(rayTargets, true)[0];
+        const u = (x + 1) * 0.5;
+        const v = (y + 1) * 0.5;
+        const sampleIndex = primaryRayIndex;
+        primaryRayIndex += 1;
+        if (!launchesPrimaryRay(u, v, primaryHit)) continue;
         for (let depth = 0; depth < this.cameraDebugMaxDepth; depth += 1) {
           raycaster.set(origin, direction);
           raycaster.far = diagramRange;
@@ -934,13 +1019,12 @@ export default class PtRenderer {
           const scattered = this.scatterCameraDebugRay(
             direction,
             hit,
-            primaryRayIndex * 11 + depth * 101
+            sampleIndex * 11 + depth * 101
           );
           if (!scattered) break;
           direction = scattered;
           origin = end.clone().addScaledVector(direction, 0.001);
         }
-        primaryRayIndex += 1;
       }
     }
     const rayGeometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -954,6 +1038,39 @@ export default class PtRenderer {
         depthTest: false,
       })
     ));
+
+    const hierarchyNodes = this.cameraDebugBvhEnabled ? [
+        ...describeSphereBvh(this.gpuScene.sphereBvh).map((description) => ({
+          description,
+          node: this.gpuScene.sphereBvh.nodes[description.index]!,
+          kind: "sphere" as const,
+        })),
+        ...describeTriangleBvh(this.gpuScene.triangleBvh).map((description) => ({
+          description,
+          node: this.gpuScene.triangleBvh.nodes[description.index]!,
+          kind: "triangle" as const,
+        })),
+    ] : [];
+    for (const { description, node, kind } of hierarchyNodes) {
+        if (description.depth > this.cameraDebugBvhDepth) continue;
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(this.boxEdgePositions(node.boundsMin, node.boundsMax), 3)
+        );
+        const color = kind === "sphere"
+          ? (description.leaf ? 0xfbbf24 : 0xc084fc)
+          : (description.leaf ? 0x4ade80 : 0x38bdf8);
+        this.cameraDebugGroup.add(new THREE.LineSegments(
+          geometry,
+          new THREE.LineBasicMaterial({
+            color,
+            transparent: true,
+            opacity: description.depth === this.cameraDebugBvhDepth ? 0.68 : 0.3,
+            depthTest: false,
+          })
+        ));
+    }
 
     // Keep the observer camera in a stable camera-relative pose. Deriving its
     // framing from hit endpoints causes visible jumps whenever a sample ray
@@ -1399,7 +1516,11 @@ export default class PtRenderer {
       uEnvironmentIntensity: { value: this.settings.environmentIntensity },
       uEnvironmentLightingIntensity: { value: this.settings.environmentLightingIntensity },
       uEnableDoF: { value: this.settings.enableDepthOfField },
-      uObjectMaskEnabled: { value: this.settings.renderMode === "selectedObject" },
+      uObjectMaskEnabled: {
+        value:
+          this.settings.renderMode === "selectedObject" ||
+          this.settings.renderMode === "selectedObjectComparison",
+      },
       uObjectMaskHasSelection: { value: false },
     };
     return uniforms;
@@ -1517,6 +1638,18 @@ export default class PtRenderer {
     this.invalidate(PtInvalidationLevel.Settings, "environment source changed");
   }
 
+  private applySceneEnvironmentSettings() {
+    const rotation = THREE.MathUtils.degToRad(this.settings.environmentRotation);
+    this.ptScene.scene.backgroundRotation.y = rotation;
+    this.ptScene.scene.environmentRotation.y = rotation;
+    this.ptScene.scene.backgroundIntensity = this.settings.environmentIntensity;
+    this.ptScene.scene.environmentIntensity =
+      this.settings.environmentLightingIntensity;
+    this.ptScene.syncEnvironmentShadowDirection(
+      this.settings.environmentRotation
+    );
+  }
+
   private watchEnvironmentTexture() {
     const loaded = this.ptScene.environmentLoaded;
     if (!loaded || loaded === this.watchedEnvironmentLoad) return;
@@ -1610,16 +1743,21 @@ export default class PtRenderer {
   }
 
   private updateComposerMode() {
+    const objectMasked =
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison";
     this.hybridMaterial.uniforms.uRegionMode.value = this.settings.renderMode === "region";
     this.hybridMaterial.uniforms.uObjectMode.value = this.settings.renderMode === "selectedObject";
-    this.uniforms.uObjectMaskEnabled.value = this.settings.renderMode === "selectedObject";
-    this.shaderCanvas.setStencilMaskEnabled(this.settings.renderMode === "selectedObject");
+    this.hybridMaterial.uniforms.uObjectComparisonMode.value =
+      this.settings.renderMode === "selectedObjectComparison";
+    this.uniforms.uObjectMaskEnabled.value = objectMasked;
+    this.shaderCanvas.setStencilMaskEnabled(objectMasked);
     this.renderPass.enabled = this.settings.renderMode === "raster";
     this.ptPass.enabled = this.settings.renderMode === "pathtraced";
     this.hybridPass.enabled =
       this.settings.renderMode === "comparison" ||
       this.settings.renderMode === "region" ||
-      this.settings.renderMode === "selectedObject";
+      objectMasked;
   }
 
   private resizeHybridTarget(width: number, height: number, pixelRatio: number) {
@@ -1727,19 +1865,12 @@ export default class PtRenderer {
     this.ptScene.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       restored.push({ mesh: object, material: object.material, visible: object.visible });
-      if (traceable.has(object) && object.visible) {
-        object.material = this.objectMaskDepthMaterial;
-      } else {
-        object.visible = false;
-      }
+      const objectId = traceable.get(object);
+      object.visible = object.visible && Boolean(
+        objectId && this.selectedObjectIds.has(objectId)
+      );
+      if (object.visible) object.material = this.objectMaskStencilMaterial;
     });
-    renderer.render(this.ptScene.scene, this.camera);
-
-    for (const entry of restored) {
-      const objectId = traceable.get(entry.mesh);
-      entry.mesh.visible = entry.visible && Boolean(objectId && this.selectedObjectIds.has(objectId));
-      if (entry.mesh.visible) entry.mesh.material = this.objectMaskStencilMaterial;
-    }
     renderer.render(this.ptScene.scene, this.camera);
 
     for (const entry of restored) {
@@ -1919,13 +2050,18 @@ export default class PtRenderer {
       this.ptScene.dirLight.castShadow = !hasEmissiveQuad;
     }
 
-    if (this.settings.renderMode === "selectedObject") {
+    if (
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison"
+    ) {
       this.renderObjectIds();
     }
 
     const pauseFullFrameHybridTracing = this.hybridRegionInteractionActive && (
       (this.settings.renderMode === "region" && this.settings.regionTracingMode === "fullFrame") ||
-      (this.settings.renderMode === "comparison" && this.settings.comparisonTracingMode === "fullFrame")
+      ((this.settings.renderMode === "comparison" ||
+        this.settings.renderMode === "selectedObjectComparison") &&
+        this.settings.comparisonTracingMode === "fullFrame")
     );
 
     if (
@@ -1960,11 +2096,20 @@ export default class PtRenderer {
               width: 1 - this.hybridSeam,
               height: 1,
             }
+          : this.settings.renderMode === "selectedObjectComparison" &&
+              this.settings.comparisonTracingMode === "pathtracedSide"
+            ? {
+                left: this.hybridSeam,
+                bottom: 0,
+                width: 1 - this.hybridSeam,
+                height: 1,
+              }
           : undefined;
       this.shaderCanvas.render(
         this.renderer,
         region,
-        this.settings.renderMode === "selectedObject"
+        this.settings.renderMode === "selectedObject" ||
+          this.settings.renderMode === "selectedObjectComparison"
           ? (renderer) => this.renderSelectedObjectStencil(renderer)
           : undefined
       );
@@ -1973,7 +2118,8 @@ export default class PtRenderer {
     if (
       this.settings.renderMode === "comparison" ||
       this.settings.renderMode === "region" ||
-      this.settings.renderMode === "selectedObject"
+      this.settings.renderMode === "selectedObject" ||
+      this.settings.renderMode === "selectedObjectComparison"
     ) {
       this.renderer.setRenderTarget(this.hybridRasterTarget);
       this.renderer.clear();
@@ -2059,7 +2205,6 @@ export default class PtRenderer {
     for (const material of this.objectIdMaterials.values()) material.dispose();
     this.objectIdMaterials.clear();
     this.objectIdColors.clear();
-    this.objectMaskDepthMaterial.dispose();
     this.objectMaskStencilMaterial.dispose();
     this.hybridMaterial.dispose();
     this.hybridScene.traverse((object) => {

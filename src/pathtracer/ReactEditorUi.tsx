@@ -689,6 +689,7 @@ function RenderSettings({
             { value: "comparison", label: "Comparison" },
             { value: "region", label: "Region" },
             { value: "selectedObject", label: "Selected object" },
+            { value: "selectedObjectComparison", label: "Selected comparison" },
           ]}
           density="compact"
           layout="horizontal"
@@ -715,7 +716,8 @@ function RenderSettings({
           }
         />
       )}
-      {settings.renderMode === "comparison" && (
+      {(settings.renderMode === "comparison" ||
+        settings.renderMode === "selectedObjectComparison") && (
         <SelectField
           label="Comparison tracing"
           value={settings.comparisonTracingMode}
@@ -2238,6 +2240,8 @@ function RenderPanel({
                   ? "Region"
                   : state.settings.renderMode === "selectedObject"
                     ? "Selected object"
+                  : state.settings.renderMode === "selectedObjectComparison"
+                    ? "Selected comparison"
                   : "Path tracing"
           }
         </span>
@@ -2330,7 +2334,7 @@ function CreationMenu({
 }
 
 function HybridComparisonSeam({ actions }: { actions: PtActions }) {
-  const [seam, setSeam] = useState(0.5);
+  const [seam, setSeam] = useState(() => actions.getHybridComparisonSeam());
   const draggingPointer = useRef<number | null>(null);
   const hovering = useRef(false);
   const focused = useRef(false);
@@ -2734,12 +2738,20 @@ function EditorShell({ actions }: { actions: PtActions }) {
       fov={state.settings.fov}
       orthographicHeight={state.settings.orthographicHeight}
     />
-    {state.settings.renderMode === "comparison" && (
+    {(state.settings.renderMode === "comparison" ||
+      state.settings.renderMode === "selectedObjectComparison") && (
       <HybridComparisonSeam actions={actions} />
     )}
     {state.settings.renderMode === "region" && (
       <HybridComparisonRegion actions={actions} />
     )}
+    {(state.settings.renderMode === "selectedObject" ||
+      state.settings.renderMode === "selectedObjectComparison") &&
+      state.selection.objectId === null && (
+        <div className="selected-object-empty-notice" role="status">
+          Select an object to path trace <span>— no objects selected</span>
+        </div>
+      )}
     <a
       className="editor-repository-link"
       href="https://github.com/sbobyn/pathtracer-lab"
@@ -2868,10 +2880,16 @@ function CameraRayDebugViewport({
   fov: number;
   orthographicHeight: number;
 }) {
+  const maxBvhDepth = Math.max(
+    actions.getTriangleBvhStats().maxDepth,
+    actions.getSphereBvhStats().maxDepth
+  );
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
   const [rayDensity, setRayDensity] = useState<"sparse" | "medium" | "dense">("sparse");
   const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(1);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [bvhEnabled, setBvhEnabled] = useState(true);
+  const [bvhDepth, setBvhDepth] = useState(() => Math.min(2, maxBvhDepth));
   const viewportRef = useRef<HTMLDivElement>(null);
   const orbitSurfaceRef = useRef<HTMLDivElement>(null);
   const rayGrid = rayDensity === "sparse"
@@ -2881,12 +2899,22 @@ function CameraRayDebugViewport({
       : { columns: 9, rows: 5 };
 
   useEffect(() => {
+    actions.setCameraDebugBvhEnabled(bvhEnabled);
+  }, [actions, bvhEnabled]);
+
+  useEffect(() => {
     actions.setCameraDebugRayGrid(rayGrid.columns, rayGrid.rows);
   }, [actions, rayDensity]);
 
   useEffect(() => {
     actions.setCameraDebugMaxDepth(rayDepth);
   }, [actions, rayDepth]);
+
+  useEffect(() => {
+    const validDepth = Math.min(bvhDepth, maxBvhDepth);
+    if (validDepth !== bvhDepth) setBvhDepth(validDepth);
+    actions.setCameraDebugBvhDepth(validDepth);
+  }, [actions, bvhDepth, maxBvhDepth]);
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -2973,6 +3001,28 @@ function CameraRayDebugViewport({
               ↺
             </button>
           </div>
+          <div className="camera-ray-debug__bvh-controls">
+            <button
+              type="button"
+              aria-pressed={bvhEnabled}
+              title={bvhEnabled ? "Hide BVH bounds" : "Show BVH bounds"}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setBvhEnabled((enabled) => !enabled)}
+            >BVH</button>
+            <button
+              type="button"
+              disabled={!bvhEnabled || bvhDepth <= 0}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setBvhDepth((depth) => Math.max(0, depth - 1))}
+            >−</button>
+            <span className="camera-ray-debug__bvh-depth" aria-disabled={!bvhEnabled}>Depth {bvhDepth}</span>
+            <button
+              type="button"
+              disabled={!bvhEnabled || bvhDepth >= maxBvhDepth}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setBvhDepth((depth) => Math.min(maxBvhDepth, depth + 1))}
+            >+</button>
+          </div>
           <button
             type="button"
             className="camera-ray-debug__legend-toggle"
@@ -2996,6 +3046,12 @@ function CameraRayDebugViewport({
               <span><i style={{ background: "#c084fc" }} />sphere</span>
               <span><i style={{ background: "#38bdf8" }} />quad</span>
               <span><i style={{ background: "#94a3b8" }} />mesh</span>
+            </div>
+            <div>
+              <span className="camera-ray-debug__key-title">BVH</span>
+              <span><i style={{ background: "#c084fc" }} />sphere node</span>
+              <span><i style={{ background: "#38bdf8" }} />mesh node</span>
+              <span><i style={{ background: "#4ade80" }} />leaf</span>
             </div>
           </div>}
           <span className="camera-ray-debug__camera-label">

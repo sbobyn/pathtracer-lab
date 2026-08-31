@@ -13,15 +13,19 @@ import {
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import {
   buildEnvironmentImportanceDistribution,
+  dominantEnvironmentDirection,
   disposeEnvironmentImportanceDistribution,
   type EnvironmentImportanceDistribution,
 } from "./EnvironmentImportanceDistribution";
 import { loadStaticGltf } from "./StaticGltfLoader";
 import { translateStaticGltfMaterial } from "./GltfMaterialTranslator";
+import {
+  configureRasterLightShadow,
+  configureRasterMesh,
+} from "./RasterPreviewQuality";
 
 export type PtPreviewMaterial =
   | THREE.MeshBasicMaterial
-  | THREE.MeshLambertMaterial
   | THREE.MeshStandardMaterial
   | THREE.MeshPhysicalMaterial;
 
@@ -66,6 +70,7 @@ export default class PtScene {
   private readonly previewMaterials = new Map<number, PtPreviewMaterial>();
   private readonly sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
   dirLight: THREE.DirectionalLight;
+  ambientLight: THREE.AmbientLight;
   backgroundColorTop: THREE.Color;
   backgroundColorBottom: THREE.Color;
   environmentSource = "";
@@ -93,12 +98,14 @@ export default class PtScene {
     this.backgroundColorBottom = new THREE.Color(1, 1, 1); // White ground
     this.scene.background = this.backgroundColorTop;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    this.scene.add(this.ambientLight);
 
     this.dirLight = new THREE.DirectionalLight(this.backgroundColorTop, 1.0);
-    this.dirLight.position.set(0, 5, 0);
-    configureDirectionalShadow(this.dirLight);
+    // Keep the baseline preview light oblique so contact shadows remain
+    // readable instead of hiding directly beneath the subject.
+    this.dirLight.position.set(4, 7, 5);
+    configureRasterLightShadow(this.dirLight);
     this.scene.add(this.dirLight);
 
     this.intersectGroup = new THREE.Group();
@@ -130,7 +137,7 @@ export default class PtScene {
       ) as PtSphereMesh;
       sphereMesh.position.copy(sphere.position);
       sphereMesh.scale.setScalar(sphere.radius);
-      configureRasterShadows(sphereMesh);
+      configureRasterMesh(sphereMesh);
 
       sphereMesh.userData.pathTracer = {
         objectId: THREE.MathUtils.generateUUID(),
@@ -150,7 +157,7 @@ export default class PtScene {
       material.side = THREE.DoubleSide;
       const quadMesh = new THREE.Mesh(createQuadGeometry(), material) as PtQuadMesh;
       applyQuadTransform(quadMesh, quad);
-      configureRasterShadows(quadMesh);
+      configureRasterMesh(quadMesh);
       quadMesh.userData.pathTracer = {
         objectId: THREE.MathUtils.generateUUID(),
         objectName: `Quad ${i}`,
@@ -200,11 +207,25 @@ export default class PtScene {
         texture.wrapS = THREE.RepeatWrapping;
         this.environmentTexture = texture;
         this.environmentDistribution = buildEnvironmentImportanceDistribution(texture);
+        this.syncEnvironmentShadowDirection(
+          THREE.MathUtils.radToDeg(this.scene.environmentRotation.y)
+        );
         this.scene.background = texture;
         this.scene.environment = texture;
         resolve(texture);
       }, undefined, reject);
     });
+  }
+
+  public syncEnvironmentShadowDirection(rotationDegrees: number) {
+    if (!this.environmentTexture) return;
+    const direction = dominantEnvironmentDirection(
+      this.environmentTexture as THREE.DataTexture,
+      rotationDegrees
+    );
+    this.dirLight.position.copy(direction.multiplyScalar(10));
+    this.dirLight.target.position.set(0, 0, 0);
+    this.dirLight.target.updateMatrixWorld();
   }
 
   public getQuadMeshes(): PtQuadMesh[] {
@@ -234,7 +255,7 @@ export default class PtScene {
     material.side = THREE.DoubleSide;
     material.needsUpdate = true;
     const mesh = new THREE.Mesh(geometry, material) as PtTriangleMesh;
-    configureRasterShadows(mesh);
+    configureRasterMesh(mesh);
     mesh.userData.pathTracer = { objectId: THREE.MathUtils.generateUUID(), objectName, primitiveType: "triangleMesh" };
     this.triangleMeshGroup.add(mesh);
     this.triangleMeshGroup.updateMatrixWorld(true);
@@ -347,7 +368,7 @@ export default class PtScene {
     const mesh = new THREE.Mesh(this.sphereGeometry, material) as PtSphereMesh;
     mesh.position.copy(position);
     mesh.scale.setScalar(radius);
-    configureRasterShadows(mesh);
+    configureRasterMesh(mesh);
     mesh.userData.pathTracer = {
       objectId: THREE.MathUtils.generateUUID(),
       objectName,
@@ -372,7 +393,7 @@ export default class PtScene {
     mesh.position.copy(position);
     mesh.quaternion.copy(rotation);
     mesh.scale.set(width, height, 1);
-    configureRasterShadows(mesh);
+    configureRasterMesh(mesh);
     mesh.userData.pathTracer = {
       objectId: THREE.MathUtils.generateUUID(),
       objectName,
@@ -526,9 +547,8 @@ export function isPtTriangleMesh(object: THREE.Object3D): object is PtTriangleMe
 
 /**
  * Approximate an emissive path-traced quad in the Three.js preview.
- * RectAreaLight supplies broad preview illumination. Three.js rectangle lights
- * do not cast shadows; a separate shadow proxy is intentionally deferred until
- * it can handle the study scenes' zero-thickness quad geometry robustly.
+ * RectAreaLight supplies broad preview illumination while one aligned,
+ * filtered spotlight supplies the shadow map Three.js area lights lack.
  */
 export function syncEmissiveQuadPreview(mesh: PtQuadMesh) {
   const definition = getMaterialMetadata(mesh.material).materialDefinition;
@@ -537,6 +557,8 @@ export function syncEmissiveQuadPreview(mesh: PtQuadMesh) {
     ? previewColorInput(emission.color)
     : new THREE.Color(0x000000);
   const enabled = emission.strength > 0 && color.getHex() !== 0;
+  // A zero-thickness emitter must not shadow its own light proxy.
+  mesh.castShadow = !enabled;
   let group = mesh.children.find(
     (child) => child.userData.pathTracerEmissiveQuadPreview === true
   ) as THREE.Group | undefined;
@@ -556,6 +578,15 @@ export function syncEmissiveQuadPreview(mesh: PtQuadMesh) {
   if (area) {
     area.color.copy(color);
     area.intensity = emission.strength;
+  }
+  const shadowProxies = group.children.filter(
+    (child): child is THREE.SpotLight =>
+      child instanceof THREE.SpotLight &&
+      child.userData.pathTracerEmissiveShadowProxy === true
+  );
+  for (const shadowProxy of shadowProxies) {
+    shadowProxy.color.copy(color);
+    shadowProxy.intensity = emission.strength * 1.2;
   }
 }
 
@@ -577,9 +608,11 @@ function createPreviewMaterial(
     ? previewInput.factor
     : texturePreviewColor(previewInput.texture).clone().multiply(previewInput.factor);
   if (material.type === 0) {
-    previewMaterial = new THREE.MeshLambertMaterial({
+    previewMaterial = new THREE.MeshStandardMaterial({
       color: previewColor,
       map: previewMap,
+      metalness: 0,
+      roughness: 1,
     });
   } else if (material.type === 1) {
     previewMaterial = new THREE.MeshStandardMaterial({
@@ -648,26 +681,6 @@ function previewColorInput(input: PtMaterial["definition"]["baseColor"]): THREE.
   return texturePreviewColor(input.texture).clone().multiply(input.factor);
 }
 
-function configureRasterShadows(mesh: THREE.Mesh) {
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-}
-
-function configureDirectionalShadow(light: THREE.DirectionalLight) {
-  light.castShadow = true;
-  light.shadow.mapSize.set(2048, 2048);
-  light.shadow.camera.left = -20;
-  light.shadow.camera.right = 20;
-  light.shadow.camera.top = 20;
-  light.shadow.camera.bottom = -20;
-  light.shadow.camera.near = 0.1;
-  light.shadow.camera.far = 100;
-  light.shadow.bias = 0.0001;
-  light.shadow.normalBias = 0.015;
-  light.shadow.radius = 3;
-  light.shadow.blurSamples = 8;
-}
-
 function createEmissiveQuadPreview(): THREE.Group {
   const group = new THREE.Group();
   group.userData.pathTracerEmissiveQuadPreview = true;
@@ -677,6 +690,28 @@ function createEmissiveQuadPreview(): THREE.Group {
   area.position.z = 0.01;
   area.rotation.y = Math.PI;
   group.add(area);
+
+  // The authored quad normal is local +Z. A centered proxy avoids the visibly
+  // duplicated wall shadows produced by multiple discrete shadow maps.
+  const target = new THREE.Object3D();
+  target.position.z = 2;
+  group.add(target);
+  const shadowProxy = new THREE.SpotLight(
+    0xffffff,
+    1,
+    0,
+    THREE.MathUtils.degToRad(58),
+    0.65,
+    2
+  );
+  shadowProxy.position.set(0, 0, -0.03);
+  shadowProxy.target = target;
+  shadowProxy.userData.pathTracerEmissiveShadowProxy = true;
+  configureRasterLightShadow(shadowProxy);
+  shadowProxy.shadow.mapSize.set(2048, 2048);
+  shadowProxy.shadow.radius = 5;
+  shadowProxy.shadow.camera.far = 20;
+  group.add(shadowProxy);
 
   return group;
 }
