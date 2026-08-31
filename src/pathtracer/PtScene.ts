@@ -20,6 +20,9 @@ import {
 import { loadStaticGltf } from "./StaticGltfLoader";
 import { translateStaticGltfMaterial } from "./GltfMaterialTranslator";
 import {
+  createFuzzyMetalPreviewMaterial,
+  configurePerlinMarblePreviewMaterial,
+  createSolidGlassPreviewMaterial,
   configureRasterLightShadow,
   configureRasterMesh,
 } from "./RasterPreviewQuality";
@@ -76,6 +79,7 @@ export default class PtScene {
   environmentSource = "";
   environmentLabel = "Gradient";
   environmentTexture: THREE.Texture | null = null;
+  rasterGradientEnvironmentTexture: THREE.Texture | null = null;
   environmentDistribution: EnvironmentImportanceDistribution | null = null;
   environmentLoaded: Promise<THREE.Texture> | null = null;
   staticAssetsLoaded: Promise<void> | null = null;
@@ -433,6 +437,15 @@ export default class PtScene {
     return material;
   }
 
+  public syncMaterialPreview(materialId: number) {
+    const material = this.getMaterial(materialId);
+    if (!(material instanceof THREE.MeshStandardMaterial)) return;
+    configurePerlinMarblePreviewMaterial(
+      material,
+      getMaterialMetadata(material).materialDefinition.baseColor
+    );
+  }
+
   public addMaterial(material: PtMaterial): number {
     const materialId = this.previewMaterials.size;
     this.previewMaterials.set(materialId, createPreviewMaterial(material, materialId));
@@ -451,6 +464,7 @@ export default class PtScene {
       : metadata.materialDefinition.baseColor;
     input.texture = texture;
     input.factor.set(0xffffff);
+    this.syncMaterialPreview(materialId);
     material.needsUpdate = true;
   }
 
@@ -480,6 +494,7 @@ export default class PtScene {
       }
       definition.emission.color.texture = texture;
     }
+    this.syncMaterialPreview(materialId);
     material.needsUpdate = true;
   }
 
@@ -514,6 +529,7 @@ export default class PtScene {
           : new THREE.Color(0x000000));
       }
     }
+    this.syncMaterialPreview(materialId);
     material.needsUpdate = true;
   }
 
@@ -615,22 +631,17 @@ function createPreviewMaterial(
       roughness: 1,
     });
   } else if (material.type === 1) {
-    previewMaterial = new THREE.MeshStandardMaterial({
-      color: previewColor,
-      map: previewMap,
-      roughness: material.fuzz,
-    });
+    previewMaterial = createFuzzyMetalPreviewMaterial(
+      previewColor,
+      previewMap,
+      material.fuzz
+    );
   } else if (material.type === 2) {
-    previewMaterial = new THREE.MeshPhysicalMaterial({
-      color: previewColor,
-      map: previewMap,
-      metalness: 0,
-      roughness: 0,
-      ior: material.ior,
-      transmission: 1,
-      opacity: 1,
-      transparent: true,
-    });
+    previewMaterial = createSolidGlassPreviewMaterial(
+      previewColor,
+      previewMap,
+      material.ior
+    );
   } else if (material.type === PtMaterialModel.PrincipledMetallicRoughness) {
     const dataMap = material.definition.metallicRoughnessTextureEnabled
       ? createPreviewTexture(material.definition.metallicRoughnessTexture, false)
@@ -674,6 +685,12 @@ function createPreviewMaterial(
     emissionTwoSided: material.emissionTwoSided,
     materialDefinition: material.definition,
   };
+  if (previewMaterial instanceof THREE.MeshStandardMaterial) {
+    configurePerlinMarblePreviewMaterial(
+      previewMaterial,
+      material.definition.baseColor
+    );
+  }
   return previewMaterial;
 }
 

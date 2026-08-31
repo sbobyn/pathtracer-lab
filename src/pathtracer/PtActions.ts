@@ -12,6 +12,10 @@ import {
   type PtSphereMesh,
 } from "./PtScene";
 import {
+  LEGACY_FUZZY_METAL_PREVIEW_METALNESS,
+  legacyFuzzToPreviewRoughness,
+} from "./RasterPreviewQuality";
+import {
   isPtAnalyticLightNode,
   syncAnalyticLightPreview,
 } from "./PtAnalyticLight";
@@ -379,7 +383,9 @@ export default class PtActions {
 
   public setEnvironmentGradient() {
     this.renderer.ptScene.scene.background = this.renderer.ptScene.backgroundColorTop;
-    this.renderer.ptScene.scene.environment = null;
+    this.renderer.ptScene.scene.environment = this.renderer.settings.environmentLightingEnabled
+      ? this.renderer.ptScene.rasterGradientEnvironmentTexture
+      : null;
     this.renderer.settings.environmentMode = "gradient";
     this.renderer.uniforms.uEnvironmentEnabled.value = false;
     this.renderer.invalidate(PtInvalidationLevel.Settings, "gradient environment selected");
@@ -448,7 +454,9 @@ export default class PtActions {
     this.renderer.settings.environmentLightingEnabled = value;
     this.renderer.uniforms.uEnvironmentLightingEnabled.value = value;
     this.renderer.ptScene.scene.environment = value
-      ? this.renderer.ptScene.environmentTexture
+      ? this.renderer.settings.environmentMode === "map"
+        ? this.renderer.ptScene.environmentTexture
+        : this.renderer.ptScene.rasterGradientEnvironmentTexture
       : null;
     this.renderer.invalidate(PtInvalidationLevel.Settings, "environment lighting changed");
     this.updateSetting("environmentLightingEnabled", value);
@@ -1291,7 +1299,10 @@ export default class PtActions {
     this.beginMaterialEdit(materialId);
     const material = this.renderer.ptScene.getMaterial(materialId);
     if (material instanceof THREE.MeshStandardMaterial) {
-      material.roughness = fuzz;
+      const model = getMaterialMetadata(material).materialDefinition.model;
+      material.roughness = model === PtMaterialModel.LegacyFuzzyMetal
+        ? legacyFuzzToPreviewRoughness(fuzz)
+        : fuzz;
     }
     getMaterialMetadata(material).materialDefinition.roughness = fuzz;
     this.renderer.invalidate(
@@ -1910,11 +1921,15 @@ export default class PtActions {
       snapshot.roughness !== undefined &&
       material instanceof THREE.MeshStandardMaterial
     ) {
-      material.roughness = snapshot.roughness;
+      material.roughness = metadata.materialDefinition.model === PtMaterialModel.LegacyFuzzyMetal
+        ? legacyFuzzToPreviewRoughness(snapshot.roughness)
+        : snapshot.roughness;
       metadata.materialDefinition.roughness = snapshot.roughness;
     }
     if (snapshot.metallic !== undefined && material instanceof THREE.MeshStandardMaterial) {
-      material.metalness = snapshot.metallic;
+      material.metalness = metadata.materialDefinition.model === PtMaterialModel.LegacyFuzzyMetal
+        ? LEGACY_FUZZY_METAL_PREVIEW_METALNESS
+        : snapshot.metallic;
       metadata.materialDefinition.metallic = snapshot.metallic;
     }
     if (snapshot.ior !== undefined) {

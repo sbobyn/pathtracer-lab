@@ -7,6 +7,7 @@ import { createFullScreenPerspectiveCamera } from "../utils/createFullscreenCame
 import { checkerTexture, imageTexture, perlinTexture } from "./PtTexture";
 import textureStudyImage from "../assets/texture-study.svg?url";
 import { syncAnalyticLightPreview } from "./PtAnalyticLight";
+import { createGradientReflectionTexture } from "./RasterPreviewQuality";
 import { builtinEnvironments } from "./BuiltinEnvironments";
 import boxGltfUrl from "../assets/gltf/box/Box.glb?url";
 
@@ -187,7 +188,6 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
   },
   RTIOW1Simple: () => {
     const spheres: PtSphere[] = [
-      new PtSphere(new THREE.Vector3(0, -100.5, 0), 100, 0), // Ground
       new PtSphere(new THREE.Vector3(0, 0, 0), 0.5, 1), // Center
       new PtSphere(new THREE.Vector3(-1.2, 0, 0), 0.5, 2), // Left
       new PtSphere(new THREE.Vector3(1.2, 0, 0), 0.5, 3), // Right
@@ -195,7 +195,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     const materials: PtMaterial[] = [
       PtMaterial.legacyLambert(new THREE.Color(0.8, 0.8, 0)), // Ground - Lambert
       PtMaterial.legacyLambert(new THREE.Color(0.1, 0.2, 0.5)), // Center - Lambert
-      PtMaterial.legacyDielectric(1 / 1.33), // Left - Dielectric
+      PtMaterial.legacyDielectric(1.5), // Left - glass in air
       PtMaterial.legacyFuzzyMetal(new THREE.Color(0.8, 0.6, 0.2), 0.1), // Right - Metal
     ];
 
@@ -205,13 +205,40 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       far: 10000,
     });
 
-    return new PtScene(spheres, materials, camera);
+    return createRtiowGroundScene(spheres, materials, camera, -0.5, 6);
+  },
+
+  RTIOW1HollowGlassStudy: () => {
+    const materials: PtMaterial[] = [
+      PtMaterial.legacyLambert(new THREE.Color(0.35, 0.4, 0.48)),
+      PtMaterial.legacyDielectric(1.5),
+      // The inner boundary is air enclosed by glass, so its IOR is relative
+      // to the surrounding glass rather than to the scene atmosphere.
+      PtMaterial.legacyDielectric(1 / 1.5),
+      PtMaterial.legacyLambert(new THREE.Color(0.75, 0.12, 0.05)),
+      PtMaterial.legacyLambert(new THREE.Color(0.08, 0.3, 0.75)),
+    ];
+    const spheres = [
+      // Solid reference.
+      new PtSphere(new THREE.Vector3(-1.15, 0, 0), 0.8, 1),
+      // Hollow reference: glass outer boundary and concentric air cavity.
+      new PtSphere(new THREE.Vector3(1.15, 0, 0), 0.8, 1),
+      new PtSphere(new THREE.Vector3(1.15, 0, 0), 0.62, 2),
+      // Colored objects behind the glass make lensing differences obvious.
+      new PtSphere(new THREE.Vector3(-1.15, -0.38, -2), 0.42, 3),
+      new PtSphere(new THREE.Vector3(1.15, -0.38, -2), 0.42, 4),
+    ];
+    const camera = createFullScreenPerspectiveCamera({
+      position: new THREE.Vector3(0, 0.35, 5),
+      lookAt: new THREE.Vector3(0, 0, 0),
+      far: 10000,
+    });
+    camera.fov = 34;
+    return createRtiowGroundScene(spheres, materials, camera, -0.8, 6);
   },
 
   RTIOW1Final: () => {
-    const spheres: PtSphere[] = [
-      new PtSphere(new THREE.Vector3(0, -1000, 0), 1000, 0), // Ground
-    ];
+    const spheres: PtSphere[] = [];
     const materials: PtMaterial[] = [
       PtMaterial.legacyLambert(new THREE.Color(0.5, 0.5, 0.5)), // Ground - Lambert
     ];
@@ -280,12 +307,12 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 20;
 
-    return new PtScene(spheres, materials, camera);
+    return createRtiowGroundScene(spheres, materials, camera, 0, 12);
   },
 
   RTIOW1SphereBvhStudy: () => {
     const random = createSeededRandom(0x805b7a);
-    const spheres: PtSphere[] = [new PtSphere(new THREE.Vector3(0, -1000, 0), 1000, 0)];
+    const spheres: PtSphere[] = [];
     const materials: PtMaterial[] = [PtMaterial.legacyLambert(new THREE.Color(0.5, 0.5, 0.5))];
     const protectedCenters = [
       new THREE.Vector3(0, 0.2, 0),
@@ -325,7 +352,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       position: new THREE.Vector3(13, 2, 3), lookAt: new THREE.Vector3(0, 0, 0), far: 10000,
     });
     camera.fov = 20;
-    return new PtScene(spheres, materials, camera);
+    return createRtiowGroundScene(spheres, materials, camera, 0, 15);
   },
 
   TextureStudy: () => {
@@ -652,6 +679,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
 // saved preferences or external scene references.
 export const presetPtSceneOrder = [
   "RTIOW1Simple",
+  "RTIOW1HollowGlassStudy",
   "RTIOW1Final",
   "TextureStudy",
   "QuadStudy",
@@ -680,6 +708,61 @@ function createSeededRandom(seed: number) {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
     return state / 0x100000000;
   };
+}
+
+function createRtiowGroundQuad(y: number, size: number) {
+  return new PtQuad(
+    new THREE.Vector3(-size, y, size),
+    new THREE.Vector3(size * 2, 0, 0),
+    new THREE.Vector3(0, 0, -size * 2),
+    0
+  );
+}
+
+function createRtiowGroundScene(
+  spheres: PtSphere[],
+  materials: PtMaterial[],
+  camera: THREE.PerspectiveCamera,
+  groundY: number,
+  groundSize: number
+) {
+  const scene = new PtScene(spheres, materials, camera, [
+    createRtiowGroundQuad(groundY, groundSize),
+  ]);
+  // The zero-thickness floor only needs to receive object shadows. Letting it
+  // cast into the directional shadow map produces large-scale self-shadow
+  // acne that looks like a second, overlapping quad.
+  scene.getQuadMeshes()[0].castShadow = false;
+  // Metallic raster materials need image-based lighting. Mirror the path
+  // tracer's procedural sky/ground gradient without changing its environment
+  // mode or the camera-visible raster background.
+  scene.rasterGradientEnvironmentTexture = createGradientReflectionTexture(
+    scene.backgroundColorTop,
+    scene.backgroundColorBottom
+  );
+  scene.scene.environment = scene.rasterGradientEnvironmentTexture;
+  for (const material of scene.getMaterials()) {
+    if (
+      material instanceof THREE.MeshStandardMaterial &&
+      material.metalness > 0.5
+    ) {
+      material.envMap = scene.rasterGradientEnvironmentTexture;
+      material.envMapIntensity = 1.5;
+      material.needsUpdate = true;
+    }
+  }
+  // These low, wide scenes view the receiver at a grazing angle, amplifying
+  // light-space depth precision into long contour bands. Offset shadow tests
+  // along the floor normal while retaining the spheres' contact shadows.
+  scene.dirLight.shadow.bias = -0.0005;
+  scene.dirLight.shadow.normalBias = 0.08;
+  const shadowExtent = Math.min(20, groundSize * 1.35);
+  scene.dirLight.shadow.camera.left = -shadowExtent;
+  scene.dirLight.shadow.camera.right = shadowExtent;
+  scene.dirLight.shadow.camera.top = shadowExtent;
+  scene.dirLight.shadow.camera.bottom = -shadowExtent;
+  scene.dirLight.shadow.camera.updateProjectionMatrix();
+  return scene;
 }
 
 function createIndexedPyramidGeometry() {
