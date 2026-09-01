@@ -10,6 +10,21 @@ export const presetPtSceneInfo: Record<string, PresetPtSceneInfo> = {
     implementation: "The top row holds geometry and lighting constant while varying opaque/thin/solid/rough/high-IOR behavior. The bottom row uses one absorbing material on increasingly large spheres so only the distance traveled through the medium changes.",
     concepts: "Thin walls transmit without entering a medium. Solid boundaries refract and track nested media. Beer–Lambert transmittance is exponential: after one attenuation distance, white light becomes the authored attenuation color.",
   },
+  KhronosCompareTransmission: {
+    purpose: "Validates dielectric transmission and rough-transmission response against Khronos's focused glTF reference asset.",
+    implementation: "Loads the official CompareTransmission GLB through the same static glTF material translator, packed triangle path, and principled BSDF used by production assets.",
+    concepts: "KHR_materials_transmission uses the material's GGX roughness for both reflection and transmission; transmitted directions are therefore non-delta whenever roughness is nonzero.",
+  },
+  KhronosCompareVolume: {
+    purpose: "Validates solid-volume thickness, refraction, and distance-dependent attenuation against Khronos's focused glTF reference asset.",
+    implementation: "Loads the official CompareVolume GLB and maps transmission, thickness, attenuation color, and attenuation distance into nested-medium path state and Beer–Lambert transport.",
+    concepts: "A nonzero thickness defines a volume. Refraction occurs at its boundaries and attenuation depends exponentially on the distance traveled inside it.",
+  },
+  KhronosDispersionTest: {
+    purpose: "Validates wavelength-dependent dielectric refraction against Khronos's dedicated dispersion reference asset.",
+    implementation: "Loads the official DispersionTest GLB and stochastically traces one RGB hero wavelength using the Khronos IOR-spread approximation, compensating channel selection to keep the estimator unbiased.",
+    concepts: "Dispersion separates wavelengths because their indices of refraction differ. Khronos defines dispersion as 20 divided by the Abbe number and provides an RGB approximation around the material IOR.",
+  },
   PrincipledMaterialStudy: {
     purpose: "Compares continuous metallic and roughness values under the same studio illumination.",
     implementation: "A grid of principled spheres varies metallic by row and roughness by column while keeping base color, geometry, camera, and HDR fixed.",

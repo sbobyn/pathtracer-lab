@@ -70,6 +70,7 @@ export default class PtScene {
   intersectGroup: THREE.Group;
   analyticLightGroup: THREE.Group;
   triangleMeshGroup: THREE.Group;
+  readonly annotationGroup = new THREE.Group();
   private readonly previewMaterials = new Map<number, PtPreviewMaterial>();
   private readonly sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
   dirLight: THREE.DirectionalLight;
@@ -117,6 +118,7 @@ export default class PtScene {
     this.triangleMeshGroup = new THREE.Group();
     this.triangleMeshGroup.name = "Static triangle meshes";
     this.analyticLightGroup.name = "Analytic lights";
+    this.annotationGroup.name = "Scene annotations";
 
     materials.forEach((material, materialId) => {
       this.previewMaterials.set(

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Text } from "troika-three-text";
 import PtScene from "./PtScene";
 import PtSphere from "./PtSphere";
 import PtQuad from "./PtQuad";
@@ -10,6 +11,36 @@ import { syncAnalyticLightPreview } from "./PtAnalyticLight";
 import { createGradientReflectionTexture } from "./RasterPreviewQuality";
 import { builtinEnvironments } from "./BuiltinEnvironments";
 import boxGltfUrl from "../assets/gltf/box/Box.glb?url";
+import compareTransmissionGltfUrl from "../assets/gltf/khronos-pbr/CompareTransmission.glb?url";
+import compareVolumeGltfUrl from "../assets/gltf/khronos-pbr/CompareVolume.glb?url";
+import dispersionTestGltfUrl from "../assets/gltf/khronos-pbr/DispersionTest.glb?url";
+
+function createKhronosMaterialReferenceScene(
+  source: string,
+  label: string,
+  cameraPosition = new THREE.Vector3(0, 0, 5),
+  lookAt = new THREE.Vector3(0, 0, 0),
+  importScale = 1,
+  environmentId = "studio-small-03"
+) {
+  const fallback = PtMaterial.legacyLambert(new THREE.Color(0xaaaaaa));
+  const camera = createFullScreenPerspectiveCamera({
+    position: cameraPosition,
+    lookAt,
+    far: 10000,
+  });
+  camera.fov = 38;
+  const scene = new PtScene([], [fallback], camera);
+  void scene.loadStaticGltf(source, 0, label, importScale);
+  scene.backgroundColorTop.set(0x10141c);
+  scene.backgroundColorBottom.set(0x10141c);
+  scene.scene.background = scene.backgroundColorTop;
+  const environment = builtinEnvironments.find(
+    (candidate) => candidate.id === environmentId
+  );
+  if (environment) scene.setEnvironmentMap(environment.source, environment.label);
+  return scene;
+}
 
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   if (
@@ -63,40 +94,62 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       }),
     ];
     const spheres = [
-      // Top row: opaque dielectric surface, thin wall, smooth volume,
-      // rough volume, and higher IOR. All other inputs are held constant.
-      new PtSphere(new THREE.Vector3(-3.0, 0.7, 0), 0.58, 2),
-      new PtSphere(new THREE.Vector3(-1.5, 0.7, 0), 0.58, 3),
-      new PtSphere(new THREE.Vector3(0, 0.7, 0), 0.58, 4),
-      new PtSphere(new THREE.Vector3(1.5, 0.7, 0), 0.58, 5),
-      new PtSphere(new THREE.Vector3(3.0, 0.7, 0), 0.58, 6),
-      // Bottom row: identical absorbing glass with increasing chord length.
-      // Their bottoms share the same ground plane so size is the only change.
-      new PtSphere(new THREE.Vector3(-1.65, -0.7, 0), 0.3, 7),
-      new PtSphere(new THREE.Vector3(0, -0.5, 0), 0.5, 7),
-      new PtSphere(new THREE.Vector3(1.85, -0.25, 0), 0.75, 7),
+      // Balanced 4x2 grid. Top: opaque dielectric surface, thin wall,
+      // smooth volume, and rough volume. All other inputs are held constant.
+      new PtSphere(new THREE.Vector3(-3.0, 2.5, 0), 0.58, 2),
+      new PtSphere(new THREE.Vector3(-1.0, 2.5, 0), 0.58, 3),
+      new PtSphere(new THREE.Vector3(1.0, 2.5, 0), 0.58, 4),
+      new PtSphere(new THREE.Vector3(3.0, 2.5, 0), 0.58, 5),
+      // Bottom: higher IOR, then identical absorbing glass with increasing
+      // chord length. Their bottoms share a clear label baseline above ground.
+      new PtSphere(new THREE.Vector3(-3.0, 0.23, 0), 0.58, 6),
+      new PtSphere(new THREE.Vector3(-1.0, -0.05, 0), 0.3, 7),
+      new PtSphere(new THREE.Vector3(1.0, 0.15, 0), 0.5, 7),
+      new PtSphere(new THREE.Vector3(3.0, 0.4, 0), 0.75, 7),
     ];
     const quads = [
       new PtQuad(
-        new THREE.Vector3(-5, -1, -2.2),
-        new THREE.Vector3(10, 0, 0),
-        new THREE.Vector3(0, 4.2, 0),
+        new THREE.Vector3(-8, -1, -2.2),
+        new THREE.Vector3(16, 0, 0),
+        new THREE.Vector3(0, 6.5, 0),
         0
       ),
       new PtQuad(
-        new THREE.Vector3(-5, -1, 2.5),
-        new THREE.Vector3(10, 0, 0),
-        new THREE.Vector3(0, 0, -5),
+        new THREE.Vector3(-8, -1, 4),
+        new THREE.Vector3(16, 0, 0),
+        new THREE.Vector3(0, 0, -8),
         1
       ),
     ];
     const camera = createFullScreenPerspectiveCamera({
-      position: new THREE.Vector3(0, 0.2, 7.6),
-      lookAt: new THREE.Vector3(0, 0, 0),
+      position: new THREE.Vector3(0, 0.85, 17.5),
+      lookAt: new THREE.Vector3(0, 0.85, 0),
       far: 10000,
     });
-    camera.fov = 34;
+    camera.fov = 36;
     const scene = new PtScene(spheres, materials, camera, quads);
+    const labels = [
+      ["Opaque dielectric\nTransmission 0", spheres[0]],
+      ["Thin-walled glass\nThickness 0", spheres[1]],
+      ["Clear volume\nThickness 1.2", spheres[2]],
+      ["Rough volume\nRoughness 0.25", spheres[3]],
+      ["High-IOR volume\nIOR 2.0", spheres[4]],
+      ["Absorption: short\nr = 0.30", spheres[5]],
+      ["Absorption: medium\nr = 0.50", spheres[6]],
+      ["Absorption: long\nr = 0.75", spheres[7]],
+    ] as const;
+    for (const [description, sphere] of labels) {
+      addStudyLabel(
+        scene,
+        description,
+        new THREE.Vector3(
+          sphere.position.x,
+          sphere.position.y - sphere.radius - 0.08,
+          0.35
+        ),
+        { fontSize: 0.14, maxWidth: 1.65 }
+      );
+    }
     scene.backgroundColorTop.set(0xd6e8ff);
     scene.backgroundColorBottom.set(0xffffff);
     scene.scene.background = scene.backgroundColorTop;
@@ -118,7 +171,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
           roughness: roughnessValues[column],
         })) - 1;
         spheres.push(new PtSphere(
-          new THREE.Vector3((column - 2) * 1.15, 0.05 + row * 1.15, 0),
+          new THREE.Vector3((column - 2) * 1.15, 0.25 + row * 1.15, 0),
           0.48,
           materialId
         ));
@@ -137,6 +190,21 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 42;
     const scene = new PtScene(spheres, materials, camera, [floor]);
+    for (let row = 0; row < metallicValues.length; row++) {
+      for (let column = 0; column < roughnessValues.length; column++) {
+        const sphere = spheres[row * roughnessValues.length + column];
+        addStudyLabel(
+          scene,
+          `Metal ${metallicValues[row].toFixed(2)} · Rough ${roughnessValues[column].toFixed(2)}`,
+          new THREE.Vector3(
+            sphere.position.x,
+            sphere.position.y - sphere.radius - 0.035,
+            0.35
+          ),
+          { fontSize: 0.085, maxWidth: 1.08 }
+        );
+      }
+    }
     scene.backgroundColorTop.set(0x000000);
     scene.backgroundColorBottom.set(0x000000);
     scene.scene.background = scene.backgroundColorTop;
@@ -264,6 +332,22 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     if (environment) scene.setEnvironmentMap(environment.source, environment.label);
     return scene;
   },
+  KhronosCompareTransmission: () => createKhronosMaterialReferenceScene(
+    compareTransmissionGltfUrl,
+    "Khronos CompareTransmission"
+  ),
+  KhronosCompareVolume: () => createKhronosMaterialReferenceScene(
+    compareVolumeGltfUrl,
+    "Khronos CompareVolume"
+  ),
+  KhronosDispersionTest: () => createKhronosMaterialReferenceScene(
+    dispersionTestGltfUrl,
+    "Khronos DispersionTest",
+    new THREE.Vector3(0, 0.7, 3.9),
+    new THREE.Vector3(0, 0.25, 0.35),
+    8,
+    "relax-inn-seaview-suite"
+  ),
   RTIOW1Simple: () => {
     const spheres: PtSphere[] = [
       new PtSphere(new THREE.Vector3(0, 0, 0), 0.5, 1), // Center
@@ -785,6 +869,7 @@ export const presetPtSceneOrder = [
   "AnalyticLightsStudy",
   "EnvironmentStudy",
   "TriangleStudy",
+  "RTIOW1SphereBvhStudy",
   "PackedTrianglesStudy",
   "GlTFBoxStudy",
   "GlTFSuzanneStudy",
@@ -792,7 +877,9 @@ export const presetPtSceneOrder = [
   "DamagedHelmetStudy",
   "PrincipledMaterialStudy",
   "TransmissionVolumeStudy",
-  "RTIOW1SphereBvhStudy",
+  "KhronosCompareTransmission",
+  "KhronosCompareVolume",
+  "KhronosDispersionTest",
 ] as const;
 
 export function presetPtSceneLabel(sceneKey: string) {
@@ -861,6 +948,32 @@ function createRtiowGroundScene(
   scene.dirLight.shadow.camera.bottom = -shadowExtent;
   scene.dirLight.shadow.camera.updateProjectionMatrix();
   return scene;
+}
+
+function addStudyLabel(
+  scene: PtScene,
+  description: string,
+  position: THREE.Vector3,
+  options: { fontSize: number; maxWidth: number }
+) {
+  const label = new Text();
+  label.text = description;
+  label.fontSize = options.fontSize;
+  label.lineHeight = 1.18;
+  label.maxWidth = options.maxWidth;
+  label.textAlign = "center";
+  label.anchorX = "center";
+  label.anchorY = "top";
+  label.color = 0xffffff;
+  label.outlineColor = 0x101827;
+  label.outlineWidth = "8%";
+  label.material.depthTest = false;
+  label.material.depthWrite = false;
+  label.renderOrder = 100;
+  label.position.copy(position);
+  label.userData.billboard = true;
+  scene.annotationGroup.add(label);
+  label.sync();
 }
 
 function createIndexedPyramidGeometry() {

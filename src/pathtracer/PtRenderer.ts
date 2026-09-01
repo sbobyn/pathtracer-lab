@@ -319,6 +319,7 @@ export default class PtRenderer {
     this.initializeComposerPasses();
 
     this.setupGizmo();
+    this.debugOverlayScene.add(this.ptScene.annotationGroup);
     this.setupTriangleWireframes();
     this.setupBvhHelpers();
     this.setupCameraDebugView();
@@ -354,7 +355,9 @@ export default class PtRenderer {
     this.disposePackedTriangleBvh();
     this.packedMaterials.texture.dispose();
     this.packedTextures.texture.dispose();
+    this.debugOverlayScene.remove(this.ptScene.annotationGroup);
     this.ptScene = ptScene;
+    this.debugOverlayScene.add(this.ptScene.annotationGroup);
     this.applySceneEnvironmentSettings();
     this.gpuScene = this.sceneCompiler.compile(ptScene);
     this.packedSpheres = packSphereTexture(this.gpuScene.spheres, this.renderer.capabilities.maxTextureSize);
@@ -2135,6 +2138,9 @@ export default class PtRenderer {
 
     this.composer.render();
     this.syncTriangleWireframes();
+    this.ptScene.annotationGroup.traverse((object) => {
+      if (object.userData.billboard === true) object.quaternion.copy(this.camera.quaternion);
+    });
     this.renderer.clearDepth();
     this.renderer.render(this.debugOverlayScene, this.camera);
     this.renderer.clearDepth();
