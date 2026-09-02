@@ -31,6 +31,7 @@ import { calibrationProgress } from "./AdaptiveQualityCalibration";
 
 const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
 const pathTracerScrubSpeed = 0.25;
+const minimumInteractiveFps = 15;
 const contextualHelpOpenEvent = "three-pathtracer:contextual-help-open";
 
 type ContextualHelpContent = {
@@ -651,9 +652,11 @@ function SceneSettings({
 function RenderSettings({
   state,
   actions,
+  performanceSettingsRequest,
 }: {
   state: Readonly<PtState>;
   actions: PtActions;
+  performanceSettingsRequest: number;
 }) {
   const { settings } = state;
   const bvhStats = actions.getTriangleBvhStats();
@@ -676,6 +679,9 @@ function RenderSettings({
   const finalCalibrationMeasurement = calibration?.measurements.at(-1) ?? null;
   const calibrationTargetMissed = calibration?.phase === "complete" &&
     finalCalibrationMeasurement !== null && !finalCalibrationMeasurement.passed;
+  const calibrationP90Fps = finalCalibrationMeasurement
+    ? 1000 / Math.max(finalCalibrationMeasurement.p90FrameTimeMs, 1e-6)
+    : null;
   const lowerResolutionSuggestion = [1, 0.5, 0.25, 0.125, 0.0625]
     .find((scale) => scale < settings.qualityMinimumResolutionScale) ?? null;
   const lowerTargetSuggestion = [120, 90, 60, 30]
@@ -684,6 +690,7 @@ function RenderSettings({
     "folder:performance-calibration",
     true
   );
+  const performanceCalibrationRef = useRef<HTMLDetailsElement>(null);
   const performanceCalibrationSummary = settings.qualityMode === "manual"
     ? "Manual"
     : calibrationActive
@@ -711,6 +718,14 @@ function RenderSettings({
   useEffect(() => {
     if (calibrationActive) setPerformanceCalibrationOpen(true);
   }, [calibrationActive]);
+  useEffect(() => {
+    if (performanceSettingsRequest === 0) return;
+    setPerformanceCalibrationOpen(true);
+    window.requestAnimationFrame(() => {
+      performanceCalibrationRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      performanceCalibrationRef.current?.focus({ preventScroll: true });
+    });
+  }, [performanceSettingsRequest]);
   return (
       <div className="render-panel__content">
       <SelectField
@@ -768,7 +783,9 @@ function RenderSettings({
         />
       )}
       <details
+        ref={performanceCalibrationRef}
         className="quality-calibration"
+        tabIndex={-1}
         open={performanceCalibrationOpen}
         onToggle={(event) => {
           const next = event.currentTarget.open;
@@ -845,8 +862,8 @@ function RenderSettings({
                   <div className="quality-calibration__target-missed" role="alert">
                     <strong>Performance target not met</strong>
                     <p>
-                      The fastest permitted setting measured {Math.round(finalCalibrationMeasurement.measuredFps)} FPS,
-                      below the {calibration.targetFps} FPS target.
+                      Validation measured a {Math.round(finalCalibrationMeasurement.measuredFps)} FPS median, but only {Math.round(calibrationP90Fps!)} FPS at p90
+                      ({finalCalibrationMeasurement.p90FrameTimeMs.toFixed(1)} ms). It did not reliably hold the {calibration.targetFps} FPS target.
                     </p>
                     {lowerResolutionSuggestion !== null ? (
                       <button
@@ -899,7 +916,7 @@ function RenderSettings({
                     <p>{calibration.status}</p>
                     <p className="quality-calibration__result">
                       {calibration.measurements.at(-1)
-                        ? `Last result: ${Math.round(calibration.measurements.at(-1)!.measuredFps)} FPS · median ${calibration.measurements.at(-1)!.medianFrameTimeMs.toFixed(1)} ms · p90 ${calibration.measurements.at(-1)!.p90FrameTimeMs.toFixed(1)} ms · ${calibration.measurements.at(-1)!.passed ? "passed" : "below target"}`
+                        ? `Last result: ${Math.round(calibration.measurements.at(-1)!.measuredFps)} FPS median · p90 ${calibration.measurements.at(-1)!.p90FrameTimeMs.toFixed(1)} ms · ${calibration.measurements.at(-1)!.passed ? "passed" : "stability check failed"}`
                         : "Warming up and gathering frame timings…"}
                     </p>
                   </div>
@@ -908,7 +925,7 @@ function RenderSettings({
                     <p>{calibration.reason}</p>
                     {calibration.measurements.at(-1) && (
                       <p className="quality-calibration__result">
-                        Last result: {Math.round(calibration.measurements.at(-1)!.measuredFps)} FPS · median {calibration.measurements.at(-1)!.medianFrameTimeMs.toFixed(1)} ms · p90 {calibration.measurements.at(-1)!.p90FrameTimeMs.toFixed(1)} ms · {calibration.measurements.at(-1)!.passed ? "passed" : "below target"}
+                        Last result: {Math.round(calibration.measurements.at(-1)!.measuredFps)} FPS median · p90 {calibration.measurements.at(-1)!.p90FrameTimeMs.toFixed(1)} ms · {calibration.measurements.at(-1)!.passed ? "passed" : "stability check failed"}
                       </p>
                     )}
                   </>
@@ -2363,12 +2380,133 @@ function useFrameRate() {
   return fps;
 }
 
-function RenderPanel({
+function PerformanceCalibrationHud({
   state,
   actions,
+  onViewSettings,
 }: {
   state: Readonly<PtState>;
   actions: PtActions;
+  onViewSettings: () => void;
+}) {
+  const calibration = state.qualityCalibration;
+  const [dismissedRunId, setDismissedRunId] = useState<number | null>(null);
+  if (!calibration || dismissedRunId === calibration.runId) return null;
+
+  const progress = calibrationProgress(calibration);
+  const active = calibration.phase !== "complete" && calibration.phase !== "cancelled";
+  const measurement = calibration.measurements.at(-1) ?? null;
+  const targetMissed = calibration.phase === "complete" && measurement !== null && !measurement.passed;
+  const p90Fps = measurement ? 1000 / Math.max(measurement.p90FrameTimeMs, 1e-6) : null;
+  const lowerResolutionSuggestion = [1, 0.5, 0.25, 0.125, 0.0625]
+    .find((scale) => scale < state.settings.qualityMinimumResolutionScale) ?? null;
+  const lowerTargetSuggestion = [120, 90, 60, 30]
+    .find((fps) => fps < state.settings.qualityTargetFps) as typeof state.settings.qualityTargetFps | undefined;
+  const testNumber = calibration.phase === "complete"
+    ? calibration.completedTests
+    : Math.min(calibration.completedTests + 1, calibration.maximumTests);
+  const progressPercent = calibration.phase === "cancelled"
+    ? 100
+    : Math.round(progress.fraction * 100);
+  const title = active
+    ? "Calibrating performance"
+    : calibration.phase === "cancelled"
+      ? "Calibration cancelled"
+      : targetMissed
+        ? "Performance target not met"
+        : "Calibration complete";
+
+  return (
+    <section
+      className={`performance-calibration-hud performance-calibration-hud--${calibration.phase}${targetMissed ? " performance-calibration-hud--target-missed" : ""}`}
+      aria-label="Performance calibration status"
+      aria-live="polite"
+    >
+      <button
+        type="button"
+        className="performance-calibration-hud__dismiss"
+        aria-label="Dismiss calibration status"
+        onClick={() => setDismissedRunId(calibration.runId)}
+      >
+        ×
+      </button>
+      <div className="performance-calibration-hud__heading">
+        <strong>{title}</strong>
+        <span>Test {testNumber} of up to {calibration.maximumTests}</span>
+      </div>
+      <div
+        className="performance-calibration-hud__progress"
+        role="progressbar"
+        aria-label={calibration.phase === "cancelled" ? "Calibration stopped" : "Calibration progress"}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progressPercent}
+      >
+        <span style={{ width: `${progressPercent}%` }} />
+      </div>
+      {active ? (
+        <div className="performance-calibration-hud__detail">
+          <span>{calibration.status}</span>
+          <span>{calibration.candidate.resolutionScale}× resolution · {calibration.candidate.samplesPerFrame} sample/frame</span>
+          {measurement && <span>Last result: {Math.round(measurement.measuredFps)} FPS median · {Math.round(p90Fps!)} FPS at p90 · {measurement.passed ? "passed" : "stability check failed"}</span>}
+        </div>
+      ) : calibration.phase === "cancelled" ? (
+        <p>The current quality result remains active. Resume when you are ready to test again.</p>
+      ) : targetMissed ? (
+        <p>
+          Validation measured a {Math.round(measurement.measuredFps)} FPS median, but only {Math.round(p90Fps!)} FPS at p90
+          ({measurement.p90FrameTimeMs.toFixed(1)} ms). It did not reliably hold the {calibration.targetFps} FPS target.
+        </p>
+      ) : (
+        <p>
+          Using {calibration.selected.resolutionScale}× resolution and {calibration.selected.samplesPerFrame} sample/frame
+          {measurement ? ` · validated at ${Math.round(measurement.measuredFps)} FPS.` : "."}
+        </p>
+      )}
+      <div className="performance-calibration-hud__actions">
+        {active ? (
+          <button type="button" className="performance-calibration-hud__cancel" onClick={() => actions.cancelQualityCalibration()}>
+            Cancel
+          </button>
+        ) : calibration.phase === "cancelled" ? (
+          <button type="button" onClick={() => actions.recalibrateQuality()}>Resume calibration</button>
+        ) : targetMissed && lowerResolutionSuggestion !== null ? (
+          <button
+            type="button"
+            className="performance-calibration-hud__retry"
+            onClick={() => {
+              actions.setQualityMinimumResolutionScale(lowerResolutionSuggestion);
+              actions.recalibrateQuality();
+            }}
+          >
+            Try {lowerResolutionSuggestion}× and recalibrate
+          </button>
+        ) : targetMissed && lowerTargetSuggestion !== undefined ? (
+          <button
+            type="button"
+            className="performance-calibration-hud__retry"
+            onClick={() => {
+              actions.setQualityTargetFps(lowerTargetSuggestion);
+              actions.recalibrateQuality();
+            }}
+          >
+            Try {lowerTargetSuggestion} FPS and recalibrate
+          </button>
+        ) : null}
+        <button type="button" onClick={onViewSettings}>View performance settings</button>
+      </div>
+    </section>
+  );
+}
+
+function RenderPanel({
+  state,
+  actions,
+  performanceSettingsRequest,
+}: {
+  state: Readonly<PtState>;
+  actions: PtActions;
+  performanceSettingsRequest: number;
 }) {
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:render", false);
   const [size, setSize] = usePersistentPanelSize(
@@ -2384,6 +2522,10 @@ function RenderPanel({
     startSize: PanelSize;
   } | null>(null);
   const fps = useFrameRate();
+
+  useEffect(() => {
+    if (performanceSettingsRequest > 0) setCollapsed(false);
+  }, [performanceSettingsRequest]);
 
   useEffect(() => {
     const handleResize = () => setSize((current) => clampPanelSize(current));
@@ -2446,7 +2588,19 @@ function RenderPanel({
       >
         <span>Render</span>
         <span className="render-panel__meta">
-          {fps === null ? "—" : fps} FPS · {
+          <span
+            className={fps === null
+              ? "render-panel__fps"
+              : fps < minimumInteractiveFps
+                ? "render-panel__fps render-panel__fps--poor"
+              : fps >= state.settings.qualityTargetFps
+                ? "render-panel__fps render-panel__fps--meeting-target"
+                : "render-panel__fps render-panel__fps--below-target"}
+            title={`Performance target: ${state.settings.qualityTargetFps} FPS · below ${minimumInteractiveFps} FPS is not considered interactive`}
+          >
+            {fps === null ? "—" : fps} FPS
+          </span>
+          <span aria-hidden="true"> · </span>{
             state.settings.renderMode === "raster"
               ? "Raster"
               : state.settings.renderMode === "comparison"
@@ -2462,7 +2616,13 @@ function RenderPanel({
         </span>
         <span className="render-panel__chevron" aria-hidden="true">⌃</span>
       </button>
-      {!collapsed && <RenderSettings state={state} actions={actions} />}
+      {!collapsed && (
+        <RenderSettings
+          state={state}
+          actions={actions}
+          performanceSettingsRequest={performanceSettingsRequest}
+        />
+      )}
       {(["width", "height", "both"] as const).map((axis) => (
         <div
           key={axis}
@@ -2550,6 +2710,12 @@ function CreationMenu({
 
 function HybridComparisonSeam({ actions }: { actions: PtActions }) {
   const [seam, setSeam] = useState(() => actions.getHybridComparisonSeam());
+  const [debugBounds, setDebugBounds] = useState<{
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
   const draggingPointer = useRef<number | null>(null);
   const hovering = useRef(false);
   const focused = useRef(false);
@@ -2558,6 +2724,49 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
     () => () => actions.setHybridComparisonInteractionActive(false),
     [actions]
   );
+
+  useLayoutEffect(() => {
+    const debugPanel = document.querySelector<HTMLElement>(".camera-ray-debug");
+    if (!debugPanel) {
+      setDebugBounds(null);
+      return;
+    }
+    const updateBounds = () => {
+      if (debugPanel.dataset.collapsed === "true") {
+        setDebugBounds(null);
+        return;
+      }
+      const bounds = debugPanel.getBoundingClientRect();
+      const next = {
+        left: bounds.left,
+        right: bounds.right,
+        top: Math.max(0, bounds.top),
+        bottom: Math.min(window.innerHeight, bounds.bottom),
+      };
+      setDebugBounds((current) =>
+        current?.left === next.left && current?.right === next.right &&
+        current?.top === next.top && current?.bottom === next.bottom
+          ? current
+          : next
+      );
+    };
+    const resizeObserver = new ResizeObserver(updateBounds);
+    const mutationObserver = new MutationObserver(updateBounds);
+    resizeObserver.observe(debugPanel);
+    mutationObserver.observe(debugPanel, { attributes: true, attributeFilter: ["data-collapsed"] });
+    window.addEventListener("resize", updateBounds);
+    updateBounds();
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", updateBounds);
+    };
+  }, []);
+
+  const seamX = seam * window.innerWidth;
+  const debugOcclusion = debugBounds && seamX >= debugBounds.left && seamX <= debugBounds.right
+    ? { top: debugBounds.top, bottom: debugBounds.bottom }
+    : null;
 
   const updateSeam = (clientX: number) => {
     const next = THREE.MathUtils.clamp(clientX / window.innerWidth, 0.03, 0.97);
@@ -2568,7 +2777,7 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
   return (
     <div
       className="hybrid-comparison-seam"
-      style={{ left: `${seam * 100}%` }}
+      style={{ transform: `translate3d(calc(${seam * 100}vw - 50%), 0, 0)` }}
       role="separator"
       aria-label="Raster and path-traced comparison seam"
       aria-orientation="vertical"
@@ -2598,6 +2807,7 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
       }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
+        event.preventDefault();
         draggingPointer.current = event.pointerId;
         actions.setHybridComparisonInteractionActive(true);
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -2635,13 +2845,23 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
         }
       }}
     >
-      <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--raster">
-        Raster
-      </span>
-      <span className="hybrid-comparison-seam__handle" aria-hidden="true">↔</span>
-      <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--pathtraced">
-        Path traced
-      </span>
+      {debugOcclusion ? (
+        <>
+          <span className="hybrid-comparison-seam__line" style={{ top: 0, height: debugOcclusion.top }} />
+          <span className="hybrid-comparison-seam__line" style={{ top: debugOcclusion.bottom, bottom: 0 }} />
+        </>
+      ) : (
+        <span className="hybrid-comparison-seam__line" />
+      )}
+      {(!debugOcclusion || window.innerHeight / 2 < debugOcclusion.top || window.innerHeight / 2 > debugOcclusion.bottom) && (
+        <span className="hybrid-comparison-seam__handle" aria-hidden="true">↔</span>
+      )}
+      {!debugOcclusion && (
+        <>
+          <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--raster">Raster</span>
+          <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--pathtraced">Path traced</span>
+        </>
+      )}
     </div>
   );
 }
@@ -2811,6 +3031,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
+  const [performanceSettingsRequest, setPerformanceSettingsRequest] = useState(0);
   const analyticLightSelected = state.selection.light !== null;
   const pointLightSelected = state.selection.light?.type === "point";
   const [size, setSize] = usePersistentPanelSize(
@@ -3069,8 +3290,17 @@ function EditorShell({ actions }: { actions: PtActions }) {
     />
     </div>
     <div className="editor-right-stack">
-    <RenderPanel state={state} actions={actions} />
+    <RenderPanel
+      state={state}
+      actions={actions}
+      performanceSettingsRequest={performanceSettingsRequest}
+    />
     </div>
+    <PerformanceCalibrationHud
+      state={state}
+      actions={actions}
+      onViewSettings={() => setPerformanceSettingsRequest((request) => request + 1)}
+    />
     {contextMenu && (
       <CreationMenu
         actions={actions}

@@ -438,7 +438,10 @@ export default class PtRenderer {
     const changed = next !== this.hybridSeam;
     this.hybridSeam = next;
     this.hybridMaterial.uniforms.uSeam.value = next;
-    if (changed) this.cameraDebugDirty = true;
+    // Rebuilding the camera-ray diagram traces representative rays and
+    // reconstructs its helper geometry. Defer that work while the seam is
+    // being manipulated so pointer movement stays responsive.
+    if (changed && !this.hybridRegionInteractionActive) this.cameraDebugDirty = true;
     if (
       changed &&
       (this.settings.renderMode === "comparison" ||
@@ -478,7 +481,9 @@ export default class PtRenderer {
   }
 
   public setHybridInteractionActive(active: boolean) {
+    const interactionEnded = this.hybridRegionInteractionActive && !active;
     this.hybridRegionInteractionActive = active;
+    if (interactionEnded) this.cameraDebugDirty = true;
   }
 
   public setFov(fov: number, invalidate = true) {
@@ -570,7 +575,11 @@ export default class PtRenderer {
   }
 
   public invalidateAdaptiveQualityFrame() {
-    this.invalidate(PtInvalidationLevel.Camera, "adaptive quality benchmark frame");
+    // Benchmark frames need fresh path-tracing work, but no camera or scene
+    // state changed. The general invalidation path also rebuilds the Camera
+    // rays diagram, which would measure debug-helper construction rather than
+    // the candidate render settings.
+    this.shaderCanvas.resetAccumulation();
   }
 
   public setMaxRayDepth(depth: number) {

@@ -1,5 +1,5 @@
 {
-  "name": "vite-threejs-template",
+  "name": "pathtracer-lab",
   "version": "0.0.0",
   "type": "module",
   "scripts": {

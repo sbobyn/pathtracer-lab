@@ -30,6 +30,7 @@ export interface CalibrationConfig {
 }
 
 export interface CalibrationSession {
+  runId: number;
   phase: CalibrationPhase;
   targetFps: CalibrationTargetFps;
   candidate: CalibrationCandidate;
@@ -44,6 +45,8 @@ export interface CalibrationSession {
   status: string;
   reason: string;
 }
+
+let nextCalibrationRunId = 1;
 
 const DEFAULT_RESOLUTION_STEPS = [0.0625, 0.125, 0.25, 0.5, 1, 2] as const;
 const DEFAULT_SAMPLE_STEPS = [1, 2, 4, 8, 12, 16, 20] as const;
@@ -60,6 +63,7 @@ export function createCalibrationSession(config: CalibrationConfig): Calibration
   );
   const candidate = { resolutionScale: resolutionSteps[0], samplesPerFrame: 1 };
   return {
+    runId: nextCalibrationRunId++,
     phase: "warmingUp",
     targetFps: config.targetFps,
     candidate,
@@ -113,6 +117,32 @@ export function recordCalibrationTrial(
   };
 
   if (session.phase === "validating") {
+    if (!passed) {
+      const sampleIndex = session.sampleSteps.indexOf(session.candidate.samplesPerFrame);
+      if (sampleIndex > 0) {
+        const candidate = {
+          resolutionScale: session.candidate.resolutionScale,
+          samplesPerFrame: session.sampleSteps[sampleIndex - 1],
+        };
+        return beginValidation(
+          { ...next, maximumTests: Math.max(next.maximumTests, next.completedTests + 1) },
+          candidate,
+          "Validation was unstable. Reducing samples before lowering resolution."
+        );
+      }
+      const resolutionIndex = session.resolutionSteps.indexOf(session.candidate.resolutionScale);
+      if (resolutionIndex > 0) {
+        const candidate = {
+          resolutionScale: session.resolutionSteps[resolutionIndex - 1],
+          samplesPerFrame: 1,
+        };
+        return beginValidation(
+          { ...next, maximumTests: Math.max(next.maximumTests, next.completedTests + 1) },
+          candidate,
+          "One sample per frame was unstable. Reducing resolution and validating again."
+        );
+      }
+    }
     return {
       ...next,
       phase: "complete",
@@ -140,6 +170,13 @@ export function recordCalibrationTrial(
         status: candidateStatus("Testing next resolution", candidate),
         reason: `Previous test passed at ${Math.round(measurement.measuredFps)} FPS.`,
       };
+    }
+    if (!passed && session.resolutionIndex === 0) {
+      return beginValidation(
+        next,
+        { resolutionScale: session.resolutionSteps[0], samplesPerFrame: 1 },
+        "The minimum-resolution baseline missed the target. Confirming it at one sample per frame."
+      );
     }
     const selectedResolution = passed
       ? session.candidate.resolutionScale

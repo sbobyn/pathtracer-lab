@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import glsl from "vite-plugin-glsl";
 
 export default defineConfig({
-  base: "/three-pathtracer/",
+  base: "/pathtracer-lab/",
   plugins: [glsl()],
   publicDir: "static/",
   server: {

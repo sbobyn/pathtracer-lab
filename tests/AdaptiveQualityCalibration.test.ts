@@ -48,6 +48,39 @@ test("sample search returns to the highest passing count and validates it", () =
   assert.match(session.reason, /Selected 0.5× resolution and 2 samples\/frame/);
 });
 
+test("a failed minimum-resolution baseline validates one sample without testing higher samples", () => {
+  let session = finishWarmup(createCalibrationSession({
+    targetFps: 60,
+    minimumResolutionScale: 0.25,
+    maximumSamplesPerFrame: 8,
+    resolutionSteps: [0.25, 0.5],
+    sampleSteps: [1, 2, 4, 8],
+  }));
+  session = recordCalibrationTrial(session, slow60);
+  assert.equal(session.phase, "validating");
+  assert.deepEqual(session.candidate, { resolutionScale: 0.25, samplesPerFrame: 1 });
+});
+
+test("failed validation lowers samples before resolution", () => {
+  let session = finishWarmup(createCalibrationSession({
+    targetFps: 60,
+    minimumResolutionScale: 0.5,
+    maximumSamplesPerFrame: 2,
+    resolutionSteps: [0.5],
+    sampleSteps: [1, 2],
+  }));
+  session = recordCalibrationTrial(session, fast60);
+  session = recordCalibrationTrial(session, fast60);
+  assert.equal(session.phase, "validating");
+  assert.deepEqual(session.candidate, { resolutionScale: 0.5, samplesPerFrame: 2 });
+  session = recordCalibrationTrial(session, slow60);
+  assert.equal(session.phase, "validating");
+  assert.deepEqual(session.candidate, { resolutionScale: 0.5, samplesPerFrame: 1 });
+  session = recordCalibrationTrial(session, fast60);
+  assert.equal(session.phase, "complete");
+  assert.deepEqual(session.selected, { resolutionScale: 0.5, samplesPerFrame: 1 });
+});
+
 test("30 FPS target accepts frame times that fail a 60 FPS target", () => {
   const times = [24, 25, 26, 25, 24, 26, 25, 24, 26, 25];
   const config = {

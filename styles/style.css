@@ -68,22 +68,34 @@ body {
 
 .hybrid-comparison-seam {
   position: fixed;
-  z-index: 20;
+  z-index: 5;
   top: 0;
   bottom: 0;
-  width: 3px;
+  left: 0;
+  width: 2px;
   color: #18181b;
-  background: #d9f99d;
-  box-shadow: 0 0 0 1px rgb(24 24 27 / 45%), 0 0 16px rgb(190 242 100 / 35%);
+  background: transparent;
   cursor: ew-resize;
   pointer-events: auto;
   touch-action: none;
-  transform: translateX(-50%);
+  -webkit-user-select: none;
+  user-select: none;
+  will-change: transform;
+}
+
+.hybrid-comparison-seam__line {
+  position: absolute;
+  inset: 0;
+  background: #d9f99d;
+  pointer-events: none;
 }
 
 .hybrid-comparison-seam:focus-visible {
-  outline: 2px solid #bef264;
-  outline-offset: 3px;
+  outline: none;
+}
+
+.hybrid-comparison-seam:focus-visible .hybrid-comparison-seam__handle {
+  box-shadow: 0 0 0 2px #fff, 0 5px 18px rgb(0 0 0 / 32%);
 }
 
 .hybrid-comparison-seam__handle {
@@ -91,21 +103,22 @@ body {
   top: 50%;
   left: 50%;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   color: #18181b;
   background: #bef264;
   border: 2px solid rgb(255 255 255 / 72%);
   border-radius: 999px;
   box-shadow: 0 5px 18px rgb(0 0 0 / 32%);
-  font: 700 15px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  font: 700 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
   transform: translate(-50%, -50%);
 }
 
 .hybrid-comparison-seam__label {
   position: absolute;
-  top: calc(50% + 22px);
+  top: auto;
+  bottom: 16px;
   padding: 4px 7px;
   color: #f4f4f5;
   background: rgb(24 24 27 / 84%);
@@ -115,6 +128,7 @@ body {
   backdrop-filter: blur(8px);
   font: 650 10px/1 Inter, ui-sans-serif, system-ui, sans-serif;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .hybrid-comparison-seam__label--raster {
@@ -340,6 +354,7 @@ body {
 .editor-left-stack,
 .editor-right-stack {
   position: absolute;
+  z-index: 10;
   top: 16px;
   display: flex;
   min-height: 0;
@@ -736,6 +751,137 @@ body {
   flex: 0 1 auto;
 }
 
+.performance-calibration-hud {
+  position: fixed;
+  z-index: 24;
+  right: 16px;
+  bottom: 16px;
+  left: 50%;
+  width: min(440px, calc(100vw - 32px));
+  padding: 14px 16px;
+  color: #f4f4f5;
+  background: rgb(24 24 27 / 94%);
+  border: 1px solid rgb(190 242 100 / 48%);
+  border-radius: 10px;
+  box-shadow: 0 16px 42px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+.performance-calibration-hud__dismiss {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #a1a1aa;
+  background: transparent;
+  border: 0;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.performance-calibration-hud__dismiss:hover,
+.performance-calibration-hud__dismiss:focus-visible {
+  color: #f4f4f5;
+  background: rgb(255 255 255 / 8%);
+}
+
+.performance-calibration-hud__heading {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-right: 24px;
+}
+
+.performance-calibration-hud__heading strong {
+  font-size: 14px;
+}
+
+.performance-calibration-hud__heading span,
+.performance-calibration-hud__detail,
+.performance-calibration-hud > p {
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.performance-calibration-hud__progress {
+  height: 5px;
+  margin: 10px 0;
+  overflow: hidden;
+  background: rgb(255 255 255 / 12%);
+  border-radius: 999px;
+}
+
+.performance-calibration-hud__progress > span {
+  display: block;
+  height: 100%;
+  background: #a3e635;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.performance-calibration-hud__detail {
+  display: grid;
+  gap: 3px;
+}
+
+.performance-calibration-hud > p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.performance-calibration-hud__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.performance-calibration-hud__actions button {
+  min-height: 30px;
+  padding: 5px 9px;
+  color: #e4e4e7;
+  background: rgb(63 63 70 / 72%);
+  border: 1px solid rgb(161 161 170 / 45%);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.performance-calibration-hud__actions button:hover,
+.performance-calibration-hud__actions button:focus-visible {
+  border-color: #bef264;
+}
+
+.performance-calibration-hud__actions .performance-calibration-hud__cancel {
+  color: #fecaca;
+  background: rgb(127 29 29 / 45%);
+  border-color: rgb(248 113 113 / 68%);
+}
+
+.performance-calibration-hud__actions .performance-calibration-hud__retry {
+  color: #18181b;
+  background: #bef264;
+  border-color: #d9f99d;
+}
+
+.performance-calibration-hud--cancelled,
+.performance-calibration-hud--target-missed {
+  border-color: rgb(248 113 113 / 62%);
+}
+
+.performance-calibration-hud--cancelled .performance-calibration-hud__progress > span,
+.performance-calibration-hud--target-missed .performance-calibration-hud__progress > span {
+  background: #ef4444;
+}
+
 .editor-left-stack:has(> .editor-shell:not([data-collapsed="true"])):has(> .object-inspector:not([data-collapsed="true"])) > .editor-shell,
 .editor-left-stack:has(> .editor-shell:not([data-collapsed="true"])):has(> .object-inspector:not([data-collapsed="true"])) > .object-inspector {
   flex-grow: 1;
@@ -821,7 +967,7 @@ body {
 
 .editor-top-toolbar {
   position: absolute;
-  z-index: 10;
+  z-index: 21;
   top: 16px;
   left: 50%;
   display: flex;
@@ -1380,6 +1526,24 @@ body {
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.render-panel__fps {
+  color: #a1a1aa;
+  font-weight: 700;
+  transition: color 160ms ease;
+}
+
+.render-panel__fps--meeting-target {
+  color: #a3e635;
+}
+
+.render-panel__fps--below-target {
+  color: #facc15;
+}
+
+.render-panel__fps--poor {
+  color: #f87171;
 }
 
 .render-panel__chevron {
@@ -1962,6 +2126,20 @@ body {
   .object-inspector[data-collapsed="true"] .object-inspector__meta,
   .object-inspector[data-collapsed="true"] .object-inspector__chevron {
     display: none;
+  }
+  .performance-calibration-hud {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    padding: 12px;
+  }
+  .performance-calibration-hud__heading,
+  .performance-calibration-hud__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .performance-calibration-hud__heading {
+    gap: 2px;
   }
 }
 

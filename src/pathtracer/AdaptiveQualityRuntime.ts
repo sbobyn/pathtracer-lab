@@ -153,7 +153,7 @@ export default class AdaptiveQualityRuntime {
     if (this.session.phase === "complete") {
       this.applyCandidate();
       const measurement = this.session.measurements.at(-1);
-      if (measurement && this.context) {
+      if (measurement?.passed && this.context) {
         try {
           saveAdaptiveQualityProfile(this.storage, this.context, {
             resolutionScale: this.session.selected.resolutionScale,
