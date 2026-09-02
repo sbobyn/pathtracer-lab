@@ -1160,6 +1160,38 @@ body {
   padding: 0 12px 10px;
 }
 
+.camera-pose-readout {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 4px;
+  padding: 7px 8px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 14%);
+  color: #a1a1aa;
+  font-size: 9px;
+}
+
+.camera-pose-readout > div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.camera-pose-readout dt,
+.camera-pose-readout dd {
+  margin: 0;
+}
+
+.camera-pose-readout dd {
+  color: #e4e4e7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: text;
+  white-space: nowrap;
+}
+
 .editor-control {
   display: grid;
   grid-template-columns: 1fr 84px;

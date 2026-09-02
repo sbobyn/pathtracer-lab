@@ -25,6 +25,13 @@ const requiredByAsset: Record<string, string[]> = {
     "KHR_materials_ior",
     "KHR_materials_dispersion",
   ],
+  DragonDispersion: [
+    "KHR_materials_transmission",
+    "KHR_materials_volume",
+    "KHR_materials_ior",
+    "KHR_materials_dispersion",
+  ],
+  DragonAttenuation: ["KHR_materials_transmission", "KHR_materials_volume"],
 };
 
 for (const [asset, requiredExtensions] of Object.entries(requiredByAsset)) {

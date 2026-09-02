@@ -223,6 +223,14 @@ export default class PtActions {
     return this.store.subscribe(listener);
   }
 
+  public getCameraPose() {
+    return this.renderer.getCameraPose();
+  }
+
+  public onCameraPoseChanged(listener: () => void) {
+    return this.renderer.onCameraPoseChanged(listener);
+  }
+
   public getInvalidationHistory() {
     return this.renderer.getInvalidationHistory();
   }
@@ -317,6 +325,9 @@ export default class PtActions {
       },
     }));
     Object.assign(this.renderer.settings, this.store.getState().settings);
+    if (scene.initialEnvironmentIntensity !== null) {
+      this.setEnvironmentIntensity(scene.initialEnvironmentIntensity);
+    }
     this.publishHistory();
     this.renderer.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
     this.nextSphereName = scene.getSphereMeshes().length;

@@ -83,6 +83,7 @@ export default class PtScene {
   rasterGradientEnvironmentTexture: THREE.Texture | null = null;
   environmentDistribution: EnvironmentImportanceDistribution | null = null;
   environmentLoaded: Promise<THREE.Texture> | null = null;
+  initialEnvironmentIntensity: number | null = null;
   staticAssetsLoaded: Promise<void> | null = null;
   staticAssetError: Error | null = null;
   staticAssetWarnings: string[] = [];

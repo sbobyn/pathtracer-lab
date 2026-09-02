@@ -16,3 +16,5 @@ The HDR files above were downloaded from Poly Haven as built-in studio, outdoor,
 `static/models/damaged-helmet/` contains the official Khronos glTF Sample Assets Damaged Helmet by Leonard Teo under its included CC BY 4.0 / CC BY-NC 4.0 license notice. The binary glTF is kept intact as a richer material and mesh study, with its original license beside it. Base color, packed metallic-roughness, and independent emissive inputs are supported. Normal and occlusion maps remain explicit targets for the auxiliary glTF-material work.
 
 `static/models/simple-meshes/` contains the official Khronos glTF Sample Assets Simple Meshes model under CC0. Its two nodes reference the same indexed triangle mesh, providing a compact integration check that node transforms and shared mesh data are flattened correctly. The original license is included in that directory.
+
+`gltf/khronos-pbr/` contains focused Khronos transmission references plus the Dragon Dispersion and Dragon Attenuation showcase assets. The dragons preserve their original GLBs, source links, attribution, and license notices so authored scale remains valid for volume attenuation.

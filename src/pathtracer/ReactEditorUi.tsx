@@ -1304,10 +1304,26 @@ function CameraSettings({
   actions: PtActions;
 }) {
   const { settings } = state;
+  const [cameraPose, setCameraPose] = useState(() => actions.getCameraPose());
+  useEffect(() => {
+    const updateCameraPose = () => setCameraPose(actions.getCameraPose());
+    updateCameraPose();
+    return actions.onCameraPoseChanged(updateCameraPose);
+  }, [actions, state.sceneKey]);
   return (
     <PersistentDetails className="editor-panel" storageKey="camera">
       <summary id="camera-settings-title">Camera</summary>
       <div className="editor-panel__content">
+      <dl className="camera-pose-readout" aria-label="Current camera pose">
+        <div>
+          <dt>Position</dt>
+          <dd>{formatCameraVector(cameraPose.position)}</dd>
+        </div>
+        <div>
+          <dt>Direction</dt>
+          <dd>{formatCameraVector(cameraPose.direction)}</dd>
+        </div>
+      </dl>
       <SelectField
         label="Projection"
         value={settings.cameraProjectionMode}
@@ -1428,6 +1444,12 @@ function CameraSettings({
       </div>
     </PersistentDetails>
   );
+}
+
+function formatCameraVector(vector: readonly number[]) {
+  return vector
+    .map((value) => (Math.abs(value) < 0.0005 ? 0 : value).toFixed(3))
+    .join(", ");
 }
 
 function SceneHierarchy({

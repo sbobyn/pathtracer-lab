@@ -14,6 +14,8 @@ import boxGltfUrl from "../assets/gltf/box/Box.glb?url";
 import compareTransmissionGltfUrl from "../assets/gltf/khronos-pbr/CompareTransmission.glb?url";
 import compareVolumeGltfUrl from "../assets/gltf/khronos-pbr/CompareVolume.glb?url";
 import dispersionTestGltfUrl from "../assets/gltf/khronos-pbr/DispersionTest.glb?url";
+import dragonDispersionGltfUrl from "../assets/gltf/khronos-pbr/DragonDispersion.glb?url";
+import dragonAttenuationGltfUrl from "../assets/gltf/khronos-pbr/DragonAttenuation.glb?url";
 
 function createKhronosMaterialReferenceScene(
   source: string,
@@ -45,7 +47,9 @@ function createKhronosMaterialReferenceScene(
 export function resolutionScaleForPreset(sceneKey: string, fallback: number) {
   if (
     sceneKey === "RTIOW1SphereBvhStudy" ||
-    sceneKey === "DamagedHelmetStudy"
+    sceneKey === "DamagedHelmetStudy" ||
+    sceneKey === "KhronosDragonDispersion" ||
+    sceneKey === "KhronosDragonAttenuation"
   ) return 0.25;
   if (
     sceneKey === "PackedTrianglesStudy" ||
@@ -348,6 +352,34 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     8,
     "relax-inn-seaview-suite"
   ),
+  KhronosDragonDispersion: () => {
+    const position = new THREE.Vector3(0.404, 1.438, 11.521);
+    const direction = new THREE.Vector3(-0.035, -0.124, -0.992).normalize();
+    const scene = createKhronosMaterialReferenceScene(
+      dragonDispersionGltfUrl,
+      "Khronos Dragon Dispersion",
+      position,
+      position.clone().add(direction),
+      1,
+      "meadow"
+    );
+    scene.initialEnvironmentIntensity = 0.8;
+    return scene;
+  },
+  KhronosDragonAttenuation: () => {
+    const position = new THREE.Vector3(0.404, 1.438, 11.521);
+    const direction = new THREE.Vector3(-0.035, -0.124, -0.992).normalize();
+    const scene = createKhronosMaterialReferenceScene(
+      dragonAttenuationGltfUrl,
+      "Khronos Dragon Attenuation",
+      position,
+      position.clone().add(direction),
+      1,
+      "meadow"
+    );
+    scene.initialEnvironmentIntensity = 0.8;
+    return scene;
+  },
   RTIOW1Simple: () => {
     const spheres: PtSphere[] = [
       new PtSphere(new THREE.Vector3(0, 0, 0), 0.5, 1), // Center
@@ -880,6 +912,8 @@ export const presetPtSceneOrder = [
   "KhronosCompareTransmission",
   "KhronosCompareVolume",
   "KhronosDispersionTest",
+  "KhronosDragonDispersion",
+  "KhronosDragonAttenuation",
 ] as const;
 
 export function presetPtSceneLabel(sceneKey: string) {

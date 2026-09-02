@@ -156,6 +156,7 @@ export default class PtRenderer {
   private hybridSeam = 0.5;
   private hybridRegionInteractionActive = false;
   private readonly frameTimingListeners = new Set<(frameTimeMs: number) => void>();
+  private readonly cameraPoseListeners = new Set<() => void>();
   private previousFrameStartedAt = 0;
 
   public orbitControls!: OrbitControls;
@@ -262,7 +263,24 @@ export default class PtRenderer {
 
   private readonly handleOrbitChange = () => {
     this.invalidate(PtInvalidationLevel.Camera, "orbit camera changed");
+    this.cameraPoseListeners.forEach((listener) => listener());
   };
+
+  public getCameraPose() {
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction).normalize();
+    return {
+      position: this.camera.position.toArray() as [number, number, number],
+      direction: direction.toArray() as [number, number, number],
+    };
+  }
+
+  public onCameraPoseChanged(listener: () => void) {
+    this.cameraPoseListeners.add(listener);
+    return () => {
+      this.cameraPoseListeners.delete(listener);
+    };
+  }
 
   private readonly handleTransformChange = () => {
     if (this.transformControls.dragging) {

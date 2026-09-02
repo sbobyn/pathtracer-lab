@@ -25,6 +25,16 @@ export const presetPtSceneInfo: Record<string, PresetPtSceneInfo> = {
     implementation: "Loads the official DispersionTest GLB and stochastically traces one RGB hero wavelength using the Khronos IOR-spread approximation, compensating channel selection to keep the estimator unbiased.",
     concepts: "Dispersion separates wavelengths because their indices of refraction differ. Khronos defines dispersion as 20 divided by the Abbe number and provides an RGB approximation around the material IOR.",
   },
+  KhronosDragonDispersion: {
+    purpose: "Showcases transmission, solid-volume attenuation, IOR, and wavelength-dependent dispersion together in a recognizable production asset.",
+    implementation: "Loads the official Khronos Dragon Dispersion GLB unchanged so its authored node scale, thickness map, attenuation distance, and cloth backdrop retain their intended relationship.",
+    concepts: "Dispersion is subtle through thin horns and claws but separates wavelengths more visibly through the thicker body, where refracted paths travel farther through the dielectric.",
+  },
+  KhronosDragonAttenuation: {
+    purpose: "Showcases thickness-dependent colored absorption and refraction using the official Khronos dragon and checker-cloth composition.",
+    implementation: "Loads the official Dragon Attenuation GLB unchanged and traces the true distance traveled inside its solid volume; the thickness texture establishes volume behavior while Beer–Lambert attenuation follows each path length.",
+    concepts: "The same glass material appears lighter through thin regions and deeper yellow-orange through the body because transmittance decreases exponentially with distance inside the medium.",
+  },
   PrincipledMaterialStudy: {
     purpose: "Compares continuous metallic and roughness values under the same studio illumination.",
     implementation: "A grid of principled spheres varies metallic by row and roughness by column while keeping base color, geometry, camera, and HDR fixed.",
