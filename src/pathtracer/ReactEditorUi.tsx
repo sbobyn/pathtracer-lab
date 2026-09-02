@@ -27,6 +27,7 @@ import {
 import { presetPtSceneInfo } from "./PresetPtSceneInfo";
 import { builtinTextures } from "./BuiltinTextures";
 import { builtinEnvironments, findBuiltinEnvironment } from "./BuiltinEnvironments";
+import { calibrationProgress } from "./AdaptiveQualityCalibration";
 
 const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
 const pathTracerScrubSpeed = 0.25;
@@ -663,6 +664,35 @@ function RenderSettings({
   const [bvhTraversalSpeed, setBvhTraversalSpeed] = useState(450);
   const traversal = state.bvhTraversal;
   const traversalEvent = traversal.events[traversal.step] ?? null;
+  const calibration = state.qualityCalibration;
+  const calibrationProgressState = calibration ? calibrationProgress(calibration) : null;
+  const calibrationActive = calibration !== null &&
+    calibration.phase !== "complete" && calibration.phase !== "cancelled";
+  const calibrationSettingsPending = calibration !== null && !calibrationActive && (
+    calibration.targetFps !== settings.qualityTargetFps ||
+    calibration.resolutionSteps[0] !== settings.qualityMinimumResolutionScale ||
+    calibration.sampleSteps.at(-1) !== settings.qualityMaximumSamples
+  );
+  const finalCalibrationMeasurement = calibration?.measurements.at(-1) ?? null;
+  const calibrationTargetMissed = calibration?.phase === "complete" &&
+    finalCalibrationMeasurement !== null && !finalCalibrationMeasurement.passed;
+  const lowerResolutionSuggestion = [1, 0.5, 0.25, 0.125, 0.0625]
+    .find((scale) => scale < settings.qualityMinimumResolutionScale) ?? null;
+  const lowerTargetSuggestion = [120, 90, 60, 30]
+    .find((fps) => fps < settings.qualityTargetFps) as typeof settings.qualityTargetFps | undefined;
+  const [performanceCalibrationOpen, setPerformanceCalibrationOpen] = usePersistentBoolean(
+    "folder:performance-calibration",
+    true
+  );
+  const performanceCalibrationSummary = settings.qualityMode === "manual"
+    ? "Manual"
+    : calibrationActive
+      ? "Calibrating…"
+      : calibration?.phase === "complete"
+        ? calibrationSettingsPending
+          ? "Changes ready · Run again"
+          : `${calibration.targetFps} FPS · ${calibration.selected.resolutionScale}× · ${calibration.selected.samplesPerFrame} spp`
+        : `Auto · ${settings.qualityTargetFps} FPS`;
   const visibleTraversalEvents = traversal.events.slice(0, Math.max(0, traversal.step + 1));
   const visibleNodeTests = visibleTraversalEvents.filter((event) => event.kind === "node").length;
   const visiblePrimitiveTests = visibleTraversalEvents.filter((event) => event.kind === "triangle" || event.kind === "sphere").length;
@@ -678,6 +708,9 @@ function RenderSettings({
     );
     return () => window.clearInterval(timer);
   }, [actions, bvhTraversalPlaying, bvhTraversalSpeed, traversal.events.length, traversal.step]);
+  useEffect(() => {
+    if (calibrationActive) setPerformanceCalibrationOpen(true);
+  }, [calibrationActive]);
   return (
       <div className="render-panel__content">
       <SelectField
@@ -734,6 +767,182 @@ function RenderSettings({
           }
         />
       )}
+      <details
+        className="quality-calibration"
+        open={performanceCalibrationOpen}
+        onToggle={(event) => {
+          const next = event.currentTarget.open;
+          if (next !== performanceCalibrationOpen) setPerformanceCalibrationOpen(next);
+        }}
+      >
+        <summary className="quality-calibration__summary">
+          <span>Performance calibration</span>
+          <span>{performanceCalibrationSummary}</span>
+        </summary>
+        <div className="quality-calibration__body" aria-live="polite">
+        <SelectField
+          label="Quality mode"
+          value={settings.qualityMode}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "manual", label: "Manual" },
+          ]}
+          density="compact"
+          layout="horizontal"
+          onChange={(value) => actions.setQualityMode(value as typeof settings.qualityMode)}
+        />
+        {settings.qualityMode === "auto" && (
+          <>
+            <div className="quality-calibration__limits">
+              <SelectField
+                label="Target"
+                value={String(settings.qualityTargetFps)}
+                options={[30, 60, 90, 120].map((fps) => ({ value: String(fps), label: `${fps} FPS` }))}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => actions.setQualityTargetFps(Number(value) as typeof settings.qualityTargetFps)}
+              />
+              <SelectField
+                label="Min resolution"
+                value={String(settings.qualityMinimumResolutionScale)}
+                options={[1, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({ value: String(scale), label: `${scale}×` }))}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => actions.setQualityMinimumResolutionScale(Number(value))}
+              />
+              <SelectField
+                label="Max samples"
+                value={String(settings.qualityMaximumSamples)}
+                options={[1, 2, 4, 8, 12, 16, 20].map((samples) => ({ value: String(samples), label: String(samples) }))}
+                density="compact"
+                layout="horizontal"
+                onChange={(value) => actions.setQualityMaximumSamples(Number(value))}
+              />
+            </div>
+            {calibration && calibrationProgressState && (
+              <div className={`quality-calibration__status quality-calibration__status--${calibration.phase}${calibrationTargetMissed ? " quality-calibration__status--target-missed" : ""}`}>
+                <div className="quality-calibration__actions">
+                  {(calibration.phase === "complete" || calibration.phase === "cancelled") ? (
+                    <button
+                      type="button"
+                      className={calibrationSettingsPending ? "quality-calibration__run-again--pending" : undefined}
+                      onClick={() => actions.recalibrateQuality()}
+                    >
+                      Run again
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="quality-calibration__cancel"
+                      onClick={() => actions.cancelQualityCalibration()}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button type="button" onClick={() => actions.setQualityMode("manual")}>Use manual settings</button>
+                </div>
+                {calibrationTargetMissed && (
+                  <div className="quality-calibration__target-missed" role="alert">
+                    <strong>Performance target not met</strong>
+                    <p>
+                      The fastest permitted setting measured {Math.round(finalCalibrationMeasurement.measuredFps)} FPS,
+                      below the {calibration.targetFps} FPS target.
+                    </p>
+                    {lowerResolutionSuggestion !== null ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          actions.setQualityMinimumResolutionScale(lowerResolutionSuggestion);
+                          actions.recalibrateQuality();
+                        }}
+                      >
+                        Try {lowerResolutionSuggestion}× minimum and recalibrate
+                      </button>
+                    ) : lowerTargetSuggestion !== undefined ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          actions.setQualityTargetFps(lowerTargetSuggestion);
+                          actions.recalibrateQuality();
+                        }}
+                      >
+                        Try {lowerTargetSuggestion} FPS and recalibrate
+                      </button>
+                    ) : (
+                      <p>
+                        This scene cannot reach 30 FPS at the minimum supported resolution on the current device and window size. Try a smaller window, Raster mode, or a region-based render mode.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {calibrationSettingsPending && (
+                  <p className="quality-calibration__pending">
+                    Calibration settings changed. Press Run again to test them; the current result remains active until then.
+                  </p>
+                )}
+                <div className="quality-calibration__status-heading">
+                  <strong>{calibrationActive ? "Calibrating…" : calibrationTargetMissed ? "Target not met" : calibration.status}</strong>
+                  <span>Test {calibration.phase === "complete" ? calibration.completedTests : Math.min(calibration.completedTests + 1, calibration.maximumTests)} of up to {calibration.maximumTests}</span>
+                </div>
+                <div
+                  className="quality-calibration__progress"
+                  role="progressbar"
+                  aria-label={calibration.phase === "cancelled" ? "Calibration stopped" : "Calibration progress"}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={calibration.phase === "cancelled" ? 100 : Math.round(calibrationProgressState.fraction * 100)}
+                >
+                  <span style={{ width: `${calibrationProgressState.fraction * 100}%` }} />
+                </div>
+                {calibrationActive ? (
+                  <div className="quality-calibration__live-detail">
+                    <p>{calibration.status}</p>
+                    <p className="quality-calibration__result">
+                      {calibration.measurements.at(-1)
+                        ? `Last result: ${Math.round(calibration.measurements.at(-1)!.measuredFps)} FPS · median ${calibration.measurements.at(-1)!.medianFrameTimeMs.toFixed(1)} ms · p90 ${calibration.measurements.at(-1)!.p90FrameTimeMs.toFixed(1)} ms · ${calibration.measurements.at(-1)!.passed ? "passed" : "below target"}`
+                        : "Warming up and gathering frame timings…"}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p>{calibration.reason}</p>
+                    {calibration.measurements.at(-1) && (
+                      <p className="quality-calibration__result">
+                        Last result: {Math.round(calibration.measurements.at(-1)!.measuredFps)} FPS · median {calibration.measurements.at(-1)!.medianFrameTimeMs.toFixed(1)} ms · p90 {calibration.measurements.at(-1)!.p90FrameTimeMs.toFixed(1)} ms · {calibration.measurements.at(-1)!.passed ? "passed" : "below target"}
+                      </p>
+                    )}
+                  </>
+                )}
+                {(calibrationActive || calibration.measurements.length > 0) && (
+                  <details className="quality-calibration__log">
+                    <summary>Trial log</summary>
+                    {calibration.measurements.length > 0 && (
+                      <ol>
+                        {calibration.measurements.map((measurement, index) => (
+                          <li key={`${measurement.phase}-${index}`}>
+                            {measurement.candidate.resolutionScale}× · {measurement.candidate.samplesPerFrame} spp — {Math.round(measurement.measuredFps)} FPS ({measurement.passed ? "pass" : "miss"})
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </details>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        <details className="quality-calibration__guide">
+          <summary>How to improve performance</summary>
+          <p>Path tracing measures fresh interactive frames, then uses the highest resolution and sample count that leave a safety margin around your target.</p>
+          <ul>
+            <li><strong>Raster</strong> is fastest and useful for navigation.</li>
+            <li><strong>Comparison, ROI, and selected-object modes</strong> trace fewer pixels when configured to trace only their visible region.</li>
+            <li>A smaller browser window reduces the number of pixels traced.</li>
+            <li>Manual mode keeps your sample and resolution choices authoritative.</li>
+          </ul>
+        </details>
+        </div>
+      </details>
       <fieldset
         className="editor-controls-group"
         disabled={settings.renderMode === "raster"}
@@ -756,7 +965,10 @@ function RenderSettings({
             lookFor: "More samples reduce fresh-frame noise and make the image settle faster.",
             performance: "Cost is approximately linear: doubling samples roughly doubles path-tracing work per frame.",
           }}
-          setValue={(value) => actions.setNumSamples(value)}
+          setValue={(value) => {
+            actions.setQualityMode("manual");
+            actions.setNumSamples(value);
+          }}
         />
         <SettingsNumberField
           actions={actions}
@@ -833,7 +1045,10 @@ function RenderSettings({
           layout="horizontal"
           onChange={(value) =>
             commitSetting(actions, "Change resolution scale", () =>
-              actions.setResolutionScale(Number(value))
+              {
+                actions.setQualityMode("manual");
+                actions.setResolutionScale(Number(value));
+              }
             )
           }
       /></HelpedControl>

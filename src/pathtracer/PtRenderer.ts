@@ -155,6 +155,8 @@ export default class PtRenderer {
   private readonly hybridRegion = new THREE.Vector4(0.3, 0.3, 0.7, 0.7);
   private hybridSeam = 0.5;
   private hybridRegionInteractionActive = false;
+  private readonly frameTimingListeners = new Set<(frameTimeMs: number) => void>();
+  private previousFrameStartedAt = 0;
 
   public orbitControls!: OrbitControls;
   public transformControls!: TransformControls;
@@ -546,6 +548,29 @@ export default class PtRenderer {
     if (invalidate) {
       this.invalidate(PtInvalidationLevel.Settings, "samples per frame changed");
     }
+  }
+
+  public subscribeFrameTiming(listener: (frameTimeMs: number) => void) {
+    this.frameTimingListeners.add(listener);
+    return () => this.frameTimingListeners.delete(listener);
+  }
+
+  public getAdaptiveQualityContext() {
+    const gl = this.renderer.getContext();
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info") as { UNMASKED_RENDERER_WEBGL: number } | null;
+    const renderer = debugInfo
+      ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL))
+      : String(gl.getParameter(gl.RENDERER));
+    return {
+      viewportWidth: Math.max(1, this.canvas.clientWidth),
+      viewportHeight: Math.max(1, this.canvas.clientHeight),
+      devicePixelRatio: window.devicePixelRatio || 1,
+      renderer,
+    };
+  }
+
+  public invalidateAdaptiveQualityFrame() {
+    this.invalidate(PtInvalidationLevel.Camera, "adaptive quality benchmark frame");
   }
 
   public setMaxRayDepth(depth: number) {
@@ -2025,6 +2050,12 @@ export default class PtRenderer {
   }
 
   private readonly renderLoop = () => {
+    const frameStartedAt = performance.now();
+    if (this.previousFrameStartedAt > 0) {
+      const frameTimeMs = frameStartedAt - this.previousFrameStartedAt;
+      for (const listener of this.frameTimingListeners) listener(frameTimeMs);
+    }
+    this.previousFrameStartedAt = frameStartedAt;
     // Some window managers apply snapping/fullscreen changes without a useful
     // resize-event sequence. Polling these three scalar values once per frame
     // makes the drawing buffer follow the real browser viewport in that case,

@@ -1403,6 +1403,278 @@ body {
   scrollbar-gutter: stable;
 }
 
+.quality-calibration {
+  min-width: 0;
+  margin: 4px 0 8px;
+  color: #d4d4d8;
+  border: 1px solid rgb(163 230 53 / 20%);
+  border-radius: 7px;
+  background: linear-gradient(145deg, rgb(132 204 22 / 6%), rgb(15 23 42 / 18%));
+  font-size: 11px;
+}
+
+.quality-calibration__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.quality-calibration__summary::-webkit-details-marker {
+  display: none;
+}
+
+.quality-calibration__summary > span:first-child {
+  min-width: 0;
+  color: #f4f4f5;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.quality-calibration__summary > span:last-of-type {
+  color: #a1a1aa;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.quality-calibration__summary::after {
+  content: "⌃";
+  color: #71717a;
+  transition: transform 160ms ease;
+}
+
+.quality-calibration:not([open]) .quality-calibration__summary::after {
+  transform: rotate(180deg);
+}
+
+.quality-calibration__body {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 9px 9px;
+}
+
+.quality-calibration__status-heading,
+.quality-calibration__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quality-calibration__status-heading span,
+.quality-calibration__result {
+  color: #a1a1aa;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.quality-calibration__limits {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quality-calibration__pending {
+  margin: 2px 0 0;
+  padding: 6px 7px;
+  color: #bef264;
+  border: 1px solid rgb(190 242 100 / 14%);
+  border-radius: 4px;
+  background: rgb(132 204 22 / 6%);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.quality-calibration__target-missed {
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  color: #fecaca;
+  border: 1px solid rgb(248 113 113 / 38%);
+  border-radius: 5px;
+  background: rgb(153 27 27 / 16%);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.quality-calibration__target-missed strong {
+  color: #fca5a5;
+  font-size: 10px;
+}
+
+.quality-calibration__target-missed p {
+  margin: 0;
+}
+
+.quality-calibration__target-missed button {
+  justify-self: start;
+  min-height: 25px;
+  padding: 4px 7px;
+  color: #ecfccb;
+  border: 1px solid rgb(163 230 53 / 72%);
+  border-radius: 4px;
+  background: rgb(101 163 13 / 22%);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.quality-calibration__target-missed button:hover {
+  border-color: #a3e635;
+  background: rgb(101 163 13 / 32%);
+}
+
+.quality-calibration__status {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 6%);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.quality-calibration__status-heading strong {
+  min-width: 0;
+  color: #e4e4e7;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.quality-calibration__progress {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(161 161 170 / 18%);
+}
+
+.quality-calibration__progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #a3e635;
+  transition: width 180ms ease;
+}
+
+.quality-calibration__status--cancelled .quality-calibration__progress {
+  background: rgb(153 27 27 / 48%);
+  box-shadow: inset 0 0 0 1px rgb(248 113 113 / 18%);
+}
+
+.quality-calibration__status--cancelled .quality-calibration__progress > span {
+  background: #f87171;
+}
+
+.quality-calibration__status--target-missed .quality-calibration__progress {
+  background: rgb(153 27 27 / 48%);
+}
+
+.quality-calibration__status--target-missed .quality-calibration__progress > span {
+  background: #f87171;
+}
+
+.quality-calibration__status--cancelled .quality-calibration__status-heading strong,
+.quality-calibration__status--cancelled .quality-calibration__status-heading span,
+.quality-calibration__status--target-missed .quality-calibration__status-heading strong,
+.quality-calibration__status--target-missed .quality-calibration__status-heading span {
+  color: #fca5a5;
+}
+
+.quality-calibration__status p,
+.quality-calibration__guide p,
+.quality-calibration__guide ul {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.quality-calibration__live-detail {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  height: 38px;
+  overflow: hidden;
+}
+
+.quality-calibration__live-detail > p:first-child {
+  color: #d4d4d8;
+  font-size: 9px;
+}
+
+.quality-calibration__actions button {
+  min-height: 25px;
+  padding: 4px 7px;
+  color: inherit;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 6%);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.quality-calibration__actions .quality-calibration__run-again--pending {
+  color: #ecfccb;
+  border-color: rgb(163 230 53 / 72%);
+  background: rgb(101 163 13 / 22%);
+  box-shadow: 0 0 0 1px rgb(163 230 53 / 10%), 0 0 12px rgb(132 204 22 / 10%);
+}
+
+.quality-calibration__actions .quality-calibration__run-again--pending:hover {
+  border-color: #a3e635;
+  background: rgb(101 163 13 / 32%);
+}
+
+.quality-calibration__actions .quality-calibration__cancel {
+  color: #fecaca;
+  border-color: rgb(248 113 113 / 58%);
+  background: rgb(153 27 27 / 20%);
+}
+
+.quality-calibration__actions .quality-calibration__cancel:hover {
+  color: #fee2e2;
+  border-color: #f87171;
+  background: rgb(153 27 27 / 32%);
+}
+
+.quality-calibration__log ol {
+  margin: 5px 0 0;
+  padding-left: 16px;
+  color: #a1a1aa;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.quality-calibration__guide summary,
+.quality-calibration__log summary {
+  color: #d4d4d8;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.quality-calibration__guide {
+  margin-top: 2px;
+}
+
+.quality-calibration__guide p,
+.quality-calibration__guide ul {
+  margin-top: 6px;
+}
+
+.quality-calibration__guide ul {
+  padding-left: 16px;
+}
+
 .render-panel__bvh-stats {
   display: grid;
   gap: 3px;

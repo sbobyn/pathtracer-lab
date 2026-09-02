@@ -45,6 +45,8 @@ const triangleOverlayModes = new Set(["off", "selected", "all"]);
 const resolutionScales = new Set([2, 1, 0.5, 0.25, 0.125, 0.0625]);
 const environmentModes = new Set(["gradient", "map"]);
 const cameraProjectionModes = new Set(["perspective", "orthographic"]);
+const qualityModes = new Set(["auto", "manual"]);
+const qualityTargetFpsValues = new Set([30, 60, 90, 120]);
 const colorPattern = /^#[0-9a-f]{6}$/i;
 const renamedSceneKeys: Record<string, string> = {
   Part1Simple: "RTIOW1Simple",
@@ -66,6 +68,11 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   if (!value || typeof value !== "object") return { ...defaults };
   const candidate = value as Record<string, unknown>;
   const settings = { ...defaults };
+
+  if (qualityModes.has(candidate.qualityMode as string)) settings.qualityMode = candidate.qualityMode as PtSettings["qualityMode"];
+  if (qualityTargetFpsValues.has(candidate.qualityTargetFps as number)) settings.qualityTargetFps = candidate.qualityTargetFps as PtSettings["qualityTargetFps"];
+  if (resolutionScales.has(candidate.qualityMinimumResolutionScale as number)) settings.qualityMinimumResolutionScale = candidate.qualityMinimumResolutionScale as number;
+  settings.qualityMaximumSamples = integer(candidate.qualityMaximumSamples, 1, 20) ?? settings.qualityMaximumSamples;
 
   if (renderModes.has(candidate.renderMode as string)) {
     settings.renderMode = candidate.renderMode as PtSettings["renderMode"];

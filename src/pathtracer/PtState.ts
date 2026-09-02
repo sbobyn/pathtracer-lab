@@ -15,6 +15,7 @@ export type CameraProjectionMode = "perspective" | "orthographic";
 export type TriangleTraversalMode = "bvh" | "bruteForce";
 export type TriangleOverlayMode = "off" | "selected" | "all";
 export type PtMaterialKind = "Lambert" | "Metal" | "Dielectric" | "Emissive" | "Principled" | "Unknown";
+export type QualityMode = "auto" | "manual";
 
 export interface PtTextureState {
   enabled: boolean;
@@ -59,6 +60,10 @@ export interface PtSelectionMaterialState {
 
 /** Serializable render and camera preferences. */
 export interface PtSettings {
+  qualityMode: QualityMode;
+  qualityTargetFps: 30 | 60 | 90 | 120;
+  qualityMinimumResolutionScale: number;
+  qualityMaximumSamples: number;
   renderMode: RenderMode;
   regionTracingMode: RegionTracingMode;
   comparisonTracingMode: ComparisonTracingMode;
@@ -160,9 +165,14 @@ export interface PtState {
   selection: PtSelectionState;
   history: PtHistoryState;
   bvhTraversal: PtBvhTraversalState;
+  qualityCalibration: import("./AdaptiveQualityCalibration").CalibrationSession | null;
 }
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
+  qualityMode: "auto",
+  qualityTargetFps: 60,
+  qualityMinimumResolutionScale: 0.125,
+  qualityMaximumSamples: 8,
   renderMode: "pathtraced",
   regionTracingMode: "roiOnly",
   comparisonTracingMode: "fullFrame",
@@ -232,5 +242,6 @@ export function createDefaultPtState(): PtState {
       events: [],
       result: null,
     },
+    qualityCalibration: null,
   };
 }

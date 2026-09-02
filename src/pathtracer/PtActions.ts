@@ -97,6 +97,8 @@ export default class PtActions {
   private nextSphereName = 0;
   private nextQuadName = 0;
   private nextLightName = 0;
+  private cancelQualityCalibrationAction: () => void = () => {};
+  private recalibrateQualityAction: () => void = () => {};
 
   constructor(
     private readonly store: PtStore,
@@ -324,6 +326,51 @@ export default class PtActions {
   public setRenderMode(mode: RenderMode) {
     this.renderer.setRenderMode(mode);
     this.updateSetting("renderMode", mode);
+  }
+
+  public setQualityMode(mode: PtSettings["qualityMode"]) {
+    this.updateSetting("qualityMode", mode);
+  }
+
+  public setQualityTargetFps(fps: PtSettings["qualityTargetFps"]) {
+    this.updateSetting("qualityTargetFps", fps);
+  }
+
+  public setQualityMinimumResolutionScale(scale: number) {
+    this.updateSetting("qualityMinimumResolutionScale", scale);
+  }
+
+  public setQualityMaximumSamples(samples: number) {
+    this.updateSetting("qualityMaximumSamples", Math.max(1, Math.min(20, Math.round(samples))));
+  }
+
+  public publishQualityCalibration(session: PtState["qualityCalibration"]) {
+    this.store.update((state) => ({ ...state, qualityCalibration: session }));
+  }
+
+  public configureQualityCalibration(actions: { cancel: () => void; recalibrate: () => void }) {
+    this.cancelQualityCalibrationAction = actions.cancel;
+    this.recalibrateQualityAction = actions.recalibrate;
+  }
+
+  public cancelQualityCalibration() {
+    this.cancelQualityCalibrationAction();
+  }
+
+  public recalibrateQuality() {
+    this.recalibrateQualityAction();
+  }
+
+  public subscribeFrameTiming(listener: (frameTimeMs: number) => void) {
+    return this.renderer.subscribeFrameTiming(listener);
+  }
+
+  public getAdaptiveQualityContext() {
+    return this.renderer.getAdaptiveQualityContext();
+  }
+
+  public invalidateAdaptiveQualityFrame() {
+    this.renderer.invalidateAdaptiveQualityFrame();
   }
 
   public setRegionTracingMode(mode: PtSettings["regionTracingMode"]) {

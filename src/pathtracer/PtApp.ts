@@ -13,6 +13,7 @@ import { analyticLightNodeFromObject } from "./PtAnalyticLight";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
 import type { PtUiAdapter, PtUiFactory } from "./PtUiAdapter";
+import AdaptiveQualityRuntime from "./AdaptiveQualityRuntime";
 
 export default class PtApp {
   private selectedObject: PtEditableObject | null = null;
@@ -24,6 +25,7 @@ export default class PtApp {
   private readonly actions: PtActions;
   private readonly ui: PtUiAdapter;
   private readonly unsubscribe: () => boolean;
+  private readonly adaptiveQuality: AdaptiveQualityRuntime;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
     if (event.button !== 0) return;
@@ -186,6 +188,7 @@ export default class PtApp {
       clearPtPreferences(window.localStorage);
       window.location.reload();
     });
+    this.adaptiveQuality = new AdaptiveQualityRuntime(this.actions, window.localStorage);
     this.intersectGroup = ptScene.intersectGroup;
     this.ui = createUi(this.actions);
 
@@ -252,6 +255,7 @@ export default class PtApp {
       this.draggingChangedHandler
     );
     this.unsubscribe();
+    this.adaptiveQuality.dispose();
     this.ui.dispose();
     this.ptRenderer.dispose();
   }
