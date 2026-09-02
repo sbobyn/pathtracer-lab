@@ -17,6 +17,7 @@ import {
   VectorField,
 } from "@nybobs/editor-ui";
 import * as THREE from "three";
+import html2canvas from "html2canvas";
 import type PtActions from "./PtActions";
 import type { PtUiAdapter } from "./PtUiAdapter";
 import type { PtState, PtTextureState } from "./PtState";
@@ -3054,6 +3055,22 @@ function EditorShell({ actions }: { actions: PtActions }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
   const [performanceSettingsRequest, setPerformanceSettingsRequest] = useState(0);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureMenuOpen, setCaptureMenuOpen] = useState(false);
+  const [includeCaptureOverlays, setIncludeCaptureOverlays] = useState(false);
+  const [includeCapturePanels, setIncludeCapturePanels] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [capturePreview, setCapturePreview] = useState<{
+    url: string;
+    filename: string;
+    width: number;
+    height: number;
+    scene: string;
+    mode: string;
+    samplesPerFrame: number;
+    accumulatedFrames: number;
+    capturedAt: string;
+  } | null>(null);
   const analyticLightSelected = state.selection.light !== null;
   const pointLightSelected = state.selection.light?.type === "point";
   const [size, setSize] = usePersistentPanelSize(
@@ -3075,15 +3092,138 @@ function EditorShell({ actions }: { actions: PtActions }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => () => {
+    if (capturePreview) URL.revokeObjectURL(capturePreview.url);
+  }, [capturePreview]);
+
+  useEffect(() => {
+    if (!capturePreview && !captureError) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeCapturePreview();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [captureError, capturePreview]);
+
+  const closeCapturePreview = () => {
+    setCapturePreview(null);
+    setCaptureError(null);
+  };
+
+  const captureRender = async () => {
+    if (captureBusy) return;
+    setCaptureBusy(true);
+    setCaptureMenuOpen(false);
+    setCaptureError(null);
+    try {
+      const rendererCapture = await actions.captureCurrentRender(
+        includeCaptureOverlays || includeCapturePanels,
+        includeCapturePanels
+      );
+      let capture = rendererCapture;
+      if (includeCapturePanels) {
+        const editorLayer = document.querySelector<HTMLElement>("#editor-root");
+        if (!editorLayer) throw new Error("The editor interface could not be found for capture.");
+        const pageCapture = await html2canvas(editorLayer, {
+          backgroundColor: null,
+          foreignObjectRendering: true,
+          useCORS: true,
+          width: window.innerWidth,
+          height: window.innerHeight,
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDocument) => {
+            const clonedEditor = clonedDocument.querySelector<HTMLElement>("#editor-root");
+            if (clonedEditor) clonedEditor.style.pointerEvents = "auto";
+            // Backdrop filters depend on pixels outside this transparent DOM
+            // layer and can cause DOM snapshotters to omit the whole panel.
+            // Preserve the panel appearance with its authored fallback color.
+            const captureStyle = clonedDocument.createElement("style");
+            captureStyle.textContent = `
+              #editor-root, #editor-root * { backdrop-filter: none !important; }
+              .editor-shell, .render-panel, .object-inspector, .history-panel,
+              .editor-top-toolbar, .editor-repository-link, .camera-ray-debug,
+              .performance-calibration-hud { visibility: visible !important; }
+            `;
+            clonedDocument.head.appendChild(captureStyle);
+            const captureButton = clonedDocument.querySelector<HTMLElement>(".scene-toolbar__capture");
+            if (captureButton) captureButton.innerHTML = "<span aria-hidden=\"true\">▣</span><span>Capture</span>";
+            clonedDocument.querySelector(".capture-toolbar__menu")?.remove();
+          },
+        });
+        const sceneBitmap = await createImageBitmap(rendererCapture.blob);
+        const composite = document.createElement("canvas");
+        composite.width = pageCapture.width;
+        composite.height = pageCapture.height;
+        const compositeContext = composite.getContext("2d");
+        if (!compositeContext) {
+          sceneBitmap.close();
+          throw new Error("The full interface capture could not be composited.");
+        }
+        compositeContext.drawImage(sceneBitmap, 0, 0, composite.width, composite.height);
+        sceneBitmap.close();
+        compositeContext.drawImage(pageCapture, 0, 0);
+        const pageBlob = await new Promise<Blob>((resolve, reject) => {
+          composite.toBlob((blob) => blob
+            ? resolve(blob)
+            : reject(new Error("The browser could not encode the full interface capture.")), "image/png");
+        });
+        capture = {
+          ...rendererCapture,
+          blob: pageBlob,
+          width: pageCapture.width,
+          height: pageCapture.height,
+        };
+      }
+      const url = URL.createObjectURL(capture.blob);
+      const previewImage = new Image();
+      previewImage.src = url;
+      try {
+        await previewImage.decode();
+      } catch {
+        URL.revokeObjectURL(url);
+        throw new Error("The captured PNG could not be prepared for preview.");
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const sceneName = state.sceneKey.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
+      const mode = state.settings.renderMode === "pathtraced"
+        ? "Path traced"
+        : state.settings.renderMode === "selectedObjectComparison"
+          ? "Selected-object comparison"
+          : state.settings.renderMode === "selectedObject"
+            ? "Selected object"
+            : state.settings.renderMode[0]!.toUpperCase() + state.settings.renderMode.slice(1);
+      const modeName = state.settings.renderMode.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+      setCapturePreview({
+        url,
+        filename: `pathtracer-lab-${sceneName}-${modeName}-${timestamp}.png`,
+        width: capture.width,
+        height: capture.height,
+        scene: presetPtSceneLabel(state.sceneKey),
+        mode,
+        samplesPerFrame: state.settings.numSamples,
+        accumulatedFrames: capture.accumulatedFrames,
+        capturedAt: new Date().toLocaleString(),
+      });
+    } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : "Unable to capture this render.");
+    } finally {
+      setCaptureBusy(false);
+    }
+  };
+
   useEffect(() => {
     let contextGesture: { x: number; y: number; moved: boolean } | null = null;
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (
         target instanceof Element &&
-        !target.closest(".creation-menu, .scene-toolbar__add")
+        !target.closest(".creation-menu, .scene-toolbar__add, .capture-toolbar")
       ) {
         setAddMenuOpen(false);
+        setCaptureMenuOpen(false);
         setContextMenu(null);
       }
       if (
@@ -3249,6 +3389,44 @@ function EditorShell({ actions }: { actions: PtActions }) {
         />
       )}
       </div>
+      <div className="capture-toolbar">
+        <button
+          className="scene-toolbar__capture"
+          type="button"
+          disabled={captureBusy}
+          onClick={() => void captureRender()}
+          title="Capture the current render"
+        >
+          <span aria-hidden="true">▣</span>
+          <span>{captureBusy ? "Capturing…" : "Capture"}</span>
+        </button>
+        <button
+          className="scene-toolbar__capture-options"
+          type="button"
+          aria-label="Capture options"
+          aria-haspopup="menu"
+          aria-expanded={captureMenuOpen}
+          onClick={() => setCaptureMenuOpen((open) => !open)}
+        >▾</button>
+        {captureMenuOpen && <div className="capture-toolbar__menu" role="menu">
+          <label>
+            <input
+              type="checkbox"
+              checked={includeCaptureOverlays}
+              onChange={(event) => setIncludeCaptureOverlays(event.target.checked)}
+            />
+            <span><strong>Include viewport overlays</strong><small>Comparison guides and authored scene labels</small></span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={includeCapturePanels}
+              onChange={(event) => setIncludeCapturePanels(event.target.checked)}
+            />
+            <span><strong>Include panels and controls</strong><small>Capture the complete Pathtracer Lab interface</small></span>
+          </label>
+        </div>}
+      </div>
       {state.selection.objectId !== null && (
         <div className="transform-toolbar" aria-label="Transform tools">
           <div className="transform-toolbar__group" aria-label="Transform mode">
@@ -3323,6 +3501,39 @@ function EditorShell({ actions }: { actions: PtActions }) {
       actions={actions}
       onViewSettings={() => setPerformanceSettingsRequest((request) => request + 1)}
     />
+    {(capturePreview || captureError) && (
+      <div className="capture-preview" role="presentation" onPointerDown={(event) => {
+        if (event.target === event.currentTarget) closeCapturePreview();
+      }}>
+        <section className="capture-preview__dialog" role="dialog" aria-modal="true" aria-label="Render capture preview">
+          <header>
+            <div>
+              <strong>{capturePreview ? "Render captured" : "Capture failed"}</strong>
+              {capturePreview && <span>{capturePreview.width} × {capturePreview.height} PNG</span>}
+            </div>
+            <button type="button" aria-label="Close capture preview" onClick={closeCapturePreview}>×</button>
+          </header>
+          {capturePreview ? (
+            <div className="capture-preview__content">
+              <img src={capturePreview.url} alt="Preview of the captured render" />
+              <dl>
+                <div><dt>Scene</dt><dd>{capturePreview.scene}</dd></div>
+                <div><dt>Render mode</dt><dd>{capturePreview.mode}</dd></div>
+                <div><dt>Sampling</dt><dd>{capturePreview.samplesPerFrame} spp · {capturePreview.accumulatedFrames} accumulated frames</dd></div>
+                <div><dt>Captured</dt><dd>{capturePreview.capturedAt}</dd></div>
+              </dl>
+            </div>
+          ) : (
+            <p className="capture-preview__error">{captureError}</p>
+          )}
+          <footer>
+            <button type="button" onClick={closeCapturePreview}>Close</button>
+            {capturePreview && <button type="button" onClick={() => void captureRender()}>Capture again</button>}
+            {capturePreview && <a href={capturePreview.url} download={capturePreview.filename}>Download PNG</a>}
+          </footer>
+        </section>
+      </div>
+    )}
     {contextMenu && (
       <CreationMenu
         actions={actions}

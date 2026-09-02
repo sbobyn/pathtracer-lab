@@ -227,6 +227,10 @@ export default class PtActions {
     return this.renderer.getCameraPose();
   }
 
+  public captureCurrentRender(includeOverlays = false, includePanels = false) {
+    return this.renderer.captureCurrentRender(includeOverlays, includePanels);
+  }
+
   public onCameraPoseChanged(listener: () => void) {
     return this.renderer.onCameraPoseChanged(listener);
   }

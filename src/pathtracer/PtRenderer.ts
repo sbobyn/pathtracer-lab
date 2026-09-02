@@ -218,6 +218,12 @@ export default class PtRenderer {
   private worldUp!: THREE.Vector3;
 
   private canvas: HTMLCanvasElement;
+  private readonly pendingCaptureRequests: Array<{
+    includeOverlays: boolean;
+    includePanels: boolean;
+    resolve: (capture: { blob: Blob; width: number; height: number; accumulatedFrames: number }) => void;
+    reject: (error: Error) => void;
+  }> = [];
   private viewportWidth = 0;
   private viewportHeight = 0;
   private viewportPixelRatio = 0;
@@ -351,6 +357,116 @@ export default class PtRenderer {
 
     // Event listeners
     this.attachEventListeners();
+  }
+
+  public captureCurrentRender(includeOverlays = false, includePanels = false) {
+    return new Promise<{ blob: Blob; width: number; height: number; accumulatedFrames: number }>((resolve, reject) => {
+      this.pendingCaptureRequests.push({ includeOverlays, includePanels, resolve, reject });
+    });
+  }
+
+  private snapshotPendingCaptures() {
+    if (this.pendingCaptureRequests.length === 0) return;
+    const request = this.pendingCaptureRequests.shift()!;
+    const snapshot = document.createElement("canvas");
+    snapshot.width = this.canvas.width;
+    snapshot.height = this.canvas.height;
+    const context = snapshot.getContext("2d");
+    if (!context) {
+      const error = new Error("Unable to create a capture canvas.");
+      request.reject(error);
+      return;
+    }
+    context.drawImage(this.canvas, 0, 0);
+    if (request.includeOverlays && !request.includePanels) {
+      this.drawCaptureGuides(context, snapshot.width, snapshot.height);
+    }
+    snapshot.toBlob((blob) => {
+      if (!blob) {
+        const error = new Error("The browser could not encode this render as PNG.");
+        request.reject(error);
+        return;
+      }
+      request.resolve({
+        blob,
+        width: snapshot.width,
+        height: snapshot.height,
+        accumulatedFrames: this.shaderCanvas.accumulatedFrames,
+      });
+    }, "image/png");
+  }
+
+  private drawCaptureGuides(
+    context: CanvasRenderingContext2D,
+    width: number,
+    height: number
+  ) {
+    const scale = width / Math.max(1, this.canvas.clientWidth);
+    const lime = "#d9f99d";
+    const dark = "rgba(24, 24, 27, 0.88)";
+    context.save();
+    if (
+      this.settings.renderMode === "comparison" ||
+      this.settings.renderMode === "selectedObjectComparison"
+    ) {
+      const x = this.hybridSeam * width;
+      context.strokeStyle = lime;
+      context.lineWidth = Math.max(2, 2 * scale);
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.lineTo(x, height);
+      context.stroke();
+
+      const radius = 11 * scale;
+      context.fillStyle = "#bef264";
+      context.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      context.lineWidth = 2 * scale;
+      context.beginPath();
+      context.arc(x, height / 2, radius, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.fillStyle = "#18181b";
+      context.font = `700 ${12 * scale}px Inter, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText("↔", x, height / 2);
+
+      const drawLabel = (text: string, anchorX: number, align: CanvasTextAlign) => {
+        context.font = `650 ${10 * scale}px Inter, sans-serif`;
+        const padding = 7 * scale;
+        const labelWidth = context.measureText(text).width + padding * 2;
+        const labelHeight = 20 * scale;
+        const left = align === "right" ? anchorX - labelWidth : anchorX;
+        const top = height - 36 * scale;
+        context.fillStyle = dark;
+        context.fillRect(left, top, labelWidth, labelHeight);
+        context.fillStyle = "#f4f4f5";
+        context.textAlign = "center";
+        context.fillText(text, left + labelWidth / 2, top + labelHeight / 2);
+      };
+      drawLabel("Raster", x - 9 * scale, "right");
+      drawLabel("Path traced", x + 9 * scale, "left");
+    } else if (this.settings.renderMode === "region") {
+      const left = this.hybridRegion.x * width;
+      const top = (1 - this.hybridRegion.w) * height;
+      const regionWidth = (this.hybridRegion.z - this.hybridRegion.x) * width;
+      const regionHeight = (this.hybridRegion.w - this.hybridRegion.y) * height;
+      context.strokeStyle = "#bef264";
+      context.lineWidth = 3 * scale;
+      context.strokeRect(left, top, regionWidth, regionHeight);
+      context.fillStyle = "#bef264";
+      context.fillRect(left + 8 * scale, top + 8 * scale, 92 * scale, 20 * scale);
+      context.fillStyle = "#18181b";
+      context.font = `700 ${10 * scale}px Inter, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(
+        `Path traced · ${Math.round((regionWidth * regionHeight * 100) / (width * height))}%`,
+        left + 54 * scale,
+        top + 18 * scale
+      );
+    }
+    context.restore();
   }
 
   setupRenderer() {
@@ -2194,7 +2310,25 @@ export default class PtRenderer {
     // transform controls
     this.transformControls.update(this.clock.getDelta());
 
-    this.composer.render();
+    if (this.pendingCaptureRequests.length > 0 && !this.pendingCaptureRequests[0]!.includePanels) {
+      const outlineEnabled = this.outlinePass.enabled;
+      this.outlinePass.enabled = false;
+      this.composer.render();
+      if (this.pendingCaptureRequests[0]?.includeOverlays) {
+        this.ptScene.annotationGroup.traverse((object) => {
+          if (object.userData.billboard === true) object.quaternion.copy(this.camera.quaternion);
+        });
+        this.renderer.clearDepth();
+        this.renderer.render(this.ptScene.annotationGroup, this.camera);
+      }
+      this.snapshotPendingCaptures();
+      this.outlinePass.enabled = outlineEnabled;
+      // Restore the interactive presentation immediately so capturing does not
+      // produce a one-frame selection-outline flicker on screen.
+      this.composer.render();
+    } else {
+      this.composer.render();
+    }
     this.syncTriangleWireframes();
     this.ptScene.annotationGroup.traverse((object) => {
       if (object.userData.billboard === true) object.quaternion.copy(this.camera.quaternion);
@@ -2204,6 +2338,7 @@ export default class PtRenderer {
     this.renderer.clearDepth();
     this.renderer.render(this.gizmoScene, this.camera);
     this.renderCameraDebugView();
+    if (this.pendingCaptureRequests[0]?.includePanels) this.snapshotPendingCaptures();
 
   };
 

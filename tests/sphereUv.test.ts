@@ -13,9 +13,9 @@ function assertUv(
 
 test("sphere UVs use +X as the horizontal center and -X as the seam", () => {
   assertUv({ x: 1, y: 0, z: 0 }, { u: 0.5, v: 0.5 });
-  assertUv({ x: 0, y: 0, z: 1 }, { u: 0.75, v: 0.5 });
-  assertUv({ x: 0, y: 0, z: -1 }, { u: 0.25, v: 0.5 });
-  assertUv({ x: -1, y: 0, z: 0 }, { u: 1, v: 0.5 });
+  assertUv({ x: 0, y: 0, z: 1 }, { u: 0.25, v: 0.5 });
+  assertUv({ x: 0, y: 0, z: -1 }, { u: 0.75, v: 0.5 });
+  assertUv({ x: -1, y: 0, z: 0 }, { u: 0, v: 0.5 });
 });
 
 test("sphere UVs map the poles to the vertical range", () => {

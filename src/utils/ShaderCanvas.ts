@@ -30,6 +30,10 @@ export class ShaderCanvas {
     return this.screenMaterial.map;
   }
 
+  public get accumulatedFrames() {
+    return this.material.uniforms.uFrameCount.value as number;
+  }
+
   constructor({
     width,
     height,
