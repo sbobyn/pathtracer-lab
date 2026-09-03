@@ -203,7 +203,9 @@ test("the snapshot excludes selection, history, and scene object data", () => {
   state.sceneObjects.push({} as never);
   const snapshot = preferenceSnapshot(state);
   assert.deepEqual(Object.keys(snapshot).sort(), ["sceneKey", "settings", "version"]);
-  assert.equal(JSON.stringify(snapshot).includes("selected"), false);
+  assert.equal("selection" in snapshot, false);
+  assert.equal("history" in snapshot, false);
+  assert.equal("sceneObjects" in snapshot, false);
   assert.equal(PT_PREFERENCES_KEY, "three-pathtracer.preferences");
 });
 

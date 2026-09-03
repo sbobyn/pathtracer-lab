@@ -2,7 +2,7 @@ import * as THREE from "three";
 import PtSphere from "./PtSphere";
 import PtQuad from "./PtQuad";
 import PtMaterial, { PtMaterialModel, PtMaterialType } from "./PtMaterial";
-import { PtTextureType, texturePreviewColor, type PtTexture } from "./PtTexture";
+import { cloneTexture, PtTextureType, texturePreviewColor, type PtTexture } from "./PtTexture";
 import {
   createPointLightNode,
   createDirectionalLightNode,
@@ -249,6 +249,84 @@ export default class PtScene {
 
   public getTriangleMeshes(): PtTriangleMesh[] {
     return this.triangleMeshGroup.children.filter(isPtTriangleMesh);
+  }
+
+  /** Deep scene snapshot used by an isolated still renderer. */
+  public cloneForOffline(camera: THREE.PerspectiveCamera) {
+    const materials = this.getMaterials().map((preview) => {
+      const definition = getMaterialMetadata(preview).materialDefinition;
+      return new PtMaterial({
+        model: definition.model,
+        baseColor: {
+          factor: definition.baseColor.factor.clone(),
+          texture: cloneTexture(definition.baseColor.texture),
+          textureEnabled: definition.baseColor.textureEnabled,
+        },
+        roughness: definition.roughness,
+        metallic: definition.metallic,
+        metallicRoughnessTexture: cloneTexture(definition.metallicRoughnessTexture),
+        metallicRoughnessTextureEnabled: definition.metallicRoughnessTextureEnabled,
+        ior: definition.ior,
+        transmission: definition.transmission.factor,
+        transmissionTexture: cloneTexture(definition.transmission.texture),
+        transmissionTextureEnabled: definition.transmission.textureEnabled,
+        thickness: definition.volume.thickness,
+        thicknessTexture: cloneTexture(definition.volume.thicknessTexture),
+        thicknessTextureEnabled: definition.volume.thicknessTextureEnabled,
+        attenuationColor: definition.volume.attenuationColor.clone(),
+        attenuationDistance: definition.volume.attenuationDistance,
+        dispersion: definition.dispersion,
+        emissionColor: {
+          factor: definition.emission.color.factor.clone(),
+          texture: cloneTexture(definition.emission.color.texture),
+          textureEnabled: definition.emission.color.textureEnabled,
+        },
+        emissionStrength: definition.emission.strength,
+        emissionTwoSided: definition.emission.twoSided,
+      });
+    });
+    const clone = new PtScene([], materials, camera, []);
+    clone.backgroundColorTop.copy(this.backgroundColorTop);
+    clone.backgroundColorBottom.copy(this.backgroundColorBottom);
+    clone.scene.background = clone.backgroundColorTop;
+    clone.initialEnvironmentIntensity = this.initialEnvironmentIntensity;
+    if (this.environmentSource) clone.setEnvironmentMap(this.environmentSource, this.environmentLabel);
+
+    for (const source of this.getSphereMeshes()) {
+      const metadata = getMaterialMetadata(source.material);
+      const sphere = clone.createSphereMesh(
+        source.position.clone(),
+        source.geometry.parameters.radius * source.scale.x,
+        metadata.materialId,
+        source.userData.pathTracer.objectName
+      );
+      sphere.quaternion.copy(source.quaternion);
+      sphere.userData.pathTracer.objectId = source.userData.pathTracer.objectId;
+      sphere.userData.pathTracer.uvMapping = source.userData.pathTracer.uvMapping;
+      clone.insertSphereMesh(sphere);
+    }
+    for (const source of this.getQuadMeshes()) {
+      const metadata = getMaterialMetadata(source.material);
+      const quad = clone.createQuadMesh(
+        source.position.clone(), source.quaternion.clone(), source.scale.x, source.scale.y,
+        metadata.materialId, source.userData.pathTracer.objectName
+      );
+      quad.userData.pathTracer.objectId = source.userData.pathTracer.objectId;
+      clone.insertQuadMesh(quad);
+    }
+    for (const source of this.getTriangleMeshes()) {
+      const metadata = getMaterialMetadata(source.material);
+      const mesh = clone.addTriangleMesh(source.geometry.clone(), metadata.materialId, source.userData.pathTracer.objectName);
+      mesh.userData.pathTracer.objectId = source.userData.pathTracer.objectId;
+      mesh.position.copy(source.position);
+      mesh.quaternion.copy(source.quaternion);
+      mesh.scale.copy(source.scale);
+      mesh.updateMatrixWorld(true);
+    }
+    for (const source of this.getAnalyticLightNodes()) {
+      clone.insertAnalyticLightNode(source.clone() as PtAnalyticLightNode);
+    }
+    return clone;
   }
 
   public addTriangleMesh(

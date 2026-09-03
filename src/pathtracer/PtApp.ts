@@ -255,6 +255,7 @@ export default class PtApp {
       this.draggingChangedHandler
     );
     this.unsubscribe();
+    this.actions.dispose();
     this.adaptiveQuality.dispose();
     this.ui.dispose();
     this.ptRenderer.dispose();

@@ -1453,6 +1453,242 @@ function formatCameraVector(vector: readonly number[]) {
     .join(", ");
 }
 
+function formatRemainingTime(milliseconds: number) {
+  const totalSeconds = Math.max(1, Math.ceil(milliseconds / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s remaining`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s remaining`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m remaining`;
+}
+
+function formatRenderDuration(milliseconds: number) {
+  const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function formatAverageRenderRate(durationMs: number, completedSamples: number) {
+  if (completedSamples <= 0 || durationMs <= 0) return null;
+  const millisecondsPerFrame = durationMs / completedSamples;
+  const samplesPerSecond = 1000 / millisecondsPerFrame;
+  const formattedRate = samplesPerSecond >= 100
+    ? Math.round(samplesPerSecond)
+    : samplesPerSecond.toFixed(1);
+  return `Average sampling rate: ${formattedRate} samples per pixel per second`;
+}
+
+function offlineRenderModeLabel(mode: PtState["settings"]["renderMode"]) {
+  switch (mode) {
+    case "pathtraced": return "Path traced";
+    case "comparison": return "Comparison";
+    case "region": return "Region";
+    case "selectedObject": return "Selected object";
+    case "selectedObjectComparison": return "Selected comparison";
+    default: return "Raster";
+  }
+}
+
+function OfflineRenderJobCard({ job, actions }: {
+  job: PtState["stillRenderJobs"][number];
+  actions: PtActions;
+}) {
+  const progress = Math.round((job.completedSamples / job.snapshot.settings.samples) * 100);
+  const averageRate = job.renderDurationMs != null
+    ? formatAverageRenderRate(job.renderDurationMs, job.completedSamples)
+    : null;
+  return (
+    <article className="still-render-job" data-status={job.status}>
+      <div className="still-render-job__heading">
+        <strong title={averageRate ?? undefined}>
+          {job.status}
+          {job.renderDurationMs != null ? ` · ${formatRenderDuration(job.renderDurationMs)}` : ""}
+        </strong>
+      </div>
+      <small>
+        {offlineRenderModeLabel(job.snapshot.settings.renderMode)} · {job.snapshot.settings.width} × {job.snapshot.settings.height}
+        {job.snapshot.settings.renderMode === "raster" ? "" : ` · ${job.snapshot.settings.samples} spp · depth ${job.snapshot.settings.maxRayDepth}`}
+      </small>
+      {job.status === "running" && (
+        <small className="still-render-job__eta">
+          {job.estimatedRemainingMs === null ? "Estimating time remaining…" : formatRemainingTime(job.estimatedRemainingMs)}
+        </small>
+      )}
+      {job.status === "paused" && <small className="still-render-job__eta">Paused · time estimate suspended</small>}
+      {(job.status === "queued" || job.status === "running" || job.status === "paused") && (
+        <progress value={job.completedSamples} max={job.snapshot.settings.samples}>{progress}%</progress>
+      )}
+      {!job.previewUrl && !job.resultUrl && (job.status === "queued" || job.status === "running" || job.status === "paused" || job.status === "canceling") && (
+        <div
+          className="still-render-job__preview-placeholder"
+          style={{ aspectRatio: `${job.snapshot.settings.width} / ${job.snapshot.settings.height}` }}
+          role="status"
+        >
+          <span>{job.status === "queued" ? "Waiting to start…" : "Preparing first preview…"}</span>
+        </div>
+      )}
+      {(job.previewUrl || job.resultUrl) && <img src={job.resultUrl ?? job.previewUrl!} alt={`${job.snapshot.camera.name} render preview`} />}
+      {job.error && <p className="still-render-job__error">{job.error}</p>}
+      <div className="still-render-job__actions">
+        {job.status === "running" && <button type="button" className="still-render-job__button" onClick={() => actions.pauseStillRender(job.id)}>Pause</button>}
+        {job.status === "paused" && <button type="button" className="still-render-job__button button--accent" onClick={() => actions.resumeStillRender(job.id)}>Resume</button>}
+        {(job.status === "queued" || job.status === "running" || job.status === "paused") && <button type="button" className="still-render-job__button button--danger" onClick={() => actions.cancelStillRender(job.id)}>Cancel</button>}
+        {(job.status === "completed" || (job.status === "canceled" && job.resultUrl)) && <button type="button" className="still-render-job__button button--accent" onClick={() => actions.downloadStillRender(job.id)}>Download PNG</button>}
+        {(job.status === "completed" || job.status === "failed" || job.status === "canceled") && <button type="button" className="still-render-job__button" onClick={() => actions.removeStillRenderJob(job.id)}>Remove</button>}
+      </div>
+    </article>
+  );
+}
+
+function OfflineRenderPanel({ state, actions }: { state: Readonly<PtState>; actions: PtActions }) {
+  const [collapsed, setCollapsed] = usePersistentBoolean("panel:offline-render", false);
+  const [size, setSize] = usePersistentPanelSize(
+    state.sceneKey,
+    "offline-render",
+    { width: 260, height: 520 }
+  );
+  const resizeGesture = useRef<{
+    axis: ResizeAxis;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startSize: PanelSize;
+  } | null>(null);
+  const [width, setWidth] = useState(512);
+  const [height, setHeight] = useState(512);
+  const [samples, setSamples] = useState(256);
+  const [rayDepth, setRayDepth] = useState(state.settings.maxRayDepth);
+  const [renderMode, setOfflineRenderMode] = useState(state.settings.renderMode);
+  const [regionTracingMode, setOfflineRegionTracingMode] = useState(state.settings.regionTracingMode);
+  const [comparisonTracingMode, setOfflineComparisonTracingMode] = useState(state.settings.comparisonTracingMode);
+  const [accumulationFormat, setAccumulationFormat] = useState(state.settings.accumulationFormat);
+  const [integratorMode, setIntegratorMode] = useState(state.settings.integratorMode);
+  const activeJob = state.stillRenderJobs.find((job) => job.status === "running" || job.status === "paused" || job.status === "canceling") ?? null;
+  const renderInProgress = state.stillRenderJobs.some((job) => job.status === "queued" || job.status === "running" || job.status === "paused");
+  const jobsNewestFirst = [...state.stillRenderJobs].reverse();
+  const latestJob = jobsNewestFirst[0] ?? null;
+  const previousJobs = jobsNewestFirst.slice(1);
+
+  useEffect(() => {
+    const handleResize = () => setSize((current) => clampPanelSize(current));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const beginResize = (axis: ResizeAxis, event: React.PointerEvent<HTMLDivElement>) => {
+    if (collapsed || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeGesture.current = {
+      axis,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startSize: size,
+    };
+  };
+
+  const continueResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = resizeGesture.current;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    setSize(clampPanelSize({
+      width: gesture.axis === "width" || gesture.axis === "both"
+        ? gesture.startSize.width - (event.clientX - gesture.startX)
+        : gesture.startSize.width,
+      height: gesture.axis === "height" || gesture.axis === "both"
+        ? gesture.startSize.height + event.clientY - gesture.startY
+        : gesture.startSize.height,
+    }));
+  };
+
+  const finishResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    resizeGesture.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  return (
+    <aside
+      className="render-panel offline-render-panel"
+      aria-label="Offline render settings"
+      data-collapsed={collapsed}
+      style={collapsed ? undefined : { width: size.width, maxHeight: size.height }}
+    >
+      <button className="render-panel__toggle" type="button" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}>
+        <span>Offline Render</span>
+        <span className="render-panel__meta">{activeJob ? `${activeJob.status} · ${activeJob.completedSamples}/${activeJob.snapshot.settings.samples} spp` : "High-quality still"}</span>
+        <span className="render-panel__chevron" aria-hidden="true">⌃</span>
+      </button>
+      {!collapsed && <div className="render-panel__content still-render-queue">
+        <p className="still-render-queue__intro">
+          Render a frozen copy of the current scene, camera position, direction, and lens settings without changing the interactive viewport.
+        </p>
+        <p className="still-render-queue__performance-note">
+          <strong>Performance:</strong> Offline rendering shares your GPU and may lower the interactive frame rate. Switch the main Render mode to Raster for maximum responsiveness while you wait.
+        </p>
+        <EditorNumberField label="Width" value={width} min={1} max={16384} step={1} precisionStep={1} snapInterval={100} sensitivity={4 * pathTracerScrubSpeed} integer density="compact" layout="horizontal" onChange={setWidth} />
+        <EditorNumberField label="Height" value={height} min={1} max={16384} step={1} precisionStep={1} snapInterval={100} sensitivity={4 * pathTracerScrubSpeed} integer density="compact" layout="horizontal" onChange={setHeight} />
+        <SelectField label="Render mode" value={renderMode} options={[
+          { value: "raster", label: "Raster" },
+          { value: "pathtraced", label: "Path traced" },
+          { value: "comparison", label: "Comparison" },
+          { value: "region", label: "Region" },
+          { value: "selectedObject", label: "Selected object" },
+          { value: "selectedObjectComparison", label: "Selected comparison" },
+        ]} density="compact" layout="horizontal" onChange={(value) => setOfflineRenderMode(value as typeof renderMode)} />
+        {renderMode === "region" && <SelectField label="ROI tracing" value={regionTracingMode} options={[
+          { value: "roiOnly", label: "ROI only · faster" }, { value: "fullFrame", label: "Full frame · preserve" },
+        ]} density="compact" layout="horizontal" onChange={(value) => setOfflineRegionTracingMode(value as typeof regionTracingMode)} />}
+        {(renderMode === "comparison" || renderMode === "selectedObjectComparison") && <SelectField label="Comparison tracing" value={comparisonTracingMode} options={[
+          { value: "pathtracedSide", label: "Visible side · faster" }, { value: "fullFrame", label: "Full frame · preserve" },
+        ]} density="compact" layout="horizontal" onChange={(value) => setOfflineComparisonTracingMode(value as typeof comparisonTracingMode)} />}
+        <fieldset className="editor-controls-group" disabled={renderMode === "raster"}>
+          <EditorNumberField label="Samples" value={samples} min={1} max={100000} step={1} precisionStep={1} snapInterval={16} sensitivity={2 * pathTracerScrubSpeed} integer density="compact" layout="horizontal" onChange={setSamples} />
+        </fieldset>
+        <EditorNumberField label="Ray depth" value={rayDepth} min={1} max={100} step={1} precisionStep={1} snapInterval={1} sensitivity={pathTracerScrubSpeed} integer density="compact" layout="horizontal" onChange={setRayDepth} />
+        <SelectField label="Integrator" value={integratorMode} options={[
+          { value: "bsdf", label: "BSDF only" }, { value: "direct", label: "Direct lighting" }, { value: "mis", label: "MIS" },
+        ]} density="compact" layout="horizontal" onChange={(value) => setIntegratorMode(value as typeof integratorMode)} />
+        <SelectField label="Accumulation" value={accumulationFormat} options={[
+          { value: "rgba8", label: "8-bit" }, { value: "rgba16f", label: "16-bit float" }, { value: "rgba32f", label: "32-bit float" },
+        ]} density="compact" layout="horizontal" onChange={(value) => setAccumulationFormat(value as typeof accumulationFormat)} />
+        <button type="button" className="editor-action-button still-render-queue__submit" disabled={renderInProgress} onClick={() => actions.enqueueStillRender({
+          width, height, samples, maxRayDepth: rayDepth, accumulationFormat, integratorMode,
+          renderMode, regionTracingMode, comparisonTracingMode,
+        })}>{renderInProgress ? "Rendering…" : "Render current view"}</button>
+        <div className="still-render-jobs" aria-live="polite">
+          {latestJob && <OfflineRenderJobCard key={latestJob.id} job={latestJob} actions={actions} />}
+          {previousJobs.length > 0 && (
+            <details className="still-render-history">
+              <summary>Browse previous renders <span>{previousJobs.length}</span></summary>
+              <div className="still-render-history__list">
+                {previousJobs.map((job) => <OfflineRenderJobCard key={job.id} job={job} actions={actions} />)}
+              </div>
+            </details>
+          )}
+        </div>
+      </div>}
+      {(["width", "height", "both"] as const).map((axis) => (
+        <div
+          key={axis}
+          className={`render-panel__resize-handle render-panel__resize-handle--${axis}`}
+          aria-hidden="true"
+          onPointerDown={(event) => beginResize(axis, event)}
+          onPointerMove={continueResize}
+          onPointerUp={finishResize}
+          onPointerCancel={finishResize}
+        />
+      ))}
+    </aside>
+  );
+}
+
 function SceneHierarchy({
   state,
   actions,
@@ -3495,6 +3731,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
       actions={actions}
       performanceSettingsRequest={performanceSettingsRequest}
     />
+    <OfflineRenderPanel state={state} actions={actions} />
     </div>
     <PerformanceCalibrationHud
       state={state}
@@ -3564,7 +3801,7 @@ function CameraRayDebugViewport({
   );
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
   const [rayDensity, setRayDensity] = useState<"sparse" | "medium" | "dense">("sparse");
-  const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(1);
+  const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(3);
   const [legendOpen, setLegendOpen] = useState(false);
   const [bvhEnabled, setBvhEnabled] = useState(true);
   const [bvhDepth, setBvhDepth] = useState(() => Math.min(2, maxBvhDepth));

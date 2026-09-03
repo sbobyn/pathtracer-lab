@@ -12,7 +12,7 @@ function isBuiltinEnvironmentSource(source: string) {
 }
 
 export const PT_PREFERENCES_KEY = "three-pathtracer.preferences";
-export const PT_PREFERENCES_VERSION = 2;
+export const PT_PREFERENCES_VERSION = 3;
 
 export interface PtPreferenceStorage {
   getItem(key: string): string | null;
@@ -20,8 +20,8 @@ export interface PtPreferenceStorage {
   removeItem(key: string): void;
 }
 
-interface PtPreferencesV2 {
-  version: 2;
+interface PtPreferencesV3 {
+  version: 3;
   sceneKey: string;
   settings: PtSettings;
 }
@@ -130,7 +130,7 @@ function validatedSettings(value: unknown, defaults: PtSettings): PtSettings {
   return settings;
 }
 
-export function preferenceSnapshot(state: Readonly<PtState>): PtPreferencesV2 {
+export function preferenceSnapshot(state: Readonly<PtState>): PtPreferencesV3 {
   return {
     version: PT_PREFERENCES_VERSION,
     sceneKey: state.sceneKey,
@@ -147,7 +147,7 @@ export function loadPtPreferences(
     const raw = storage.getItem(PT_PREFERENCES_KEY);
     if (!raw) return defaults;
     const candidate = JSON.parse(raw) as Record<string, unknown>;
-    if (candidate.version !== 1 && candidate.version !== PT_PREFERENCES_VERSION) {
+    if (candidate.version !== 1 && candidate.version !== 2 && candidate.version !== PT_PREFERENCES_VERSION) {
       return defaults;
     }
     const settings = validatedSettings(candidate.settings, defaults.settings);

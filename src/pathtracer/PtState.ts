@@ -166,6 +166,8 @@ export interface PtState {
   history: PtHistoryState;
   bvhTraversal: PtBvhTraversalState;
   qualityCalibration: import("./AdaptiveQualityCalibration").CalibrationSession | null;
+  sceneRevision: number;
+  stillRenderJobs: import("./StillRenderJob").StillRenderJob[];
 }
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
@@ -209,6 +211,8 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
 export function createDefaultPtState(): PtState {
   return {
     sceneKey: "RTIOW1Simple",
+    sceneRevision: 0,
+    stillRenderJobs: [],
     sceneObjects: [],
     importWarnings: [],
     settings: { ...defaultSettings },

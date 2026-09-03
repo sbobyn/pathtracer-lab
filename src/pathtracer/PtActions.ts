@@ -42,6 +42,12 @@ import {
   type PtTexture,
 } from "./PtTexture";
 import PtMaterial, { PtMaterialModel, PtMaterialType } from "./PtMaterial";
+import {
+  createAuthoredCamera,
+  type AuthoredCameraInput,
+} from "./AuthoredCamera";
+import { createStillRenderSnapshot, type StillRenderSettings } from "./StillRenderJob";
+import { embedPngText } from "./PngMetadata";
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
@@ -97,6 +103,11 @@ export default class PtActions {
   private nextSphereName = 0;
   private nextQuadName = 0;
   private nextLightName = 0;
+  private readonly canceledStillRenderJobs = new Set<string>();
+  private readonly stillRenderSceneSnapshots = new Map<string, import("./PtScene").default>();
+  private readonly stillRenderSettingsSnapshots = new Map<string, PtSettings>();
+  private readonly activeStillRenderers = new Map<string, PtRenderer>();
+  private stillRenderQueueActive = false;
   private cancelQualityCalibrationAction: () => void = () => {};
   private recalibrateQualityAction: () => void = () => {};
 
@@ -227,8 +238,300 @@ export default class PtActions {
     return this.renderer.getCameraPose();
   }
 
+  private currentCameraInput(): AuthoredCameraInput {
+    const camera = this.renderer.camera;
+    const settings = this.store.getState().settings;
+    return {
+      position: camera.position.toArray(),
+      quaternion: camera.quaternion.toArray(),
+      projection: settings.cameraProjectionMode,
+      fov: settings.fov,
+      orthographicHeight: settings.orthographicHeight,
+      depthOfField: settings.enableDepthOfField,
+      aperture: settings.aperture,
+      focusDistance: settings.focusDistance,
+      outputWidth: 1920,
+      outputHeight: 1080,
+    };
+  }
+
   public captureCurrentRender(includeOverlays = false, includePanels = false) {
     return this.renderer.captureCurrentRender(includeOverlays, includePanels);
+  }
+
+  public enqueueStillRender(overrides: Partial<StillRenderSettings> = {}) {
+    const state = this.store.getState();
+    const requestedWidth = overrides.width ?? 1920;
+    const requestedHeight = overrides.height ?? 1080;
+    const requestedRenderMode = overrides.renderMode ?? state.settings.renderMode;
+    const camera = createAuthoredCamera("Current View", {
+      ...this.currentCameraInput(),
+      outputWidth: requestedWidth,
+      outputHeight: requestedHeight,
+    });
+    const snapshot = createStillRenderSnapshot(
+      state.sceneKey,
+      this.renderer.getInvalidationHistory().at(-1)?.sequence ?? state.sceneRevision,
+      camera,
+      {
+        width: requestedWidth,
+        height: requestedHeight,
+        samples: requestedRenderMode === "raster" ? 1 : (overrides.samples ?? 256),
+        maxRayDepth: overrides.maxRayDepth ?? state.settings.maxRayDepth,
+        accumulationFormat: overrides.accumulationFormat ?? state.settings.accumulationFormat,
+        integratorMode: overrides.integratorMode ?? state.settings.integratorMode,
+        renderMode: requestedRenderMode,
+        regionTracingMode: overrides.regionTracingMode ?? state.settings.regionTracingMode,
+        comparisonTracingMode: overrides.comparisonTracingMode ?? state.settings.comparisonTracingMode,
+        comparisonSeam: overrides.comparisonSeam ?? this.renderer.getHybridComparisonSeam(),
+        region: overrides.region ?? this.renderer.getHybridRegion(),
+        selectedObjectIds: overrides.selectedObjectIds ?? [...this.selectedObjects]
+          .filter((object) => !isPtAnalyticLightNode(object))
+          .map((object) => object.userData.pathTracer.objectId),
+      },
+      "pathtracer-lab-webgl2-r1"
+    );
+    const id = THREE.MathUtils.generateUUID();
+    this.store.update((current) => ({
+      ...current,
+      stillRenderJobs: [...current.stillRenderJobs, {
+        id, status: "queued", snapshot, completedSamples: 0, estimatedRemainingMs: null, renderDurationMs: null, previewUrl: null, resultUrl: null, error: null,
+      }],
+    }));
+    const snapshotCamera = this.renderer.ptScene.camera.clone() as THREE.PerspectiveCamera;
+    snapshotCamera.position.fromArray(snapshot.camera.position);
+    snapshotCamera.quaternion.fromArray(snapshot.camera.quaternion);
+    snapshotCamera.fov = snapshot.camera.fov;
+    snapshotCamera.updateProjectionMatrix();
+    this.stillRenderSceneSnapshots.set(id, this.renderer.ptScene.cloneForOffline(snapshotCamera));
+    this.stillRenderSettingsSnapshots.set(id, { ...state.settings });
+    void this.runStillRenderQueue();
+    return id;
+  }
+
+  public cancelStillRender(jobId: string) {
+    const job = this.store.getState().stillRenderJobs.find((candidate) => candidate.id === jobId);
+    if (!job || job.status === "completed" || job.status === "failed") return false;
+    this.canceledStillRenderJobs.add(jobId);
+    const isActive = this.activeStillRenderers.has(jobId);
+    this.updateStillRenderJob(jobId, { status: isActive ? "canceling" : "canceled" });
+    if (!isActive) {
+      this.stillRenderSceneSnapshots.delete(jobId);
+      this.stillRenderSettingsSnapshots.delete(jobId);
+    }
+    return true;
+  }
+
+  public pauseStillRender(jobId: string) {
+    const renderer = this.activeStillRenderers.get(jobId);
+    if (!renderer) return false;
+    renderer.setRenderingPaused(true);
+    this.updateStillRenderJob(jobId, { status: "paused" });
+    return true;
+  }
+
+  public resumeStillRender(jobId: string) {
+    const renderer = this.activeStillRenderers.get(jobId);
+    if (!renderer) return false;
+    renderer.setRenderingPaused(false);
+    this.updateStillRenderJob(jobId, { status: "running" });
+    return true;
+  }
+
+  public removeStillRenderJob(jobId: string) {
+    const job = this.store.getState().stillRenderJobs.find((candidate) => candidate.id === jobId);
+    if (!job || job.status === "running" || job.status === "paused" || job.status === "queued") return false;
+    if (job.resultUrl) URL.revokeObjectURL(job.resultUrl);
+    if (job.previewUrl) URL.revokeObjectURL(job.previewUrl);
+    this.stillRenderSceneSnapshots.delete(jobId);
+    this.stillRenderSettingsSnapshots.delete(jobId);
+    this.canceledStillRenderJobs.delete(jobId);
+    this.store.update((state) => ({
+      ...state,
+      stillRenderJobs: state.stillRenderJobs.filter((candidate) => candidate.id !== jobId),
+    }));
+    return true;
+  }
+
+  public downloadStillRender(jobId: string) {
+    const job = this.store.getState().stillRenderJobs.find((candidate) => candidate.id === jobId);
+    if (!job?.resultUrl) return false;
+    const link = document.createElement("a");
+    link.href = job.resultUrl;
+    link.download = `${job.snapshot.sceneKey}-${job.snapshot.camera.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${job.snapshot.settings.width}x${job.snapshot.settings.height}.png`;
+    link.click();
+    return true;
+  }
+
+  public dispose() {
+    for (const job of this.store.getState().stillRenderJobs) {
+      if (job.resultUrl) URL.revokeObjectURL(job.resultUrl);
+      if (job.previewUrl) URL.revokeObjectURL(job.previewUrl);
+      this.canceledStillRenderJobs.add(job.id);
+    }
+  }
+
+  private async runStillRenderQueue() {
+    if (this.stillRenderQueueActive) return;
+    this.stillRenderQueueActive = true;
+    try {
+      while (true) {
+        const job = this.store.getState().stillRenderJobs.find((candidate) => candidate.status === "queued");
+        if (!job) break;
+        await this.executeStillRenderJob(job.id);
+      }
+    } finally {
+      this.stillRenderQueueActive = false;
+    }
+  }
+
+  private async executeStillRenderJob(jobId: string) {
+    const job = this.store.getState().stillRenderJobs.find((candidate) => candidate.id === jobId);
+    if (!job) return;
+    const renderStartedAt = performance.now();
+    this.updateStillRenderJob(jobId, { status: "running", error: null });
+    const canvas = document.createElement("canvas");
+    canvas.className = "offline-render-canvas";
+    canvas.style.width = `${job.snapshot.settings.width}px`;
+    canvas.style.height = `${job.snapshot.settings.height}px`;
+    document.body.append(canvas);
+    let offlineRenderer: PtRenderer | null = null;
+    try {
+      const scene = this.stillRenderSceneSnapshots.get(jobId);
+      if (!scene) throw new Error("The immutable scene snapshot is no longer available.");
+      if (scene.environmentLoaded) await scene.environmentLoaded;
+      const sourceSettings = this.stillRenderSettingsSnapshots.get(jobId);
+      if (!sourceSettings) throw new Error("The immutable render-settings snapshot is no longer available.");
+      const settings: PtSettings = {
+        ...sourceSettings,
+        renderMode: job.snapshot.settings.renderMode,
+        cameraProjectionMode: job.snapshot.camera.projection,
+        fov: job.snapshot.camera.fov,
+        orthographicHeight: job.snapshot.camera.orthographicHeight,
+        enableDepthOfField: job.snapshot.camera.depthOfField,
+        aperture: job.snapshot.camera.aperture,
+        focusDistance: job.snapshot.camera.focusDistance,
+        numSamples: 1,
+        maxRayDepth: job.snapshot.settings.maxRayDepth,
+        accumulationFormat: job.snapshot.settings.accumulationFormat,
+        integratorMode: job.snapshot.settings.integratorMode,
+        maxAccumulationFrames: job.snapshot.settings.samples,
+        resolutionScale: 1,
+        triangleOverlayMode: "off",
+        bvhOverlayEnabled: false,
+      };
+      scene.camera.position.fromArray(job.snapshot.camera.position);
+      scene.camera.quaternion.fromArray(job.snapshot.camera.quaternion);
+      scene.camera.fov = job.snapshot.camera.fov;
+      scene.camera.updateProjectionMatrix();
+      offlineRenderer = new PtRenderer(canvas, scene, settings);
+      this.activeStillRenderers.set(jobId, offlineRenderer);
+      offlineRenderer.setCameraProjectionMode(job.snapshot.camera.projection, false);
+      offlineRenderer.setCameraPose(job.snapshot.camera.position, job.snapshot.camera.quaternion);
+      offlineRenderer.setFixedOutputSize(job.snapshot.settings.width, job.snapshot.settings.height);
+      offlineRenderer.setRegionTracingMode(job.snapshot.settings.regionTracingMode);
+      offlineRenderer.setComparisonTracingMode(job.snapshot.settings.comparisonTracingMode);
+      offlineRenderer.setHybridComparisonSeam(job.snapshot.settings.comparisonSeam);
+      offlineRenderer.setHybridRegion(...job.snapshot.settings.region);
+      offlineRenderer.setSelectedObjectIds(job.snapshot.settings.selectedObjectIds);
+      offlineRenderer.setRenderMode(job.snapshot.settings.renderMode);
+      if (job.snapshot.settings.renderMode === "raster") {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      }
+      let reportedSamples = -1;
+      let previewThreshold = Math.max(1, Math.ceil(job.snapshot.settings.samples / 8));
+      let lastObservationAt = performance.now();
+      let estimatedMsPerSample: number | null = null;
+      let lastEtaReportedAt = 0;
+      while (job.snapshot.settings.renderMode !== "raster" && offlineRenderer.getAccumulatedFrames() < job.snapshot.settings.samples) {
+        if (this.canceledStillRenderJobs.has(jobId)) break;
+        const observationAt = performance.now();
+        const completedSamples = offlineRenderer.getAccumulatedFrames();
+        if (completedSamples !== reportedSamples) {
+          const sampleDelta = reportedSamples < 0 ? 0 : completedSamples - reportedSamples;
+          if (sampleDelta > 0) {
+            const observedMsPerSample = (observationAt - lastObservationAt) / sampleDelta;
+            estimatedMsPerSample = estimatedMsPerSample === null
+              ? observedMsPerSample
+              : estimatedMsPerSample * 0.75 + observedMsPerSample * 0.25;
+          }
+          reportedSamples = completedSamples;
+          const shouldReportEta = estimatedMsPerSample !== null &&
+            (lastEtaReportedAt === 0 || observationAt - lastEtaReportedAt >= 2000);
+          if (shouldReportEta) lastEtaReportedAt = observationAt;
+          this.updateStillRenderJob(jobId, {
+            completedSamples,
+            ...(shouldReportEta ? {
+              estimatedRemainingMs: Math.max(
+                0,
+                (job.snapshot.settings.samples - completedSamples) * estimatedMsPerSample!
+              ),
+            } : {}),
+          });
+        }
+        lastObservationAt = observationAt;
+        if (completedSamples >= previewThreshold) {
+          const preview = await offlineRenderer.captureCurrentRender(true, false, false);
+          const previousPreview = this.store.getState().stillRenderJobs.find((candidate) => candidate.id === jobId)?.previewUrl;
+          if (previousPreview) URL.revokeObjectURL(previousPreview);
+          this.updateStillRenderJob(jobId, { previewUrl: URL.createObjectURL(preview.blob) });
+          previewThreshold += Math.max(1, Math.ceil(job.snapshot.settings.samples / 8));
+        }
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+      const completedSamples = job.snapshot.settings.renderMode === "raster"
+        ? 1
+        : offlineRenderer.getAccumulatedFrames();
+      const capture = await offlineRenderer.captureCurrentRender(true, false, false);
+      const wasCanceled = this.canceledStillRenderJobs.has(jobId);
+      const metadata = JSON.stringify({
+        application: "Pathtracer Lab",
+        backend: job.snapshot.backendVersion,
+        scene: job.snapshot.sceneKey,
+        sceneRevision: job.snapshot.sceneRevision,
+        camera: job.snapshot.camera,
+        render: job.snapshot.settings,
+        outcome: wasCanceled ? "canceled" : "completed",
+        completedSamples,
+        createdAt: new Date(job.snapshot.createdAt).toISOString(),
+      });
+      const outputBlob = await embedPngText(capture.blob, "Pathtracer Lab", metadata);
+      const previousPreview = this.store.getState().stillRenderJobs.find((candidate) => candidate.id === jobId)?.previewUrl;
+      if (previousPreview) URL.revokeObjectURL(previousPreview);
+      this.updateStillRenderJob(jobId, {
+        status: wasCanceled ? "canceled" : "completed",
+        completedSamples,
+        estimatedRemainingMs: null,
+        renderDurationMs: performance.now() - renderStartedAt,
+        previewUrl: null,
+        resultUrl: URL.createObjectURL(outputBlob),
+      });
+    } catch (error) {
+      this.updateStillRenderJob(jobId, {
+        status: "failed",
+        renderDurationMs: performance.now() - renderStartedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      offlineRenderer?.dispose();
+      this.activeStillRenderers.delete(jobId);
+      canvas.remove();
+      this.canceledStillRenderJobs.delete(jobId);
+      this.stillRenderSceneSnapshots.delete(jobId);
+      this.stillRenderSettingsSnapshots.delete(jobId);
+    }
+  }
+
+  private updateStillRenderJob(
+    jobId: string,
+    patch: Partial<PtState["stillRenderJobs"][number]>
+  ) {
+    this.store.update((state) => ({
+      ...state,
+      stillRenderJobs: state.stillRenderJobs.map((job) =>
+        job.id === jobId ? { ...job, ...patch } : job
+      ),
+    }));
   }
 
   public onCameraPoseChanged(listener: () => void) {
@@ -317,7 +620,7 @@ export default class PtActions {
         enableDepthOfField: false,
       },
       selection: this.emptySelection(),
-      sceneObjects: this.createSceneObjectState(sceneKey),
+      sceneObjects: [],
       importWarnings: [...scene.staticAssetWarnings],
       bvhTraversal: {
         armed: false,
@@ -328,6 +631,7 @@ export default class PtActions {
         result: null,
       },
     }));
+    this.publishSceneObjects();
     Object.assign(this.renderer.settings, this.store.getState().settings);
     if (scene.initialEnvironmentIntensity !== null) {
       this.setEnvironmentIntensity(scene.initialEnvironmentIntensity);

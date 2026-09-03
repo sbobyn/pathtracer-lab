@@ -158,6 +158,7 @@ export default class PtRenderer {
   private readonly frameTimingListeners = new Set<(frameTimeMs: number) => void>();
   private readonly cameraPoseListeners = new Set<() => void>();
   private previousFrameStartedAt = 0;
+  private renderingPaused = false;
 
   public orbitControls!: OrbitControls;
   public transformControls!: TransformControls;
@@ -221,6 +222,7 @@ export default class PtRenderer {
   private readonly pendingCaptureRequests: Array<{
     includeOverlays: boolean;
     includePanels: boolean;
+    includeInteractionHandles: boolean;
     resolve: (capture: { blob: Blob; width: number; height: number; accumulatedFrames: number }) => void;
     reject: (error: Error) => void;
   }> = [];
@@ -279,6 +281,20 @@ export default class PtRenderer {
       position: this.camera.position.toArray() as [number, number, number],
       direction: direction.toArray() as [number, number, number],
     };
+  }
+
+  public setCameraPose(
+    position: readonly [number, number, number],
+    quaternion: readonly [number, number, number, number]
+  ) {
+    this.camera.position.fromArray(position);
+    this.camera.quaternion.fromArray(quaternion);
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    this.orbitControls.target.copy(this.camera.position).add(direction);
+    this.camera.updateMatrixWorld(true);
+    this.orbitControls.update();
+    this.invalidate(PtInvalidationLevel.Camera, "authored camera viewed");
+    this.cameraPoseListeners.forEach((listener) => listener());
   }
 
   public onCameraPoseChanged(listener: () => void) {
@@ -359,10 +375,36 @@ export default class PtRenderer {
     this.attachEventListeners();
   }
 
-  public captureCurrentRender(includeOverlays = false, includePanels = false) {
+  public captureCurrentRender(includeOverlays = false, includePanels = false, includeInteractionHandles = true) {
     return new Promise<{ blob: Blob; width: number; height: number; accumulatedFrames: number }>((resolve, reject) => {
-      this.pendingCaptureRequests.push({ includeOverlays, includePanels, resolve, reject });
+      this.pendingCaptureRequests.push({ includeOverlays, includePanels, includeInteractionHandles, resolve, reject });
     });
+  }
+
+  public getAccumulatedFrames() {
+    return this.shaderCanvas.accumulatedFrames;
+  }
+
+  public setRenderingPaused(paused: boolean) {
+    this.renderingPaused = paused;
+  }
+
+  public setFixedOutputSize(width: number, height: number) {
+    width = Math.max(1, Math.round(width));
+    height = Math.max(1, Math.round(height));
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+    this.viewportPixelRatio = 1;
+    this.updateCameraAspect(width / height);
+    this.camera.updateProjectionMatrix();
+    this.shaderCanvas.setDimensions(width, height);
+    this.resizeHybridTarget(width, height, 1);
+    this.composer.setPixelRatio(1);
+    this.composer.setSize(width, height);
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(width, height, false);
+    this.updateCameraProjectionUniforms();
+    this.invalidate(PtInvalidationLevel.Camera, "fixed output size changed");
   }
 
   private snapshotPendingCaptures() {
@@ -379,7 +421,7 @@ export default class PtRenderer {
     }
     context.drawImage(this.canvas, 0, 0);
     if (request.includeOverlays && !request.includePanels) {
-      this.drawCaptureGuides(context, snapshot.width, snapshot.height);
+      this.drawCaptureGuides(context, snapshot.width, snapshot.height, request.includeInteractionHandles);
     }
     snapshot.toBlob((blob) => {
       if (!blob) {
@@ -399,7 +441,8 @@ export default class PtRenderer {
   private drawCaptureGuides(
     context: CanvasRenderingContext2D,
     width: number,
-    height: number
+    height: number,
+    includeInteractionHandles: boolean
   ) {
     const scale = width / Math.max(1, this.canvas.clientWidth);
     const lime = "#d9f99d";
@@ -417,19 +460,21 @@ export default class PtRenderer {
       context.lineTo(x, height);
       context.stroke();
 
-      const radius = 11 * scale;
-      context.fillStyle = "#bef264";
-      context.strokeStyle = "rgba(255, 255, 255, 0.8)";
-      context.lineWidth = 2 * scale;
-      context.beginPath();
-      context.arc(x, height / 2, radius, 0, Math.PI * 2);
-      context.fill();
-      context.stroke();
-      context.fillStyle = "#18181b";
-      context.font = `700 ${12 * scale}px Inter, sans-serif`;
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText("↔", x, height / 2);
+      if (includeInteractionHandles) {
+        const radius = 11 * scale;
+        context.fillStyle = "#bef264";
+        context.strokeStyle = "rgba(255, 255, 255, 0.8)";
+        context.lineWidth = 2 * scale;
+        context.beginPath();
+        context.arc(x, height / 2, radius, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+        context.fillStyle = "#18181b";
+        context.font = `700 ${12 * scale}px Inter, sans-serif`;
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText("↔", x, height / 2);
+      }
 
       const drawLabel = (text: string, anchorX: number, align: CanvasTextAlign) => {
         context.font = `650 ${10 * scale}px Inter, sans-serif`;
@@ -442,6 +487,7 @@ export default class PtRenderer {
         context.fillRect(left, top, labelWidth, labelHeight);
         context.fillStyle = "#f4f4f5";
         context.textAlign = "center";
+        context.textBaseline = "middle";
         context.fillText(text, left + labelWidth / 2, top + labelHeight / 2);
       };
       drawLabel("Raster", x - 9 * scale, "right");
@@ -544,6 +590,12 @@ export default class PtRenderer {
     this.hybridMaterial.uniforms.uSelectedObjectIdCount.value = index;
     this.hybridMaterial.uniforms.uObjectSelectionActive.value = index > 0;
     this.uniforms.uObjectMaskHasSelection.value = index > 0;
+    const outlinedObjects: THREE.Object3D[] = [];
+    this.ptScene.scene.traverse((object) => {
+      const objectId = object.userData.pathTracer?.objectId as string | undefined;
+      if (objectId && this.selectedObjectIds.has(objectId)) outlinedObjects.push(object);
+    });
+    this.outlinePass.selectedObjects = outlinedObjects;
     this.cameraDebugDirty = true;
     if (
       this.settings.renderMode === "selectedObject" ||
@@ -588,6 +640,15 @@ export default class PtRenderer {
 
   public getHybridComparisonSeam() {
     return this.hybridSeam;
+  }
+
+  public getHybridRegion(): [number, number, number, number] {
+    return [
+      this.hybridRegion.x,
+      1 - this.hybridRegion.w,
+      this.hybridRegion.z - this.hybridRegion.x,
+      this.hybridRegion.w - this.hybridRegion.y,
+    ];
   }
 
   public setHybridRegion(left: number, top: number, width: number, height: number) {
@@ -654,7 +715,9 @@ export default class PtRenderer {
         (mode === "orthographic" && this.camera instanceof THREE.OrthographicCamera))
     ) return;
     const previous = this.camera;
-    const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    const aspect = this.viewportWidth > 0
+      ? this.viewportWidth / Math.max(1, this.viewportHeight)
+      : this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
     const next = mode === "orthographic"
       ? new THREE.OrthographicCamera(-1, 1, 1, -1, previous.near, previous.far)
       : new THREE.PerspectiveCamera(this.settings.fov, aspect, previous.near, previous.far);
@@ -2193,6 +2256,7 @@ export default class PtRenderer {
   }
 
   private readonly renderLoop = () => {
+    if (this.renderingPaused) return;
     const frameStartedAt = performance.now();
     if (this.previousFrameStartedAt > 0) {
       const frameTimeMs = frameStartedAt - this.previousFrameStartedAt;
@@ -2312,7 +2376,7 @@ export default class PtRenderer {
 
     if (this.pendingCaptureRequests.length > 0 && !this.pendingCaptureRequests[0]!.includePanels) {
       const outlineEnabled = this.outlinePass.enabled;
-      this.outlinePass.enabled = false;
+      this.outlinePass.enabled = this.pendingCaptureRequests[0]!.includeOverlays && outlineEnabled;
       this.composer.render();
       if (this.pendingCaptureRequests[0]?.includeOverlays) {
         this.ptScene.annotationGroup.traverse((object) => {
