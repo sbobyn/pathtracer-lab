@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title description">
+  <title id="title">Pathtracer Lab</title>
+  <desc id="description">A softly illuminated reflective sphere on a dark background.</desc>
+  <defs>
+    <radialGradient id="sphere" cx="0" cy="0" r="1" gradientTransform="translate(24 21) rotate(48) scale(35)">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".2" stop-color="#e5e7eb"/>
+      <stop offset=".5" stop-color="#9ca3af"/>
+      <stop offset=".76" stop-color="#475569"/>
+      <stop offset="1" stop-color="#111827"/>
+    </radialGradient>
+    <linearGradient id="bounce" x1="21" y1="49" x2="46" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#65a30d" stop-opacity="0"/>
+      <stop offset="1" stop-color="#bef264" stop-opacity=".72"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#15161a"/>
+  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#383a40" stroke-width="2"/>
+  <circle cx="32" cy="32" r="21" fill="url(#sphere)"/>
+  <path d="M17 43c7 7 20 11 31 2-5 10-18 13-27 7-2-2-3-5-4-9Z" fill="url(#bounce)"/>
+  <ellipse cx="24" cy="21" rx="6" ry="3.5" fill="#fff" opacity=".7" transform="rotate(-38 24 21)"/>
+  <circle cx="32" cy="32" r="21" fill="none" stroke="#f8fafc" stroke-opacity=".22"/>
+</svg>

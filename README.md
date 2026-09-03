@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="static/pathtracer-lab-logo.svg" alt="Pathtracer Lab" width="360" />
+</p>
+
 # Path Tracer Lab
 
 <!-- Hero image or GIF -->
