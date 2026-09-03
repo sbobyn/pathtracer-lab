@@ -177,7 +177,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   qualityTargetFps: 60,
   qualityMinimumResolutionScale: 0.125,
   qualityMaximumSamples: 8,
-  renderMode: "pathtraced",
+  renderMode: "comparison",
   regionTracingMode: "roiOnly",
   comparisonTracingMode: "fullFrame",
   environmentMode: "gradient",
@@ -214,7 +214,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
 
 export function createDefaultPtState(): PtState {
   return {
-    sceneKey: "RTIOW1Simple",
+    sceneKey: "CornellBox",
     sceneRevision: 0,
     stillRenderJobs: [],
     sceneObjects: [],

@@ -18,6 +18,12 @@ class MemoryStorage {
   removeItem() { this.value = null; }
 }
 
+test("new users begin with the Cornell box comparison showcase", () => {
+  const state = createDefaultPtState();
+  assert.equal(state.sceneKey, "CornellBox");
+  assert.equal(state.settings.renderMode, "comparison");
+});
+
 test("loads valid versioned preferences over authoritative defaults", () => {
   const storage = new MemoryStorage();
   storage.value = JSON.stringify({

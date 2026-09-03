@@ -2673,14 +2673,39 @@ function PerformanceCalibrationHud({
   state,
   actions,
   onViewSettings,
+  dismissedRunId,
+  onDismiss,
+  onBottomOffsetChange,
 }: {
   state: Readonly<PtState>;
   actions: PtActions;
   onViewSettings: () => void;
+  dismissedRunId: number | null;
+  onDismiss: (runId: number) => void;
+  onBottomOffsetChange: (offset: number) => void;
 }) {
   const calibration = state.qualityCalibration;
-  const [dismissedRunId, setDismissedRunId] = useState<number | null>(null);
-  if (!calibration || dismissedRunId === calibration.runId) return null;
+  const hud = useRef<HTMLElement>(null);
+  const visible = calibration !== null && dismissedRunId !== calibration.runId;
+  useLayoutEffect(() => {
+    if (!visible || !hud.current) {
+      onBottomOffsetChange(16);
+      return;
+    }
+    const element = hud.current;
+    const updateOffset = () => {
+      onBottomOffsetChange(Math.max(16, window.innerHeight - element.getBoundingClientRect().top + 10));
+    };
+    const observer = new ResizeObserver(updateOffset);
+    observer.observe(element);
+    window.addEventListener("resize", updateOffset);
+    updateOffset();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateOffset);
+    };
+  }, [onBottomOffsetChange, visible]);
+  if (!calibration || !visible) return null;
 
   const progress = calibrationProgress(calibration);
   const active = calibration.phase !== "complete" && calibration.phase !== "cancelled";
@@ -2707,6 +2732,7 @@ function PerformanceCalibrationHud({
 
   return (
     <section
+      ref={hud}
       className={`performance-calibration-hud performance-calibration-hud--${calibration.phase}${targetMissed ? " performance-calibration-hud--target-missed" : ""}`}
       aria-label="Performance calibration status"
       aria-live="polite"
@@ -2715,7 +2741,7 @@ function PerformanceCalibrationHud({
         type="button"
         className="performance-calibration-hud__dismiss"
         aria-label="Dismiss calibration status"
-        onClick={() => setDismissedRunId(calibration.runId)}
+        onClick={() => onDismiss(calibration.runId)}
       >
         ×
       </button>
@@ -3034,7 +3060,7 @@ function CreationMenu({
   );
 }
 
-function HybridComparisonSeam({ actions }: { actions: PtActions }) {
+function HybridComparisonSeam({ actions, labelBottom }: { actions: PtActions; labelBottom: number }) {
   const [seam, setSeam] = useState(() => actions.getHybridComparisonSeam());
   const [debugBounds, setDebugBounds] = useState<{
     left: number;
@@ -3184,8 +3210,8 @@ function HybridComparisonSeam({ actions }: { actions: PtActions }) {
       )}
       {!debugOcclusion && (
         <>
-          <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--raster">Raster</span>
-          <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--pathtraced">Path traced</span>
+          <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--raster" style={{ bottom: labelBottom }}>Raster</span>
+          <span className="hybrid-comparison-seam__label hybrid-comparison-seam__label--pathtraced" style={{ bottom: labelBottom }}>Path traced</span>
         </>
       )}
     </div>
@@ -3358,6 +3384,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
   const [performanceSettingsRequest, setPerformanceSettingsRequest] = useState(0);
+  const [dismissedCalibrationRunId, setDismissedCalibrationRunId] = useState<number | null>(null);
+  const [comparisonLabelBottom, setComparisonLabelBottom] = useState(16);
   const [captureBusy, setCaptureBusy] = useState(false);
   const [captureMenuOpen, setCaptureMenuOpen] = useState(false);
   const [includeCaptureOverlays, setIncludeCaptureOverlays] = useState(false);
@@ -3641,7 +3669,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
     />
     {(state.settings.renderMode === "comparison" ||
       state.settings.renderMode === "selectedObjectComparison") && (
-      <HybridComparisonSeam actions={actions} />
+      <HybridComparisonSeam actions={actions} labelBottom={comparisonLabelBottom} />
     )}
     {state.settings.renderMode === "region" && (
       <HybridComparisonRegion actions={actions} />
@@ -3804,6 +3832,9 @@ function EditorShell({ actions }: { actions: PtActions }) {
       state={state}
       actions={actions}
       onViewSettings={() => setPerformanceSettingsRequest((request) => request + 1)}
+      dismissedRunId={dismissedCalibrationRunId}
+      onDismiss={setDismissedCalibrationRunId}
+      onBottomOffsetChange={setComparisonLabelBottom}
     />
     {(capturePreview || captureError) && (
       <div className="capture-preview" role="presentation" onPointerDown={(event) => {
