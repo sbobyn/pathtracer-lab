@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { GpuLight, GpuQuad } from "./GpuScene";
+import type { GpuBox, GpuLight, GpuQuad } from "./GpuScene";
 
 export default interface PtUniforms {
   uCamera: {
@@ -19,6 +19,7 @@ export default interface PtUniforms {
   uWorld: {
     value: {
       quads: GpuQuad[];
+      boxes: GpuBox[];
     };
   };
   uSphereCount: { value: number };
@@ -30,6 +31,7 @@ export default interface PtUniforms {
   uSphereBvhIndexData: { value: THREE.DataTexture };
   uSphereBvhIndexDataSize: { value: THREE.Vector2 };
   uQuadCount: { value: number };
+  uBoxCount: { value: number };
   uTriangleCount: { value: number };
   uTriangleData: { value: THREE.DataTexture };
   uTriangleDataSize: { value: THREE.Vector2 };

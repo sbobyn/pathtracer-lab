@@ -73,6 +73,63 @@ bool hitQuad(Quad quad, Ray ray, Interval rayInterval, out Hit hit) {
     return true;
 }
 
+bool hitBox(Box box, Ray ray, Interval rayInterval, out Hit hit) {
+    vec3 relativeOrigin = ray.origin - box.center;
+    vec3 localOrigin = vec3(
+        dot(relativeOrigin, box.axisX),
+        dot(relativeOrigin, box.axisY),
+        dot(relativeOrigin, box.axisZ)
+    );
+    vec3 localDirection = vec3(
+        dot(ray.direction, box.axisX),
+        dot(ray.direction, box.axisY),
+        dot(ray.direction, box.axisZ)
+    );
+    float nearT = rayInterval.min;
+    float farT = rayInterval.max;
+    int nearAxis = -1;
+    int farAxis = -1;
+    float nearSign = 0.0;
+    float farSign = 0.0;
+    for (int axis = 0; axis < 3; axis++) {
+        if (abs(localDirection[axis]) < 1e-12) {
+            if (localOrigin[axis] < -box.halfSize[axis] || localOrigin[axis] > box.halfSize[axis]) return false;
+            continue;
+        }
+        float inverseDirection = 1.0 / localDirection[axis];
+        float axisNear = (-box.halfSize[axis] - localOrigin[axis]) * inverseDirection;
+        float axisFar = (box.halfSize[axis] - localOrigin[axis]) * inverseDirection;
+        float axisNearSign = -1.0;
+        float axisFarSign = 1.0;
+        if (axisNear > axisFar) {
+            float swapT = axisNear; axisNear = axisFar; axisFar = swapT;
+            float swapSign = axisNearSign; axisNearSign = axisFarSign; axisFarSign = swapSign;
+        }
+        if (axisNear > nearT) { nearT = axisNear; nearAxis = axis; nearSign = axisNearSign; }
+        if (axisFar < farT) { farT = axisFar; farAxis = axis; farSign = axisFarSign; }
+        if (farT < nearT) return false;
+    }
+    bool useNear = nearAxis >= 0 && intervalSurrounds(rayInterval, nearT);
+    float t = useNear ? nearT : farT;
+    int hitAxis = useNear ? nearAxis : farAxis;
+    float hitSign = useNear ? nearSign : farSign;
+    if (hitAxis < 0 || !intervalSurrounds(rayInterval, t)) return false;
+
+    vec3 localNormal = vec3(0.0);
+    localNormal[hitAxis] = hitSign;
+    vec3 outwardNormal = normalize(
+        localNormal.x * box.axisX + localNormal.y * box.axisY + localNormal.z * box.axisZ
+    );
+    vec3 localHit = localOrigin + t * localDirection;
+    vec3 normalizedHit = localHit / max(box.halfSize, vec3(1e-8));
+    hit.t = t;
+    hit.position = rayAt(ray, t);
+    hit.uv = boxUv(normalizedHit);
+    hit.barycentrics = vec3(0.0);
+    setFaceNormal(ray, outwardNormal, hit);
+    return true;
+}
+
 bool hitTriangle(Triangle triangle, Ray ray, Interval rayInterval, out Hit hit) {
     vec3 edgeAB = triangle.b - triangle.a;
     vec3 edgeAC = triangle.c - triangle.a;
@@ -284,6 +341,18 @@ bool hitWorld(World world, Ray ray, Interval rayInterval, out Hit hit) {
             hit = candidate;
             hit.materialId = quad.materialId;
             hit.primitiveType = 1;
+            hit.primitiveId = i;
+        }
+    }
+    for (int i = 0; i < MAX_BOXES; i++) {
+        if (i >= uBoxCount) break;
+        Box box = world.boxes[i];
+        if (hitBox(box, ray, Interval(rayInterval.min, closestSoFar), candidate)) {
+            hitAnything = true;
+            closestSoFar = candidate.t;
+            hit = candidate;
+            hit.materialId = box.materialId;
+            hit.primitiveType = 3;
             hit.primitiveId = i;
         }
     }

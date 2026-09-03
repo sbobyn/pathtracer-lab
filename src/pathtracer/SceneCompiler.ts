@@ -4,6 +4,7 @@ import GpuScene, {
   type GpuMaterial,
   type GpuLight,
   type GpuQuad,
+  type GpuBox,
   type GpuSphere,
   type GpuTriangle,
   type GpuTexture,
@@ -30,6 +31,7 @@ export default class SceneCompiler {
       spheres,
       buildSphereBvh(spheres),
       this.compileQuads(scene),
+      this.compileBoxes(scene),
       triangles,
       buildTriangleBvh(triangles),
       materials,
@@ -50,6 +52,7 @@ export default class SceneCompiler {
       const spheres = this.compileSpheres(scene);
       gpuScene.updateSpheres(spheres, buildSphereBvh(spheres));
       gpuScene.updateQuads(this.compileQuads(scene));
+      gpuScene.updateBoxes(this.compileBoxes(scene));
       const triangles = this.compileTriangles(scene);
       gpuScene.updateTriangles(triangles, buildTriangleBvh(triangles));
       if (level === PtInvalidationLevel.Scene) {
@@ -80,6 +83,23 @@ export default class SceneCompiler {
         u,
         v,
         normal: new THREE.Vector3().crossVectors(u, v).normalize(),
+        materialId: getMaterialMetadata(mesh.material).materialId,
+      };
+    });
+  }
+
+  private compileBoxes(scene: PtScene): GpuBox[] {
+    return scene.getBoxMeshes().map((mesh) => {
+      mesh.updateWorldMatrix(true, false);
+      const rotation = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      mesh.matrixWorld.decompose(new THREE.Vector3(), rotation, scale);
+      return {
+        center: mesh.getWorldPosition(new THREE.Vector3()),
+        halfSize: scale.set(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z)).multiplyScalar(0.5),
+        axisX: new THREE.Vector3(1, 0, 0).applyQuaternion(rotation).normalize(),
+        axisY: new THREE.Vector3(0, 1, 0).applyQuaternion(rotation).normalize(),
+        axisZ: new THREE.Vector3(0, 0, 1).applyQuaternion(rotation).normalize(),
         materialId: getMaterialMetadata(mesh.material).materialId,
       };
     });

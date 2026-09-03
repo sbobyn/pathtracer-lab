@@ -3,11 +3,14 @@ import { PresetPtScenes, resolutionScaleForPreset } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
 import {
   getMaterialMetadata,
+  isPtBoxMesh,
   isPtQuadMesh,
   isPtSphereMesh,
   isPtTriangleMesh,
   sphereRadius,
   type PtEditableObject,
+  type PtBoxMesh,
+  type PtPreviewMaterial,
   type PtQuadMesh,
   type PtSphereMesh,
 } from "./PtScene";
@@ -39,6 +42,7 @@ import {
   imageTexture,
   perlinTexture,
   PtTextureType,
+  texturePreviewColor,
   type PtTexture,
 } from "./PtTexture";
 import PtMaterial, { PtMaterialModel, PtMaterialType } from "./PtMaterial";
@@ -48,6 +52,9 @@ import {
 } from "./AuthoredCamera";
 import { createStillRenderSnapshot, type StillRenderSettings } from "./StillRenderJob";
 import { embedPngText } from "./PngMetadata";
+import { TeapotGeometry } from "three/examples/jsm/geometries/TeapotGeometry.js";
+import { loadStaticGltf } from "./StaticGltfLoader";
+import { translateStaticGltfMaterial } from "./GltfMaterialTranslator";
 
 interface TransformSnapshot {
   readonly position: THREE.Vector3;
@@ -102,6 +109,8 @@ export default class PtActions {
   } | null = null;
   private nextSphereName = 0;
   private nextQuadName = 0;
+  private nextBoxName = 0;
+  private nextTeapotName = 0;
   private nextLightName = 0;
   private readonly canceledStillRenderJobs = new Set<string>();
   private readonly stillRenderSceneSnapshots = new Map<string, import("./PtScene").default>();
@@ -118,6 +127,10 @@ export default class PtActions {
   ) {
     this.nextSphereName = renderer.ptScene.getSphereMeshes().length;
     this.nextQuadName = renderer.ptScene.getQuadMeshes().length;
+    this.nextBoxName = renderer.ptScene.getBoxMeshes().length;
+    this.nextTeapotName = renderer.ptScene.getTriangleMeshes()
+      .filter((mesh) => mesh.userData.pathTracer.objectName.startsWith("Utah teapot"))
+      .length;
     this.renderer.transformControls.mode = this.store.getState().settings.transformMode;
     this.renderer.transformControls.space =
       this.store.getState().settings.transformSpace === "global" ? "world" : "local";
@@ -640,6 +653,10 @@ export default class PtActions {
     this.renderer.invalidate(PtInvalidationLevel.Scene, "scene preset replaced");
     this.nextSphereName = scene.getSphereMeshes().length;
     this.nextQuadName = scene.getQuadMeshes().length;
+    this.nextBoxName = scene.getBoxMeshes().length;
+    this.nextTeapotName = scene.getTriangleMeshes()
+      .filter((mesh) => mesh.userData.pathTracer.objectName.startsWith("Utah teapot"))
+      .length;
   }
 
   public setRenderMode(mode: RenderMode) {
@@ -1071,6 +1088,7 @@ export default class PtActions {
     const object = [
       ...scene.getSphereMeshes(),
       ...scene.getQuadMeshes(),
+      ...scene.getBoxMeshes(),
       ...scene.getAnalyticLightNodes(),
       ...scene.getTriangleMeshes(),
     ].find((candidate) => candidate.userData.pathTracer.objectId === objectId);
@@ -1086,10 +1104,13 @@ export default class PtActions {
     const position = this.renderer.camera.position
       .clone()
       .addScaledVector(direction, 3);
+    const materialId = scene.addMaterial(PtMaterial.principledMetallicRoughness({
+      baseColor: new THREE.Color(0.72, 0.74, 0.78), roughness: 0.45, metallic: 0,
+    }));
     const object = scene.createSphereMesh(
       position,
       0.5,
-      0,
+      materialId,
       `Sphere ${this.nextSphereName++}`
     );
     const index = scene.intersectGroup.children.length;
@@ -1125,12 +1146,15 @@ export default class PtActions {
     this.renderer.camera.getWorldDirection(direction);
     const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
     const rotation = this.renderer.camera.quaternion.clone();
+    const materialId = scene.addMaterial(PtMaterial.principledMetallicRoughness({
+      baseColor: new THREE.Color(0.72, 0.74, 0.78), roughness: 0.45, metallic: 0,
+    }));
     const object = scene.createQuadMesh(
       position,
       rotation,
       1,
       1,
-      0,
+      materialId,
       `Quad ${this.nextQuadName++}`
     );
     const index = scene.intersectGroup.children.length;
@@ -1154,6 +1178,173 @@ export default class PtActions {
     });
     this.publishHistory();
     return true;
+  }
+
+  public addBox() {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+    const materialId = scene.addMaterial(PtMaterial.principledMetallicRoughness({
+      baseColor: new THREE.Color(0.72, 0.74, 0.78), roughness: 0.45, metallic: 0,
+    }));
+    const object = scene.createBoxMesh(
+      position, new THREE.Quaternion(), new THREE.Vector3(1, 1, 1),
+      materialId, `Box ${this.nextBoxName++}`
+    );
+    const index = scene.intersectGroup.children.length;
+    const insert = () => {
+      scene.insertBoxMesh(object, index);
+      this.publishSceneObjects();
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "box added");
+    };
+    const remove = () => {
+      scene.removeBoxMesh(object);
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "added box removed");
+    };
+    insert();
+    this.history.record({ label: `Add ${object.userData.pathTracer.objectName}`, execute: insert, undo: remove });
+    this.publishHistory();
+    return true;
+  }
+
+  public addTeapot() {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+    const scene = this.renderer.ptScene;
+    const direction = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(direction);
+    const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+    const materialId = scene.addMaterial(
+      PtMaterial.legacyLambert(new THREE.Color(0.78, 0.8, 0.84))
+    );
+    const object = scene.addTriangleMesh(
+      new TeapotGeometry(0.45, 8, true, true, true, true, true),
+      materialId,
+      `Utah teapot ${this.nextTeapotName++}`
+    );
+    object.position.copy(position);
+    object.updateMatrixWorld(true);
+
+    const insert = () => {
+      scene.triangleMeshGroup.add(object);
+      scene.triangleMeshGroup.updateMatrixWorld(true);
+      this.publishSceneObjects();
+      this.selectObject(object);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "teapot added");
+    };
+    const remove = () => {
+      scene.triangleMeshGroup.remove(object);
+      scene.triangleMeshGroup.updateMatrixWorld(true);
+      this.publishSceneObjects();
+      if (this.selectedObject === object) this.selectObject(null);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "added teapot removed");
+    };
+    // addTriangleMesh inserted the object already; record this initial state as
+    // an already-applied command, matching the other creation actions.
+    this.publishSceneObjects();
+    this.selectObject(object);
+    this.renderer.invalidate(PtInvalidationLevel.Scene, "teapot added");
+    this.history.record({
+      label: `Add ${object.userData.pathTracer.objectName}`,
+      execute: insert,
+      undo: remove,
+    });
+    this.publishHistory();
+    return true;
+  }
+
+  public async importMesh(file: File) {
+    this.commitSelectedTransform();
+    this.commitMaterialEdit();
+
+    const source = URL.createObjectURL(file);
+    try {
+      const primitives = await loadStaticGltf(source);
+      const scene = this.renderer.ptScene;
+      const bounds = new THREE.Box3();
+      for (const primitive of primitives) {
+        primitive.geometry.computeBoundingBox();
+        if (primitive.geometry.boundingBox) bounds.union(primitive.geometry.boundingBox);
+      }
+      if (bounds.isEmpty()) throw new Error("The imported mesh has no visible geometry");
+
+      const size = bounds.getSize(new THREE.Vector3());
+      const largestDimension = Math.max(size.x, size.y, size.z);
+      if (!Number.isFinite(largestDimension) || largestDimension <= 0) {
+        throw new Error("The imported mesh has invalid or zero-sized geometry");
+      }
+      const center = bounds.getCenter(new THREE.Vector3());
+      const importScale = 2 / largestDimension;
+      const direction = new THREE.Vector3();
+      this.renderer.camera.getWorldDirection(direction);
+      const position = this.renderer.camera.position.clone().addScaledVector(direction, 3);
+      const label = file.name.replace(/\.glb$/i, "") || "Imported mesh";
+      const materialIds = new Map<string, number>();
+      let fallbackMaterialId: number | null = null;
+      const objects = primitives.map((primitive, index) => {
+        primitive.geometry.translate(-center.x, -center.y, -center.z);
+        primitive.geometry.scale(importScale, importScale, importScale);
+        let materialId = materialIds.get(primitive.material.uuid);
+        if (materialId === undefined) {
+          try {
+            materialId = scene.addMaterial(translateStaticGltfMaterial(primitive.material));
+          } catch (error) {
+            fallbackMaterialId ??= scene.addMaterial(
+              PtMaterial.principledMetallicRoughness({
+                baseColor: new THREE.Color(0.72, 0.74, 0.78),
+                roughness: 0.45,
+                metallic: 0,
+              })
+            );
+            materialId = fallbackMaterialId;
+            console.warn(`Using a fallback material for ${primitive.name}`, error);
+          }
+          materialIds.set(primitive.material.uuid, materialId);
+        }
+        const object = scene.addTriangleMesh(
+          primitive.geometry,
+          materialId,
+          primitives.length === 1 ? label : `${label} · ${primitive.name || index + 1}`
+        );
+        object.position.copy(position);
+        object.updateMatrixWorld(true);
+        return object;
+      });
+
+      const insert = () => {
+        for (const object of objects) scene.triangleMeshGroup.add(object);
+        scene.triangleMeshGroup.updateMatrixWorld(true);
+        this.publishSceneObjects();
+        this.selectObject(objects[0]);
+        this.renderer.invalidate(PtInvalidationLevel.Scene, "mesh imported");
+      };
+      const remove = () => {
+        for (const object of objects) scene.triangleMeshGroup.remove(object);
+        scene.triangleMeshGroup.updateMatrixWorld(true);
+        this.publishSceneObjects();
+        if (objects.includes(this.selectedObject as (typeof objects)[number])) this.selectObject(null);
+        this.renderer.invalidate(PtInvalidationLevel.Scene, "imported mesh removed");
+      };
+
+      this.publishSceneObjects();
+      this.selectObject(objects[0]);
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "mesh imported");
+      this.history.record({
+        label: `Import ${label}`,
+        execute: insert,
+        undo: remove,
+      });
+      this.publishHistory();
+      return true;
+    } finally {
+      URL.revokeObjectURL(source);
+    }
   }
 
   public addEmissiveSphere() {
@@ -1313,18 +1504,22 @@ export default class PtActions {
 
   public removeSelectedObject() {
     const object = this.selectedObject;
-    if (!object || isPtTriangleMesh(object)) return false;
+    if (!object) return false;
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
     const index = isPtAnalyticLightNode(object)
       ? scene.analyticLightGroup.children.indexOf(object)
+      : isPtTriangleMesh(object)
+        ? scene.triangleMeshGroup.children.indexOf(object)
       : scene.intersectGroup.children.indexOf(object);
     if (index < 0) return false;
 
     const remove = () => {
       if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
       else if (isPtQuadMesh(object)) scene.removeQuadMesh(object);
+      else if (isPtBoxMesh(object)) scene.removeBoxMesh(object);
+      else if (isPtTriangleMesh(object)) scene.removeTriangleMesh(object);
       else scene.removeAnalyticLightNode(object);
       this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
@@ -1333,10 +1528,12 @@ export default class PtActions {
     const restore = () => {
       if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
       else if (isPtQuadMesh(object)) scene.insertQuadMesh(object, index);
+      else if (isPtBoxMesh(object)) scene.insertBoxMesh(object, index);
+      else if (isPtTriangleMesh(object)) scene.insertTriangleMesh(object, index);
       else scene.insertAnalyticLightNode(object, index);
       this.publishSceneObjects();
       this.selectObject(object);
-      this.renderer.invalidate(PtInvalidationLevel.Scene, "sphere restored");
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "object restored");
     };
 
     remove();
@@ -1355,7 +1552,7 @@ export default class PtActions {
     this.commitSelectedTransform();
     this.commitMaterialEdit();
     const scene = this.renderer.ptScene;
-    const object = source.clone() as PtSphereMesh | PtQuadMesh | import("./PtAnalyticLight").PtAnalyticLightNode;
+    const object = source.clone() as PtSphereMesh | PtQuadMesh | PtBoxMesh | import("./PtAnalyticLight").PtAnalyticLightNode;
     object.userData.pathTracer = isPtSphereMesh(source)
       ? {
           objectId: THREE.MathUtils.generateUUID(),
@@ -1369,6 +1566,11 @@ export default class PtActions {
           objectName: `${source.userData.pathTracer.objectName} Copy`,
           primitiveIndex: scene.getQuadMeshes().length,
           primitiveType: "quad",
+        } : isPtBoxMesh(source) ? {
+          objectId: THREE.MathUtils.generateUUID(),
+          objectName: `${source.userData.pathTracer.objectName} Copy`,
+          primitiveIndex: scene.getBoxMeshes().length,
+          primitiveType: "box",
         } : {
           ...source.userData.pathTracer,
           objectId: THREE.MathUtils.generateUUID(),
@@ -1382,6 +1584,7 @@ export default class PtActions {
     const insert = () => {
       if (isPtSphereMesh(object)) scene.insertSphereMesh(object, index);
       else if (isPtQuadMesh(object)) scene.insertQuadMesh(object, index);
+      else if (isPtBoxMesh(object)) scene.insertBoxMesh(object, index);
       else scene.insertAnalyticLightNode(object, index);
       this.publishSceneObjects();
       this.selectObject(object);
@@ -1390,6 +1593,7 @@ export default class PtActions {
     const remove = () => {
       if (isPtSphereMesh(object)) scene.removeSphereMesh(object);
       else if (isPtQuadMesh(object)) scene.removeQuadMesh(object);
+      else if (isPtBoxMesh(object)) scene.removeBoxMesh(object);
       else scene.removeAnalyticLightNode(object);
       this.publishSceneObjects();
       if (this.selectedObject === object) this.selectObject(null);
@@ -1438,6 +1642,14 @@ export default class PtActions {
     this.beginSelectedTransform();
     this.selectedObject.scale[axis === "width" ? "x" : "y"] = value;
     this.renderer.invalidate(PtInvalidationLevel.Geometry, `quad ${axis} changed`);
+    this.publishSelection();
+  }
+
+  public setSelectedBoxSize(axis: "width" | "height" | "depth", value: number) {
+    if (!this.selectedObject || !isPtBoxMesh(this.selectedObject)) return;
+    this.beginSelectedTransform();
+    this.selectedObject.scale[axis === "width" ? "x" : axis === "height" ? "y" : "z"] = value;
+    this.renderer.invalidate(PtInvalidationLevel.Geometry, `box ${axis} changed`);
     this.publishSelection();
   }
 
@@ -1659,6 +1871,56 @@ export default class PtActions {
       `material ${materialId} color changed`
     );
     this.publishSelection();
+  }
+
+  public setSelectedMaterialModel(kind: "Lambert" | "Metal" | "Dielectric" | "Principled" | "Emissive") {
+    const object = this.selectedObject;
+    if (!object || isPtAnalyticLightNode(object)) return;
+    this.commitMaterialEdit();
+    const previousMaterial = object.material;
+    const current = getMaterialMetadata(previousMaterial).materialDefinition;
+    const currentKind = current.model === PtMaterialModel.LegacyLambert ? "Lambert"
+      : current.model === PtMaterialModel.LegacyFuzzyMetal ? "Metal"
+      : current.model === PtMaterialModel.LegacyDielectric ? "Dielectric"
+      : current.model === PtMaterialModel.NoBsdf ? "Emissive"
+      : current.model === PtMaterialModel.PrincipledMetallicRoughness ? "Principled"
+      : null;
+    if (currentKind === kind) return false;
+    const colorInput = current.model === PtMaterialModel.NoBsdf
+      ? current.emission.color
+      : current.baseColor;
+    const color = colorInput.factor.clone().multiply(texturePreviewColor(colorInput.texture));
+    const material = kind === "Lambert"
+      ? PtMaterial.legacyLambert(color)
+      : kind === "Metal"
+        ? PtMaterial.legacyFuzzyMetal(color, current.roughness)
+        : kind === "Dielectric"
+          ? PtMaterial.legacyDielectric(Math.max(1, current.ior || 1.5), color)
+          : kind === "Emissive"
+            ? PtMaterial.emissive(color, Math.max(1, current.emission.strength || 1), true)
+            : PtMaterial.principledMetallicRoughness({
+                baseColor: color,
+                roughness: current.roughness,
+                metallic: current.metallic,
+                ior: Math.max(1, current.ior || 1.5),
+              });
+    const materialId = this.renderer.ptScene.addMaterial(material);
+    const replacementMaterial = this.renderer.ptScene.getMaterial(materialId);
+    const apply = (previewMaterial: PtPreviewMaterial) => {
+      object.material = previewMaterial;
+      if (isPtQuadMesh(object)) object.material.side = THREE.DoubleSide;
+      this.renderer.invalidate(PtInvalidationLevel.Scene, "object material model history applied");
+      if (this.selectedObject === object) this.publishSelection();
+      this.publishSceneObjects();
+    };
+    apply(replacementMaterial);
+    this.history.record({
+      label: `Change ${object.userData.pathTracer.objectName} material to ${kind}`,
+      execute: () => apply(replacementMaterial),
+      undo: () => apply(previousMaterial),
+    });
+    this.publishHistory();
+    return true;
   }
 
   public setMaterialFuzz(materialId: number, fuzz: number) {
@@ -1924,6 +2186,7 @@ export default class PtActions {
       return;
     }
     const sphere = isPtSphereMesh(selectedObject);
+    const box = isPtBoxMesh(selectedObject);
     const triangleMesh = isPtTriangleMesh(selectedObject);
     const sphereIndex = sphere ? selectedObject.userData.pathTracer.primitiveIndex : null;
     const quadIndex = isPtQuadMesh(selectedObject) ? selectedObject.userData.pathTracer.primitiveIndex : null;
@@ -1948,7 +2211,7 @@ export default class PtActions {
         name: selectedObject.userData.pathTracer.objectName,
         sphereIndex,
         quadIndex,
-        kind: sphere ? "sphere" : triangleMesh ? "triangleMesh" : "quad",
+        kind: sphere ? "sphere" : box ? "box" : triangleMesh ? "triangleMesh" : "quad",
         position: { x, y, z },
         rotation: {
           x: THREE.MathUtils.radToDeg(rotation.x),
@@ -1956,8 +2219,9 @@ export default class PtActions {
           z: THREE.MathUtils.radToDeg(rotation.z),
         },
         radius,
-        width: isPtQuadMesh(selectedObject) ? selectedObject.scale.x : null,
-        height: isPtQuadMesh(selectedObject) ? selectedObject.scale.y : null,
+        width: isPtQuadMesh(selectedObject) || box ? selectedObject.scale.x : null,
+        height: isPtQuadMesh(selectedObject) || box ? selectedObject.scale.y : null,
+        depthSize: box ? selectedObject.scale.z : null,
         uvMapping: sphere
           ? selectedObject.userData.pathTracer.uvMapping === 1 ? "box" : "spherical"
           : null,
@@ -1972,7 +2236,7 @@ export default class PtActions {
         material: {
           id: materialId,
           kind: materialKind,
-          color: `#${definition.baseColor.factor.getHexString()}`,
+          color: `#${material.color.getHexString()}`,
           roughness: materialType === PtMaterialModel.LegacyFuzzyMetal || materialType === PtMaterialModel.PrincipledMetallicRoughness
             ? definition.roughness : null,
           metallic: materialType === PtMaterialModel.PrincipledMetallicRoughness
@@ -2115,6 +2379,21 @@ export default class PtActions {
           capability: emissive ? "emissive quad light" : "path-traced quad",
         };
       });
+    const boxes: PtState["sceneObjects"] = this.renderer.ptScene
+      .getBoxMeshes()
+      .map((box) => ({
+        id: box.userData.pathTracer.objectId,
+        label: box.userData.pathTracer.objectName,
+        kind: "box" as const,
+        parentId: "group:traceables",
+        depth: 2,
+        sphereIndex: null,
+        quadIndex: null,
+        boxIndex: box.userData.pathTracer.primitiveIndex,
+        selectable: true,
+        traceable: true,
+        capability: "analytic box",
+      }));
     const analyticLights: PtState["sceneObjects"] = this.renderer.ptScene
       .getAnalyticLightNodes()
       .map((light) => ({
@@ -2144,7 +2423,7 @@ export default class PtActions {
         traceable: true,
         capability: `${mesh.geometry.index ? "indexed " : ""}${Math.floor((mesh.geometry.index?.count ?? mesh.geometry.getAttribute("position").count) / 3)}-triangle mesh`,
       }));
-    return [...fixedObjects, ...analyticLights, ...spheres, ...quads, ...triangleMeshes];
+    return [...fixedObjects, ...analyticLights, ...spheres, ...quads, ...boxes, ...triangleMeshes];
   }
 
   private publishSceneObjects() {

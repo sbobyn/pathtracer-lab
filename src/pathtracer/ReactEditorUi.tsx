@@ -1135,6 +1135,7 @@ function RenderSettings({
           }
         /></HelpedControl>
       )}
+      </fieldset>
       {(bvhStats.nodeCount > 0 || sphereBvhStats.nodeCount > 0) && (
         <PersistentDetails
           className="editor-subpanel render-panel__bvh-visualization"
@@ -1270,7 +1271,6 @@ function RenderSettings({
           </div>
         </PersistentDetails>
       )}
-      </fieldset>
       {bvhStats.triangleCount > 0 && (
         <dl className="render-panel__bvh-stats" aria-label="Triangle BVH statistics">
           <div><dt>BVH triangles</dt><dd>{bvhStats.triangleCount}</dd></div>
@@ -1966,7 +1966,7 @@ function ObjectInspectorContent({
       <div className="object-inspector__content">
         <div className="editor-inspector__identity">
           <strong>{selection.name}</strong>
-          <span>{selection.kind === "sphere" ? "Sphere" : selection.kind === "triangleMesh" ? "Triangle mesh" : "Quad"} · Path traced</span>
+          <span>{selection.kind === "sphere" ? "Sphere" : selection.kind === "box" ? "Box" : selection.kind === "triangleMesh" ? "Triangle mesh" : "Quad"} · Path traced</span>
         </div>
         <ObjectNameField
           objectId={selection.objectId!}
@@ -1997,7 +1997,7 @@ function ObjectInspectorContent({
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
           />
-          {(selection.kind === "quad" || selection.kind === "triangleMesh") && (
+          {(selection.kind === "quad" || selection.kind === "box" || selection.kind === "triangleMesh") && (
             <VectorField
               label="Rotation"
               value={[selection.rotation.x, selection.rotation.y, selection.rotation.z]}
@@ -2045,7 +2045,9 @@ function ObjectInspectorContent({
             sensitivity={10 * pathTracerScrubSpeed}
             density="compact"
             layout="horizontal"
-            onChange={(value) => actions.setSelectedQuadSize("width", value)}
+            onChange={(value) => selection.kind === "box"
+              ? actions.setSelectedBoxSize("width", value)
+              : actions.setSelectedQuadSize("width", value)}
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
           />}
@@ -2060,7 +2062,19 @@ function ObjectInspectorContent({
             sensitivity={10 * pathTracerScrubSpeed}
             density="compact"
             layout="horizontal"
-            onChange={(value) => actions.setSelectedQuadSize("height", value)}
+            onChange={(value) => selection.kind === "box"
+              ? actions.setSelectedBoxSize("height", value)
+              : actions.setSelectedQuadSize("height", value)}
+            onCommit={() => actions.commitSelectedTransform()}
+            onCancel={() => actions.cancelSelectedTransform()}
+          />}
+          {selection.depthSize !== null && selection.depthSize !== undefined && <EditorNumberField
+            label="Depth"
+            value={selection.depthSize}
+            min={0.001} max={10000} step={0.01} precisionStep={0.001}
+            snapInterval={1} sensitivity={10 * pathTracerScrubSpeed}
+            density="compact" layout="horizontal"
+            onChange={(value) => actions.setSelectedBoxSize("depth", value)}
             onCommit={() => actions.commitSelectedTransform()}
             onCancel={() => actions.cancelSelectedTransform()}
           />}
@@ -2099,6 +2113,22 @@ function ObjectInspectorContent({
         )}
         <PersistentDetails className="editor-subpanel" storageKey="object-material">
           <summary>Material · {material.kind}</summary>
+          <SelectField
+            label="Model"
+            value={material.kind === "Unknown" ? "Principled" : material.kind}
+            options={[
+              { value: "Principled", label: "Principled" },
+              { value: "Lambert", label: "Diffuse" },
+              { value: "Metal", label: "Metal" },
+              { value: "Dielectric", label: "Glass / dielectric" },
+              { value: "Emissive", label: "Emissive" },
+            ]}
+            density="compact"
+            layout="horizontal"
+            onChange={(value) => actions.setSelectedMaterialModel(
+              value as "Lambert" | "Metal" | "Dielectric" | "Principled" | "Emissive"
+            )}
+          />
           {material.kind === "Principled" && <span className="texture-picker__label">Base color</span>}
           <div className="texture-slot">
             <button type="button" className={`texture-slot__preview texture-slot__preview--${material.texture.type}`} data-empty={material.texture.type === "constant"}
@@ -2384,9 +2414,9 @@ function ObjectInspectorContent({
           {selection.kind !== "triangleMesh" && <button type="button" onClick={() => actions.duplicateSelectedObject()}>
             Duplicate
           </button>}
-          {selection.kind !== "triangleMesh" && <button type="button" onClick={() => actions.removeSelectedObject()}>
+          <button type="button" onClick={() => actions.removeSelectedObject()}>
             Remove
-          </button>}
+          </button>
         </div>
       </div>
   );
@@ -2910,6 +2940,9 @@ function CreationMenu({
   onRename: () => void;
   style?: CSSProperties;
 }) {
+  const meshInput = useRef<HTMLInputElement>(null);
+  const [importingMesh, setImportingMesh] = useState(false);
+  const [meshImportError, setMeshImportError] = useState<string | null>(null);
   const run = (action: () => unknown) => {
     action();
     onClose();
@@ -2922,6 +2955,43 @@ function CreationMenu({
       <button type="button" role="menuitem" onClick={() => run(() => actions.addQuad())}>
         <span>Add quad</span>
       </button>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addBox())}>
+        <span>Add box</span><small>Analytic box intersection</small>
+      </button>
+      <button type="button" role="menuitem" onClick={() => run(() => actions.addTeapot())}>
+        <span>Add Utah teapot</span><small>Three.js triangle geometry</small>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        disabled={importingMesh}
+        onClick={() => meshInput.current?.click()}
+      >
+        <span>{importingMesh ? "Importing mesh…" : "Import mesh"}</span>
+        <small>glTF binary (.glb)</small>
+      </button>
+      <input
+        ref={meshInput}
+        type="file"
+        accept=".glb,model/gltf-binary"
+        hidden
+        onChange={(event) => {
+          const input = event.currentTarget;
+          const file = input.files?.[0];
+          if (!file) return;
+          setImportingMesh(true);
+          setMeshImportError(null);
+          void actions.importMesh(file).then(() => {
+            onClose();
+          }).catch((error: unknown) => {
+            setMeshImportError(error instanceof Error ? error.message : String(error));
+          }).finally(() => {
+            setImportingMesh(false);
+            input.value = "";
+          });
+        }}
+      />
+      {meshImportError && <p className="creation-menu__error" role="alert">{meshImportError}</p>}
       <div className="creation-menu__separator" />
       <span className="creation-menu__section-label">Add Light</span>
       <button type="button" role="menuitem" onClick={() => run(() => actions.addEmissiveQuad())}>
@@ -2938,9 +3008,6 @@ function CreationMenu({
       </button>
       <button type="button" role="menuitem" onClick={() => run(() => actions.addSpotLight())}>
         <span>Spot light</span><small>Inverse-square cone light</small>
-      </button>
-      <button type="button" role="menuitem" disabled title="Available after triangle support">
-        <span>Import mesh</span><small>Not traceable yet</small>
       </button>
       {selectionActive && <div className="creation-menu__separator" />}
       {selectionActive && (

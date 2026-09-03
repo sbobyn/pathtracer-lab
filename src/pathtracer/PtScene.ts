@@ -58,11 +58,22 @@ export type PtQuadMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
   };
 };
 
+export type PtBoxMesh = THREE.Mesh<THREE.BoxGeometry, PtPreviewMaterial> & {
+  userData: {
+    pathTracer: {
+      objectId: string;
+      objectName: string;
+      primitiveIndex: number;
+      primitiveType: "box";
+    };
+  };
+};
+
 export type PtTriangleMesh = THREE.Mesh<THREE.BufferGeometry, PtPreviewMaterial> & {
   userData: { pathTracer: { objectId: string; objectName: string; primitiveType: "triangleMesh" } };
 };
 
-export type PtTraceableMesh = PtSphereMesh | PtQuadMesh | PtTriangleMesh;
+export type PtTraceableMesh = PtSphereMesh | PtQuadMesh | PtBoxMesh | PtTriangleMesh;
 export type PtEditableObject = PtTraceableMesh | PtAnalyticLightNode;
 
 export default class PtScene {
@@ -73,6 +84,7 @@ export default class PtScene {
   readonly annotationGroup = new THREE.Group();
   private readonly previewMaterials = new Map<number, PtPreviewMaterial>();
   private readonly sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
+  private readonly boxGeometry = new THREE.BoxGeometry(1, 1, 1);
   dirLight: THREE.DirectionalLight;
   ambientLight: THREE.AmbientLight;
   backgroundColorTop: THREE.Color;
@@ -243,6 +255,14 @@ export default class PtScene {
     return quads.sort((a, b) => a.userData.pathTracer.primitiveIndex - b.userData.pathTracer.primitiveIndex);
   }
 
+  public getBoxMeshes(): PtBoxMesh[] {
+    const boxes: PtBoxMesh[] = [];
+    this.intersectGroup.traverse((object) => {
+      if (isPtBoxMesh(object)) boxes.push(object);
+    });
+    return boxes.sort((a, b) => a.userData.pathTracer.primitiveIndex - b.userData.pathTracer.primitiveIndex);
+  }
+
   public getAnalyticLightNodes(): PtAnalyticLightNode[] {
     return this.analyticLightGroup.children.filter(isPtAnalyticLightNode);
   }
@@ -313,6 +333,15 @@ export default class PtScene {
       );
       quad.userData.pathTracer.objectId = source.userData.pathTracer.objectId;
       clone.insertQuadMesh(quad);
+    }
+    for (const source of this.getBoxMeshes()) {
+      const metadata = getMaterialMetadata(source.material);
+      const box = clone.createBoxMesh(
+        source.position.clone(), source.quaternion.clone(), source.scale.clone(),
+        metadata.materialId, source.userData.pathTracer.objectName
+      );
+      box.userData.pathTracer.objectId = source.userData.pathTracer.objectId;
+      clone.insertBoxMesh(box);
     }
     for (const source of this.getTriangleMeshes()) {
       const metadata = getMaterialMetadata(source.material);
@@ -429,6 +458,23 @@ export default class PtScene {
     this.insertTraceableMesh(mesh, index);
   }
 
+  public insertBoxMesh(mesh: PtBoxMesh, index = this.intersectGroup.children.length) {
+    this.insertTraceableMesh(mesh, index);
+  }
+
+  public insertTriangleMesh(mesh: PtTriangleMesh, index = this.triangleMeshGroup.children.length) {
+    const clampedIndex = THREE.MathUtils.clamp(
+      Math.trunc(index),
+      0,
+      this.triangleMeshGroup.children.length
+    );
+    this.triangleMeshGroup.add(mesh);
+    const appendedIndex = this.triangleMeshGroup.children.indexOf(mesh);
+    this.triangleMeshGroup.children.splice(appendedIndex, 1);
+    this.triangleMeshGroup.children.splice(clampedIndex, 0, mesh);
+    this.triangleMeshGroup.updateMatrixWorld(true);
+  }
+
   private insertTraceableMesh(mesh: PtTraceableMesh, index: number) {
     const clampedIndex = THREE.MathUtils.clamp(
       Math.trunc(index),
@@ -488,6 +534,28 @@ export default class PtScene {
     return mesh;
   }
 
+  public createBoxMesh(
+    position: THREE.Vector3,
+    rotation: THREE.Quaternion,
+    size: THREE.Vector3,
+    materialId: number,
+    objectName: string
+  ): PtBoxMesh {
+    const material = this.getMaterial(materialId);
+    const mesh = new THREE.Mesh(this.boxGeometry, material) as PtBoxMesh;
+    mesh.position.copy(position);
+    mesh.quaternion.copy(rotation);
+    mesh.scale.copy(size);
+    configureRasterMesh(mesh);
+    mesh.userData.pathTracer = {
+      objectId: THREE.MathUtils.generateUUID(),
+      objectName,
+      primitiveIndex: this.getBoxMeshes().length,
+      primitiveType: "box",
+    };
+    return mesh;
+  }
+
   public removeSphereMesh(mesh: PtSphereMesh): number {
     const index = this.intersectGroup.children.indexOf(mesh);
     if (index < 0) return -1;
@@ -503,6 +571,23 @@ export default class PtScene {
     this.intersectGroup.remove(mesh);
     this.reindexPrimitives();
     this.intersectGroup.updateMatrixWorld();
+    return index;
+  }
+
+  public removeBoxMesh(mesh: PtBoxMesh): number {
+    const index = this.intersectGroup.children.indexOf(mesh);
+    if (index < 0) return -1;
+    this.intersectGroup.remove(mesh);
+    this.reindexPrimitives();
+    this.intersectGroup.updateMatrixWorld();
+    return index;
+  }
+
+  public removeTriangleMesh(mesh: PtTriangleMesh): number {
+    const index = this.triangleMeshGroup.children.indexOf(mesh);
+    if (index < 0) return -1;
+    this.triangleMeshGroup.remove(mesh);
+    this.triangleMeshGroup.updateMatrixWorld(true);
     return index;
   }
 
@@ -617,11 +702,14 @@ export default class PtScene {
   private reindexPrimitives() {
     let sphereIndex = 0;
     let quadIndex = 0;
+    let boxIndex = 0;
     this.intersectGroup.children.forEach((object) => {
       if (isPtSphereMesh(object)) {
         object.userData.pathTracer.primitiveIndex = sphereIndex++;
       } else if (isPtQuadMesh(object)) {
         object.userData.pathTracer.primitiveIndex = quadIndex++;
+      } else if (isPtBoxMesh(object)) {
+        object.userData.pathTracer.primitiveIndex = boxIndex++;
       }
     });
   }
@@ -636,6 +724,10 @@ export function isPtSphereMesh(object: THREE.Object3D): object is PtSphereMesh {
 
 export function isPtQuadMesh(object: THREE.Object3D): object is PtQuadMesh {
   return object instanceof THREE.Mesh && object.userData.pathTracer?.primitiveType === "quad";
+}
+
+export function isPtBoxMesh(object: THREE.Object3D): object is PtBoxMesh {
+  return object instanceof THREE.Mesh && object.userData.pathTracer?.primitiveType === "box";
 }
 
 export function isPtTriangleMesh(object: THREE.Object3D): object is PtTriangleMesh {

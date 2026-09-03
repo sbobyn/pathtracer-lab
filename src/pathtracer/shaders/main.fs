@@ -42,6 +42,7 @@ uniform vec2 uSphereBvhNodeDataSize;
 uniform sampler2D uSphereBvhIndexData;
 uniform vec2 uSphereBvhIndexDataSize;
 uniform int uQuadCount;
+uniform int uBoxCount;
 uniform int uTriangleCount;
 uniform sampler2D uTriangleData;
 uniform vec2 uTriangleDataSize;

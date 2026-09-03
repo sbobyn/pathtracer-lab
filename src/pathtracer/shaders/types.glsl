@@ -2,9 +2,10 @@ struct Camera { vec3 position; vec3 forward; vec3 up; vec3 right; float halfWidt
 struct Ray { vec3 origin; vec3 direction; };
 struct Sphere { vec3 position; float radius; int materialId; int uvMapping; };
 struct Quad { vec3 q; vec3 u; vec3 v; vec3 normal; int materialId; };
+struct Box { vec3 center; vec3 halfSize; vec3 axisX; vec3 axisY; vec3 axisZ; int materialId; };
 struct Triangle { vec3 a; vec3 b; vec3 c; vec3 normalA; vec3 normalB; vec3 normalC; vec2 uvA; vec2 uvB; vec2 uvC; int materialId; };
 struct Light { int kind; int primitiveType; int primitiveIndex; int materialId; float area; bool emissionTwoSided; vec3 position; vec3 direction; vec3 color; float intensity; float angularDiameter; float innerConeCos; float outerConeCos; };
-struct World { Quad quads[MAX_QUADS]; };
+struct World { Quad quads[MAX_QUADS]; Box boxes[MAX_BOXES]; };
 struct Material { int model; int baseColorTextureId; int emissionTextureId; int metallicRoughnessTextureId; int transmissionTextureId; int thicknessTextureId; int textureEnableMask; vec3 baseColorFactor; vec3 emissionFactor; vec3 attenuationColor; float roughness; float metallic; float ior; float transmission; float thickness; float attenuationDistance; float dispersion; float emissionStrength; bool emissionTwoSided; };
 struct Surface { vec3 baseColor; vec3 emission; vec3 shadingNormal; float roughness; float metallic; float transmission; float thickness; };
 struct BsdfSample { vec3 direction; vec3 weight; float pdf; bool delta; bool transmitted; bool valid; };

@@ -16,6 +16,7 @@ import compareVolumeGltfUrl from "../assets/gltf/khronos-pbr/CompareVolume.glb?u
 import dispersionTestGltfUrl from "../assets/gltf/khronos-pbr/DispersionTest.glb?url";
 import dragonDispersionGltfUrl from "../assets/gltf/khronos-pbr/DragonDispersion.glb?url";
 import dragonAttenuationGltfUrl from "../assets/gltf/khronos-pbr/DragonAttenuation.glb?url";
+import { TeapotGeometry } from "three/examples/jsm/geometries/TeapotGeometry.js";
 
 function createKhronosMaterialReferenceScene(
   source: string,
@@ -852,6 +853,7 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       PtMaterial.legacyLambert(new THREE.Color(0.65, 0.05, 0.05)),
       PtMaterial.legacyLambert(new THREE.Color(0.12, 0.45, 0.15)),
       PtMaterial.emissive(new THREE.Color(1, 0.88, 0.68), 12),
+      PtMaterial.legacyLambert(new THREE.Color(0.78, 0.8, 0.84)),
     ];
     const quads = [
       // Open-front room. Winding points each geometric normal into the box.
@@ -862,16 +864,6 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       new PtQuad(new THREE.Vector3(1.5, -1.5, -1.5), new THREE.Vector3(0, 0, 3), new THREE.Vector3(0, 3, 0), 2),
       // A downward-facing emissive quad acts as the area light.
       new PtQuad(new THREE.Vector3(-0.45, 1.49, -0.45), new THREE.Vector3(0.9, 0, 0), new THREE.Vector3(0, 0, 0.9), 3),
-      ...createAxisAlignedBox(
-        new THREE.Vector3(-1.05, -1.49, -0.75),
-        new THREE.Vector3(-0.15, -0.15, 0.15),
-        0
-      ),
-      ...createAxisAlignedBox(
-        new THREE.Vector3(0.25, -1.49, -1.05),
-        new THREE.Vector3(1.05, 0.55, -0.15),
-        0
-      ),
     ];
     const camera = createFullScreenPerspectiveCamera({
       position: new THREE.Vector3(0, 0, 5.4),
@@ -880,6 +872,41 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 38;
     const scene = new PtScene([], materials, camera, quads);
+    const shortBoxMin = new THREE.Vector3(-1.05, -1.49, -0.75);
+    const shortBoxMax = new THREE.Vector3(-0.15, -0.15, 0.15);
+    const shortBoxRotation = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, THREE.MathUtils.degToRad(19), 0)
+    );
+    const shortBoxCenter = shortBoxMin.clone().add(shortBoxMax).multiplyScalar(0.5).add(new THREE.Vector3(0, 0, 0.27));
+    scene.insertBoxMesh(scene.createBoxMesh(
+      shortBoxCenter,
+      shortBoxRotation,
+      shortBoxMax.clone().sub(shortBoxMin),
+      0,
+      "Short box"
+    ));
+    const teapotGeometry = new TeapotGeometry(0.34, 8, true, true, true, true, true);
+    teapotGeometry.computeBoundingBox();
+    const teapot = scene.addTriangleMesh(teapotGeometry, 4, "Utah teapot");
+    teapot.position.set(
+      shortBoxCenter.x,
+      shortBoxMax.y - (teapotGeometry.boundingBox?.min.y ?? 0),
+      shortBoxCenter.z
+    );
+    teapot.quaternion.copy(shortBoxRotation);
+    teapot.updateMatrixWorld(true);
+    const tallBoxMin = new THREE.Vector3(0.25, -1.49, -1.05);
+    const tallBoxMax = new THREE.Vector3(1.05, 0.55, -0.15);
+    const tallBoxRotation = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, THREE.MathUtils.degToRad(-21), 0)
+    );
+    scene.insertBoxMesh(scene.createBoxMesh(
+      tallBoxMin.clone().add(tallBoxMax).multiplyScalar(0.5),
+      tallBoxRotation,
+      tallBoxMax.clone().sub(tallBoxMin),
+      0,
+      "Tall box"
+    ));
     scene.backgroundColorTop.set(0x000000);
     scene.backgroundColorBottom.set(0x000000);
     scene.scene.background = scene.backgroundColorTop;
@@ -1073,22 +1100,4 @@ function orientNegativeZToward(
 ) {
   const direction = target.clone().sub(object.position).normalize();
   object.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
-}
-
-function createAxisAlignedBox(
-  min: THREE.Vector3,
-  max: THREE.Vector3,
-  materialId: number
-): PtQuad[] {
-  const x = max.x - min.x;
-  const y = max.y - min.y;
-  const z = max.z - min.z;
-  return [
-    new PtQuad(new THREE.Vector3(min.x, min.y, max.z), new THREE.Vector3(x, 0, 0), new THREE.Vector3(0, 0, -z), materialId),
-    new PtQuad(new THREE.Vector3(min.x, max.y, min.z), new THREE.Vector3(x, 0, 0), new THREE.Vector3(0, 0, z), materialId),
-    new PtQuad(new THREE.Vector3(min.x, min.y, min.z), new THREE.Vector3(x, 0, 0), new THREE.Vector3(0, y, 0), materialId),
-    new PtQuad(new THREE.Vector3(min.x, min.y, max.z), new THREE.Vector3(0, 0, -z), new THREE.Vector3(0, y, 0), materialId),
-    new PtQuad(new THREE.Vector3(max.x, min.y, min.z), new THREE.Vector3(0, 0, z), new THREE.Vector3(0, y, 0), materialId),
-    new PtQuad(new THREE.Vector3(max.x, min.y, max.z), new THREE.Vector3(x, 0, 0).negate(), new THREE.Vector3(0, y, 0), materialId),
-  ];
 }

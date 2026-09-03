@@ -8,7 +8,7 @@ import {
   preferenceSnapshot,
   savePtPreferences,
 } from "./PtPreferences";
-import { isPtQuadMesh, isPtSphereMesh, isPtTriangleMesh, type PtEditableObject } from "./PtScene";
+import { isPtBoxMesh, isPtQuadMesh, isPtSphereMesh, isPtTriangleMesh, type PtEditableObject } from "./PtScene";
 import { analyticLightNodeFromObject } from "./PtAnalyticLight";
 import { createDefaultPtState } from "./PtState";
 import PtStore from "./PtStore";
@@ -219,6 +219,7 @@ export default class PtApp {
         : [
             ...this.ptRenderer.ptScene.getSphereMeshes(),
             ...this.ptRenderer.ptScene.getQuadMeshes(),
+            ...this.ptRenderer.ptScene.getBoxMeshes(),
             ...this.ptRenderer.ptScene.getAnalyticLightNodes(),
             ...this.ptRenderer.ptScene.getTriangleMeshes(),
           ]
@@ -274,7 +275,7 @@ export default class PtApp {
     const object = intersection?.object;
     const analyticLight = analyticLightNodeFromObject(object ?? null);
 
-    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object) && !isPtTriangleMesh(object) && !analyticLight)) {
+    if (!object || (!isPtSphereMesh(object) && !isPtQuadMesh(object) && !isPtBoxMesh(object) && !isPtTriangleMesh(object) && !analyticLight)) {
       if (mode === "replace") {
         this.selectedObject = null;
         this.actions.selectObject(null);

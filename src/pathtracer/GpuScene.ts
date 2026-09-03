@@ -18,6 +18,15 @@ export interface GpuQuad {
   materialId: number;
 }
 
+export interface GpuBox {
+  center: THREE.Vector3;
+  halfSize: THREE.Vector3;
+  axisX: THREE.Vector3;
+  axisY: THREE.Vector3;
+  axisZ: THREE.Vector3;
+  materialId: number;
+}
+
 export interface GpuTriangle {
   a: THREE.Vector3;
   b: THREE.Vector3;
@@ -89,6 +98,7 @@ export default class GpuScene {
   public spheres: GpuSphere[];
   public sphereBvh: SphereBvh;
   public quads: GpuQuad[];
+  public boxes: GpuBox[];
   public triangles: GpuTriangle[];
   public triangleBvh: TriangleBvh;
   public materials: GpuMaterial[];
@@ -101,6 +111,7 @@ export default class GpuScene {
     spheres: GpuSphere[],
     sphereBvh: SphereBvh,
     quads: GpuQuad[],
+    boxes: GpuBox[],
     triangles: GpuTriangle[],
     triangleBvh: TriangleBvh,
     materials: GpuMaterial[],
@@ -111,6 +122,7 @@ export default class GpuScene {
     this.spheres = spheres;
     this.sphereBvh = sphereBvh;
     this.quads = quads;
+    this.boxes = boxes;
     this.triangles = triangles;
     this.triangleBvh = triangleBvh;
     this.materials = materials;
@@ -128,6 +140,11 @@ export default class GpuScene {
   public updateQuads(quads: GpuQuad[]) {
     this.assertUsable();
     this.quads = quads;
+  }
+
+  public updateBoxes(boxes: GpuBox[]) {
+    this.assertUsable();
+    this.boxes = boxes;
   }
 
   public updateTriangles(triangles: GpuTriangle[], triangleBvh: TriangleBvh) {
@@ -158,6 +175,7 @@ export default class GpuScene {
     this.spheres = [];
     this.sphereBvh = { nodes: [], sphereIndices: [], stats: { sphereCount: 0, nodeCount: 0, leafCount: 0, maxDepth: 0, maxLeafSize: 0 } };
     this.quads = [];
+    this.boxes = [];
     this.triangles = [];
     this.triangleBvh = { nodes: [], triangleIndices: [], stats: { triangleCount: 0, nodeCount: 0, leafCount: 0, maxDepth: 0, maxLeafSize: 0 } };
     this.materials = [];

@@ -31,11 +31,12 @@ export interface PtTextureState {
 export interface PtSceneObjectState {
   id: string;
   label: string;
-  kind: "scene" | "camera" | "light" | "group" | "sphere" | "quad" | "triangleMesh";
+  kind: "scene" | "camera" | "light" | "group" | "sphere" | "quad" | "box" | "triangleMesh";
   parentId: string | null;
   depth: number;
   sphereIndex: number | null;
   quadIndex: number | null;
+  boxIndex?: number | null;
   selectable: boolean;
   traceable: boolean;
   capability: string;
@@ -103,12 +104,13 @@ export interface PtSelectionState {
   name: string | null;
   sphereIndex: number | null;
   quadIndex: number | null;
-  kind: "sphere" | "quad" | "triangleMesh" | "pointLight" | "directionalLight" | "spotLight" | null;
+  kind: "sphere" | "quad" | "box" | "triangleMesh" | "pointLight" | "directionalLight" | "spotLight" | null;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number };
   radius: number | null;
   width: number | null;
   height: number | null;
+  depthSize?: number | null;
   uvMapping: "spherical" | "box" | null;
   mesh: {
     triangleCount: number;
@@ -197,7 +199,9 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   triangleTraversalMode: "bvh",
   triangleOverlayMode: "off",
   bvhOverlayEnabled: false,
-  bvhOverlayDepth: 0,
+  // Clamp the sentinel to the active hierarchy's real maximum in the UI.
+  // This makes first-time BVH visualization reveal the complete tree.
+  bvhOverlayDepth: 64,
   resolutionScale: 1.0,
   accumulationFormat: "rgba32f",
   maxAccumulationFrames: 0,

@@ -41,6 +41,15 @@ function integratorModeValue(mode: PtSettings["integratorMode"]): number {
   return 0;
 }
 
+type BvhOverlayNode = {
+  index: number;
+  depth: number;
+  leaf: boolean;
+  kind: "triangle" | "sphere";
+  boundsMin: THREE.Vector3;
+  boundsMax: THREE.Vector3;
+};
+
 export default class PtRenderer {
   public ptScene: PtScene;
   public camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
@@ -181,7 +190,10 @@ export default class PtRenderer {
   private cameraDebugInteractionActive = false;
   private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
   private readonly triangleWireframeOverrides = new Map<string, boolean>();
-  private readonly bvhHelpers: Array<{ helper: LineSegments2; depth: number; kind: "triangle" | "sphere" }> = [];
+  private readonly bvhOverlayNodes: BvhOverlayNode[] = [];
+  private readonly bvhOverlayNodesByKey = new Map<string, BvhOverlayNode>();
+  private readonly bvhHelpers: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>[] = [];
+  private readonly bvhTraversalNodeHelpers: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>[] = [];
   private bvhTraversalState: PtBvhTraversalState | null = null;
   private bvhTraversalInvalidated: (() => void) | null = null;
   private bvhTraversalRay: Line2 | null = null;
@@ -821,11 +833,13 @@ export default class PtRenderer {
 
   public setBvhOverlayEnabled(enabled: boolean) {
     this.settings.bvhOverlayEnabled = enabled;
+    this.rebuildBvhHelpers();
     this.updateBvhHelperVisibility();
   }
 
   public setBvhOverlayDepth(depth: number) {
     this.settings.bvhOverlayDepth = depth;
+    this.rebuildBvhHelpers();
     this.updateBvhHelperVisibility();
   }
 
@@ -1064,6 +1078,7 @@ export default class PtRenderer {
     const traceableMeshes = [
       ...this.ptScene.getSphereMeshes(),
       ...this.ptScene.getQuadMeshes(),
+      ...this.ptScene.getBoxMeshes(),
       ...this.ptScene.getTriangleMeshes(),
     ];
     for (const mesh of traceableMeshes.slice(0, 48)) {
@@ -1074,6 +1089,8 @@ export default class PtRenderer {
         ? 0xc084fc
         : primitiveType === "quad"
           ? 0x38bdf8
+          : primitiveType === "box"
+            ? 0xf59e0b
           : 0x94a3b8;
       let outlineGeometry: THREE.BufferGeometry;
       if (primitiveType === "sphere") {
@@ -1181,7 +1198,7 @@ export default class PtRenderer {
 
     const raycaster = new THREE.Raycaster();
     raycaster.far = diagramRange;
-    const points: THREE.Vector3[] = [];
+    const rayPositions: number[] = [];
     const colors: number[] = [];
     const rayTargets = this.ptScene.scene.children.filter((object) => object.visible);
     const traceableObjectIds = new Map<THREE.Object3D, string>();
@@ -1245,7 +1262,7 @@ export default class PtRenderer {
           raycaster.far = diagramRange;
           const hit = raycaster.intersectObjects(rayTargets, true)[0];
           const end = hit?.point ?? raycaster.ray.at(diagramRange, new THREE.Vector3());
-          points.push(origin.clone(), end.clone());
+          rayPositions.push(origin.x, origin.y, origin.z, end.x, end.y, end.z);
           const bounceColors = [0xa3e635, 0x38bdf8, 0xc084fc];
           const color = new THREE.Color(hit ? bounceColors[depth] : 0xf59e0b);
           colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
@@ -1261,7 +1278,8 @@ export default class PtRenderer {
         }
       }
     }
-    const rayGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const rayGeometry = new THREE.BufferGeometry();
+    rayGeometry.setAttribute("position", new THREE.Float32BufferAttribute(rayPositions, 3));
     rayGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     this.cameraDebugGroup.add(new THREE.LineSegments(
       rayGeometry,
@@ -1273,37 +1291,38 @@ export default class PtRenderer {
       })
     ));
 
-    const hierarchyNodes = this.cameraDebugBvhEnabled ? [
-        ...describeSphereBvh(this.gpuScene.sphereBvh).map((description) => ({
-          description,
-          node: this.gpuScene.sphereBvh.nodes[description.index]!,
-          kind: "sphere" as const,
-        })),
-        ...describeTriangleBvh(this.gpuScene.triangleBvh).map((description) => ({
-          description,
-          node: this.gpuScene.triangleBvh.nodes[description.index]!,
-          kind: "triangle" as const,
-        })),
-    ] : [];
-    for (const { description, node, kind } of hierarchyNodes) {
-        if (description.depth > this.cameraDebugBvhDepth) continue;
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(this.boxEdgePositions(node.boundsMin, node.boundsMax), 3)
-        );
-        const color = kind === "sphere"
-          ? (description.leaf ? 0xfbbf24 : 0xc084fc)
-          : (description.leaf ? 0x4ade80 : 0x38bdf8);
-        this.cameraDebugGroup.add(new THREE.LineSegments(
-          geometry,
-          new THREE.LineBasicMaterial({
-            color,
-            transparent: true,
-            opacity: description.depth === this.cameraDebugBvhDepth ? 0.68 : 0.3,
-            depthTest: false,
-          })
-        ));
+    const debugBvhBatches = new Map<string, { positions: number[]; color: number; opacity: number }>();
+    if (this.cameraDebugBvhEnabled) {
+      for (const node of this.bvhOverlayNodes) {
+        if (node.depth > this.cameraDebugBvhDepth) continue;
+        const color = node.kind === "sphere"
+          ? (node.leaf ? 0xfbbf24 : 0xc084fc)
+          : (node.leaf ? 0x4ade80 : 0x38bdf8);
+        const opacity = node.depth === this.cameraDebugBvhDepth ? 0.68 : 0.3;
+        const key = `${color}:${opacity}`;
+        let batch = debugBvhBatches.get(key);
+        if (!batch) {
+          batch = { positions: [], color, opacity };
+          debugBvhBatches.set(key, batch);
+        }
+        batch.positions.push(...this.boxEdgePositions(node.boundsMin, node.boundsMax));
+      }
+    }
+    for (const batch of debugBvhBatches.values()) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(batch.positions, 3));
+      const lines = new THREE.LineSegments(
+        geometry,
+        new THREE.LineBasicMaterial({
+          color: batch.color,
+          transparent: true,
+          opacity: batch.opacity,
+          depthTest: false,
+          depthWrite: false,
+        })
+      );
+      lines.frustumCulled = false;
+      this.cameraDebugGroup.add(lines);
     }
 
     // Keep the observer camera in a stable camera-relative pose. Deriving its
@@ -1539,10 +1558,14 @@ export default class PtRenderer {
     return line;
   }
 
-  private disposeDebugLine<T extends Line2 | LineSegments2>(line: T | null): null {
+  private disposeDebugLine<T extends THREE.Object3D & {
+    geometry: THREE.BufferGeometry;
+    material: THREE.Material | THREE.Material[];
+  }>(line: T | null): null {
     if (!line) return null;
     line.geometry.dispose();
-    (line.material as THREE.Material).dispose();
+    if (Array.isArray(line.material)) line.material.forEach((material) => material.dispose());
+    else line.material.dispose();
     this.debugOverlayScene.remove(line);
     return null;
   }
@@ -1563,11 +1586,13 @@ export default class PtRenderer {
 
   private setupShaderCanvas() {
     const quadCapacity = this.quadUniformCapacity();
+    const boxCapacity = this.boxUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas = new ShaderCanvas({
       width: window.innerWidth,
       height: window.innerHeight,
       fragmentShader: `#define MAX_QUADS ${quadCapacity}
+       #define MAX_BOXES ${boxCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`,
       uniforms: this.uniforms,
@@ -1580,15 +1605,21 @@ export default class PtRenderer {
 
   private updateShaderCanvas() {
     const quadCapacity = this.quadUniformCapacity();
+    const boxCapacity = this.boxUniformCapacity();
     const lightCapacity = this.lightUniformCapacity();
     this.shaderCanvas
       .setShader(`#define MAX_QUADS ${quadCapacity}
+       #define MAX_BOXES ${boxCapacity}
        #define MAX_LIGHTS ${lightCapacity}
        ${fragShader}`);
   }
 
   private quadUniformCapacity() {
     return Math.max(1, this.gpuScene.quads.length);
+  }
+
+  private boxUniformCapacity() {
+    return Math.max(1, this.gpuScene.boxes.length);
   }
 
   private lightUniformCapacity() {
@@ -1696,6 +1727,7 @@ export default class PtRenderer {
       uWorld: {
         value: {
           quads: this.uniformQuadValues(),
+          boxes: this.uniformBoxValues(),
         },
       },
       uSphereCount: { value: this.gpuScene.spheres.length },
@@ -1707,6 +1739,7 @@ export default class PtRenderer {
       uSphereBvhIndexData: { value: this.packedSphereBvh.indexTexture },
       uSphereBvhIndexDataSize: { value: this.packedSphereBvh.indexTextureSize },
       uQuadCount: { value: this.gpuScene.quads.length },
+      uBoxCount: { value: this.gpuScene.boxes.length },
       uTriangleCount: { value: this.gpuScene.triangles.length },
       uTriangleData: { value: this.packedTriangles.texture },
       uTriangleDataSize: { value: this.packedTriangles.size },
@@ -1762,6 +1795,7 @@ export default class PtRenderer {
 
   private updateSceneUniforms() {
     this.uniforms.uWorld.value.quads = this.uniformQuadValues();
+    this.uniforms.uWorld.value.boxes = this.uniformBoxValues();
     this.uniforms.uSphereCount.value = this.gpuScene.spheres.length;
     this.uniforms.uSphereData.value = this.packedSpheres.texture;
     this.uniforms.uSphereDataSize.value.copy(this.packedSpheres.size);
@@ -1771,6 +1805,7 @@ export default class PtRenderer {
     this.uniforms.uSphereBvhIndexData.value = this.packedSphereBvh.indexTexture;
     this.uniforms.uSphereBvhIndexDataSize.value.copy(this.packedSphereBvh.indexTextureSize);
     this.uniforms.uQuadCount.value = this.gpuScene.quads.length;
+    this.uniforms.uBoxCount.value = this.gpuScene.boxes.length;
     this.uniforms.uTriangleCount.value = this.gpuScene.triangles.length;
     this.uniforms.uTriangleData.value = this.packedTriangles.texture;
     this.uniforms.uTriangleDataSize.value.copy(this.packedTriangles.size);
@@ -1801,6 +1836,19 @@ export default class PtRenderer {
       materialId: 0,
     };
     return Array.from({ length: capacity }, (_, index) => this.gpuScene.quads[index] ?? padding);
+  }
+
+  private uniformBoxValues() {
+    const capacity = this.boxUniformCapacity();
+    const padding = {
+      center: new THREE.Vector3(),
+      halfSize: new THREE.Vector3(0.5, 0.5, 0.5),
+      axisX: new THREE.Vector3(1, 0, 0),
+      axisY: new THREE.Vector3(0, 1, 0),
+      axisZ: new THREE.Vector3(0, 0, 1),
+      materialId: 0,
+    };
+    return Array.from({ length: capacity }, (_, index) => this.gpuScene.boxes[index] ?? padding);
   }
 
   private updatePackedGeometryTextures() {
@@ -2046,6 +2094,7 @@ export default class PtRenderer {
     for (const mesh of [
       ...this.ptScene.getSphereMeshes(),
       ...this.ptScene.getQuadMeshes(),
+      ...this.ptScene.getBoxMeshes(),
       ...this.ptScene.getTriangleMeshes(),
     ]) {
       traceable.set(mesh, mesh.userData.pathTracer.objectId);
@@ -2087,6 +2136,7 @@ export default class PtRenderer {
     for (const mesh of [
       ...this.ptScene.getSphereMeshes(),
       ...this.ptScene.getQuadMeshes(),
+      ...this.ptScene.getBoxMeshes(),
       ...this.ptScene.getTriangleMeshes(),
     ]) {
       traceable.set(mesh, mesh.userData.pathTracer.objectId);
@@ -2167,56 +2217,107 @@ export default class PtRenderer {
   }
 
   private setupBvhHelpers() {
-    for (const { helper } of this.bvhHelpers) {
-      helper.geometry.dispose();
-      (helper.material as THREE.Material).dispose();
-      this.debugOverlayScene.remove(helper);
-    }
-    this.bvhHelpers.length = 0;
+    this.disposeBvhHelpers();
+    this.bvhOverlayNodes.length = 0;
+    this.bvhOverlayNodesByKey.clear();
     const descriptions = describeTriangleBvh(this.gpuScene.triangleBvh);
     for (const description of descriptions) {
       const node = this.gpuScene.triangleBvh.nodes[description.index]!;
-      const geometry = new LineSegmentsGeometry();
-      geometry.setPositions(this.boxEdgePositions(node.boundsMin, node.boundsMax));
-      const material = new LineMaterial({
-        color: description.leaf ? 0x9bea78 : 0x63b3ed,
-        linewidth: description.leaf ? 2.5 : 2,
-      });
-      material.transparent = true;
-      material.opacity = description.leaf ? 0.85 : 0.55;
-      material.depthTest = false;
-      material.depthWrite = false;
-      const helper = new LineSegments2(geometry, material);
-      helper.computeLineDistances();
-      helper.visible = false;
-      helper.userData.bvhNodeIndex = description.index;
-      helper.userData.bvhNode = description;
-      this.debugOverlayScene.add(helper);
-      this.bvhHelpers.push({ helper, depth: description.depth, kind: "triangle" });
+      const overlayNode: BvhOverlayNode = {
+        index: description.index,
+        depth: description.depth,
+        leaf: description.leaf,
+        kind: "triangle",
+        boundsMin: node.boundsMin,
+        boundsMax: node.boundsMax,
+      };
+      this.bvhOverlayNodes.push(overlayNode);
+      this.bvhOverlayNodesByKey.set(`triangle:${description.index}`, overlayNode);
     }
     const sphereDescriptions = describeSphereBvh(this.gpuScene.sphereBvh);
     for (const description of sphereDescriptions) {
       const node = this.gpuScene.sphereBvh.nodes[description.index]!;
-      const geometry = new LineSegmentsGeometry();
-      geometry.setPositions(this.boxEdgePositions(node.boundsMin, node.boundsMax));
-      const material = new LineMaterial({
-        color: description.leaf ? 0xfbbf24 : 0xc084fc,
-        linewidth: description.leaf ? 2.5 : 2,
-      });
-      material.transparent = true;
-      material.opacity = description.leaf ? 0.85 : 0.55;
-      material.depthTest = false;
-      material.depthWrite = false;
-      const helper = new LineSegments2(geometry, material);
-      helper.computeLineDistances();
-      helper.visible = false;
-      helper.userData.bvhNodeIndex = description.index;
-      helper.userData.bvhNode = description;
-      helper.userData.bvhKind = "sphere";
-      this.debugOverlayScene.add(helper);
-      this.bvhHelpers.push({ helper, depth: description.depth, kind: "sphere" });
+      const overlayNode: BvhOverlayNode = {
+        index: description.index,
+        depth: description.depth,
+        leaf: description.leaf,
+        kind: "sphere",
+        boundsMin: node.boundsMin,
+        boundsMax: node.boundsMax,
+      };
+      this.bvhOverlayNodes.push(overlayNode);
+      this.bvhOverlayNodesByKey.set(`sphere:${description.index}`, overlayNode);
     }
+    this.rebuildBvhHelpers();
     this.updateBvhHelperVisibility();
+  }
+
+  private disposeBvhHelpers() {
+    for (const helper of this.bvhHelpers) {
+      helper.geometry.dispose();
+      helper.material.dispose();
+      this.debugOverlayScene.remove(helper);
+    }
+    this.bvhHelpers.length = 0;
+  }
+
+  private rebuildBvhHelpers() {
+    this.disposeBvhHelpers();
+    if (!this.settings.bvhOverlayEnabled) return;
+
+    const batches = new Map<string, { nodes: BvhOverlayNode[]; color: number; opacity: number }>();
+    for (const node of this.bvhOverlayNodes) {
+      if (node.depth > this.settings.bvhOverlayDepth) continue;
+      const key = `${node.kind}:${node.leaf ? "leaf" : "branch"}`;
+      let batch = batches.get(key);
+      if (!batch) {
+        batch = {
+          nodes: [],
+          color: node.kind === "sphere"
+            ? (node.leaf ? 0xfbbf24 : 0xc084fc)
+            : (node.leaf ? 0x9bea78 : 0x63b3ed),
+          opacity: node.leaf ? 0.85 : 0.55,
+        };
+        batches.set(key, batch);
+      }
+      batch.nodes.push(node);
+    }
+
+    for (const batch of batches.values()) {
+      const positions: number[] = [];
+      for (const node of batch.nodes) {
+        positions.push(...this.boxEdgePositions(node.boundsMin, node.boundsMax));
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      const material = new THREE.LineBasicMaterial({
+        color: batch.color,
+        transparent: true,
+        opacity: batch.opacity,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const helper = new THREE.LineSegments(geometry, material);
+      helper.frustumCulled = false;
+      this.debugOverlayScene.add(helper);
+      this.bvhHelpers.push(helper);
+    }
+  }
+
+  private createNativeDebugLines(positions: number[], color: number, opacity = 1) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: opacity < 1,
+      opacity,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const helper = new THREE.LineSegments(geometry, material);
+    helper.frustumCulled = false;
+    this.debugOverlayScene.add(helper);
+    return helper;
   }
 
   private boxEdgePositions(min: THREE.Vector3, max: THREE.Vector3) {
@@ -2231,27 +2332,30 @@ export default class PtRenderer {
   }
 
   private updateBvhHelperVisibility() {
+    for (const helper of this.bvhTraversalNodeHelpers) this.disposeDebugLine(helper);
+    this.bvhTraversalNodeHelpers.length = 0;
     const inspection = this.bvhTraversalState;
     const visibleEvents = inspection
       ? inspection.events.slice(0, Math.max(0, inspection.step + 1))
       : [];
     const nodeEvents = visibleEvents.filter((event) => event.kind === "node");
     const currentEvent = visibleEvents.at(-1);
-    for (const entry of this.bvhHelpers) {
-      const nodeIndex = entry.helper.userData.bvhNodeIndex as number;
-      const event = [...nodeEvents].reverse().find(
-        (candidate) => candidate.geometryKind === entry.kind && candidate.nodeIndex === nodeIndex
+    const highlightedPositions = new Map<number, number[]>();
+    for (const event of nodeEvents) {
+      const node = this.bvhOverlayNodesByKey.get(`${event.geometryKind}:${event.nodeIndex}`);
+      if (!node) continue;
+      const isCurrent = currentEvent?.kind === "node" &&
+        currentEvent.geometryKind === event.geometryKind &&
+        currentEvent.nodeIndex === event.nodeIndex;
+      const color = isCurrent ? 0xffffff : event.hit ? 0xfbbf24 : 0xf87171;
+      const positions = highlightedPositions.get(color) ?? [];
+      positions.push(...this.boxEdgePositions(node.boundsMin, node.boundsMax));
+      highlightedPositions.set(color, positions);
+    }
+    for (const [color, positions] of highlightedPositions) {
+      this.bvhTraversalNodeHelpers.push(
+        this.createNativeDebugLines(positions, color)
       );
-      const material = entry.helper.material as LineMaterial;
-      const description = entry.helper.userData.bvhNode as { leaf: boolean };
-      if (event) material.color.set(event.hit ? 0xfbbf24 : 0xf87171);
-      else if (entry.kind === "sphere") material.color.set(description.leaf ? 0xfbbf24 : 0xc084fc);
-      else material.color.set(description.leaf ? 0x9bea78 : 0x63b3ed);
-      if (currentEvent?.kind === "node" && currentEvent.geometryKind === entry.kind && currentEvent.nodeIndex === nodeIndex) {
-        material.color.set(0xffffff);
-      }
-      entry.helper.visible = Boolean(event) ||
-        (this.settings.bvhOverlayEnabled && entry.depth <= this.settings.bvhOverlayDepth);
     }
   }
 
@@ -2486,10 +2590,11 @@ export default class PtRenderer {
       (wireframe.material as THREE.Material).dispose();
     }
     this.triangleWireframes.clear();
-    for (const { helper } of this.bvhHelpers) {
-      helper.geometry.dispose();
-      (helper.material as THREE.Material).dispose();
-    }
+    this.disposeBvhHelpers();
+    for (const helper of this.bvhTraversalNodeHelpers) this.disposeDebugLine(helper);
+    this.bvhTraversalNodeHelpers.length = 0;
+    this.bvhOverlayNodes.length = 0;
+    this.bvhOverlayNodesByKey.clear();
     this.bvhHelpers.length = 0;
     this.bvhTraversalRay = this.disposeDebugLine(this.bvhTraversalRay);
     this.bvhTraversalTriangle = this.disposeDebugLine(this.bvhTraversalTriangle);
