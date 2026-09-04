@@ -4,54 +4,70 @@
 
 # Path Tracer Lab
 
-<!-- Hero image or GIF -->
+An interactive browser lab for exploring light transport. Edit a scene, compare rasterization with path tracing, and follow the rays behind the image.
 
-An educational path tracer that runs interactively in the browser, built with Three.js, React, GLSL, and WebGL2.
+Built with Three.js, React, GLSL, and a custom WebGL2 path tracer.
 
-This project began as a continuation of my [three-pathtracer](https://github.com/sbobyn/three-pathtracer) project, which followed Peter Shirley’s [Ray Tracing in One Weekend](https://raytracing.github.io/) with adaptations for interactive rendering through WebGL, plus overlays and editing helpers provided by a parallel Three.js scene.
+> **Video · Interactive rendering** — Drag the Cornell box comparison divider, orbit the scene, then change a material. Show the path-traced side converging after the edit. Target: 15–20 seconds.
 
-It now has a broader purpose: to be an inspectable environment for learning how modern renderers are designed—from light transport and sampling to physically based materials, acceleration structures, GPU data layouts, scene compilation, and interactive editor architecture.
+## Explore, inspect, render
 
-The current renderer supports spheres, quads, triangle meshes, glTF assets, image and procedural textures, emissive geometry, analytic lights, HDR environments, physically based materials, multiple sampling strategies, progressive accumulation, and a custom BVH implementation. The editor includes scene and object inspectors, transform controls, material editing, render settings, and debugging visualizations for triangle meshes, BVH nodes, and individual ray traversals.
+- **Edit in Three.js.** Add spheres, quads, analytic boxes, or a teapot; import a static GLB; adjust transforms and materials with undo/redo.
+- **Compare rendering methods.** Switch between raster, path tracing, split comparison, region, and selected-object rendering. Trace part of the view to explore the quality/performance tradeoff.
+- **See the algorithms.** Inspect camera rays and bounces, visualize the renderer's BVH, and step through an individual ray's traversal. Scene descriptions and tooltips explain what to look for.
+- **Keep the result.** Capture the current view with optional overlays and panels, or render an offline still at a separate resolution and sample count. Preview progress, pause, cancel while retaining the partial image, and download PNGs.
 
-The project also includes a conventional Three.js rasterized preview of each scene. This provides a responsive editing view and makes it possible to compare rasterization and path tracing directly.
+> **Video · Inside the renderer** — Show five rays in the Camera Rays viewport, then enable BVH bounds and step through a picked ray's traversal. Target: 15–20 seconds.
 
-Scenes are arranged roughly in the order that their underlying techniques were introduced.
+## Rendering capabilities
 
-Each scene includes a short description of what it demonstrates, relevant implementation details or math, and suggestions for what to observe while experimenting with its settings. Renderer controls also include tooltips explaining important parameters, their visual effects, and their likely performance costs.
+Progressive accumulation with configurable samples, bounce depth, resolution, and precision; BSDF-only, direct-light, and multiple importance sampling; perspective and orthographic cameras with depth-of-field controls.
 
-## Current Features
+The renderer supports analytic spheres, quads and oriented boxes, indexed triangle meshes, custom sphere/triangle BVHs, image and procedural textures, emissive geometry, analytic point/spot/directional lights, and importance-sampled HDR environments. Materials include the original RTIOW learning models and principled metallic-roughness shading with rough transmission, volume attenuation, and dispersion.
 
-- Progressive path-traced rendering with configurable ray depth, samples per frame, resolution, accumulation precision, and frame limit
-- BSDF-only, direct-light, and multiple importance sampling integrators
-- Spheres, quads, triangles, and indexed triangle meshes
-- A custom BVH with selectable BVH or brute-force traversal
-- Lambertian, metallic, dielectric, emissive, and principled materials
-- Image, checker, Perlin noise, marble, and imported glTF textures
-- Point, spot, directional, and emissive-geometry lighting
-- HDR environment backgrounds and importance-sampled environment lighting
-- glTF mesh, texture, and physically based material import
-- A Three.js rasterized preview for comparison and interaction
-- Scene, object, material, camera, and render inspectors
-- Transform gizmos, object authoring, and an undo/redo stack
-- Triangle, BVH, and ray-traversal debugging overlays
+> **Image · Render gallery, 3 × 2** — Six offline stills labeled “Indirect light,” “Metal & roughness,” “Transmission,” “Volume attenuation,” “Dispersion,” and “Textures.” Include asset credits with the finished collage.
 
-> The undo/redo history currently resets when the browser is refreshed.
+> **Image · Inspectable rendering, 2 × 2** — Four captures labeled “Raster / path traced,” “Region rendering,” “Camera rays,” and “BVH traversal.” Keep relevant overlays visible and unrelated panels closed.
 
-## Included Scenes
+## Run locally
 
-- The initial and final scenes from _Ray Tracing in One Weekend_
-- UV orientation, image texture, checker, and Perlin noise studies
-- Quad and triangle intersection studies
-- A Cornell box for comparing BSDF sampling, direct-light sampling, and MIS
-- Emissive-geometry and analytic-light studies
-- HDR environment lighting and importance sampling
-- Packed triangle meshes and custom BVH traversal
-- BVH construction and ray-traversal visualizations
-- A larger BVH-accelerated sphere scene
-- glTF box, Suzanne, and Damaged Helmet studies
-- Physically based material and multi-material glTF tests
+Use **Node.js 22.22.2** (the verified development baseline) and **pnpm**. Rendering requires a browser and GPU with WebGL2 support; available precision and practical scene sizes depend on the device.
 
-## Screenshots and Demos
+```sh
+git clone https://github.com/sbobyn/pathtracer-lab.git
+cd pathtracer-lab
+pnpm install
+pnpm dev
+```
 
-<!-- Add screenshots and GIFs here -->
+Open the URL printed by Vite, normally `http://localhost:3005/pathtracer-lab/`. If that port is occupied, Vite may select another. The shared editor UI package is included in `vendor/`; no sibling checkout is required.
+
+Start with the default Cornell box comparison. Drag the divider, select an object to edit it, and open **Camera Rays** to inspect the scene. On small screens, use the bottom navigation to open one inspector at a time.
+
+First-visit calibration chooses interactive settings for the scene and device. For smoother interaction during an offline render, switch the interactive view to Raster; both renderers still share the device's GPU.
+
+```sh
+pnpm verify  # Tests, RNG precision check, typecheck, production build
+pnpm build   # Production files in dist/, served under /pathtracer-lab/
+```
+
+## Current boundaries
+
+- **WebGL2 today.** WebGPU is planned. Responsive mobile controls are implemented; performance and compatibility vary by browser and device.
+- **Scoped static glTF support.** Built-in assets and GLB import support triangle meshes, baked node transforms, multiple materials, and the implemented material inputs. Animation, skinning, morph targets, secondary UV sets, and texture transforms are unsupported. Normal maps, alpha/render-state fidelity, and advanced reflective lobes remain future work.
+- **Four unique material images per scene.** The current WebGL image-sampler bridge has a fixed capacity; larger textured assets may exceed it.
+- **Editing is session-based.** Preferences persist, but scene edits, undo history, and render history are not a saved project format. Download renders you want to keep.
+- **Offline rendering is local.** It snapshots the current scene, camera, and settings. It can reduce interactive frame rate. Persistent authored cameras, video output, and denoising/upscaling are planned.
+- **Comparison is educational.** Raster and path-traced output share scene data, but their lighting and transport approximations differ; pixel-identical results are not expected.
+
+## How it is built
+
+Three.js is the editable scene. Application actions manage edits and invalidation; `SceneCompiler` produces renderer-owned geometry, materials, lights, and acceleration data. The WebGL backend packs that data into GPU resources and renders through modular GLSL. React provides inspectors and controls.
+
+The project continues [three-pathtracer](https://github.com/sbobyn/three-pathtracer), which began with Peter Shirley's [Ray Tracing in One Weekend](https://raytracing.github.io/). Its direction is an inspectable rendering lab: WebGPU parity next, then authored cameras, camera animation/video, and optional assisted post-processing.
+
+## Credits and licensing
+
+Bundled models, textures, environments, and dependencies retain their own licenses. See the [asset credits](src/assets/README.md) and [Khronos showcase notices](src/assets/gltf/khronos-pbr/README.md). Dragon geometry is credited to the Stanford Computer Graphics Laboratory; its included license contains non-commercial restrictions. Do not treat the entire asset collection as covered by the project's source-code license.
+
+<!-- Release preparation: add the confirmed source-code LICENSE and link it here; replace media descriptions with final captures. -->
