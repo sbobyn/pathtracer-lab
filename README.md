@@ -68,6 +68,8 @@ The project continues [three-pathtracer](https://github.com/sbobyn/three-pathtra
 
 ## Credits and licensing
 
+The project's source code is licensed under the [MIT License](LICENSE).
+
 Bundled models, textures, environments, and dependencies retain their own licenses. See the [asset credits](src/assets/README.md) and [Khronos showcase notices](src/assets/gltf/khronos-pbr/README.md). Dragon geometry is credited to the Stanford Computer Graphics Laboratory; its included license contains non-commercial restrictions. Do not treat the entire asset collection as covered by the project's source-code license.
 
-<!-- Release preparation: add the confirmed source-code LICENSE and link it here; replace media descriptions with final captures. -->
+<!-- Release preparation: replace media descriptions with final captures. -->
