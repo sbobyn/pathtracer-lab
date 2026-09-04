@@ -176,18 +176,37 @@ export default class PtRenderer {
   private gizmoScene!: THREE.Scene;
   private readonly debugOverlayScene = new THREE.Scene();
   private readonly cameraDebugScene = new THREE.Scene();
-  private readonly cameraDebugCamera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
+  private readonly cameraDebugCamera = new THREE.PerspectiveCamera(52, 1, 0.01, 1000);
+  private cameraDebugStaticGroup = new THREE.Group();
   private cameraDebugGroup = new THREE.Group();
   private cameraDebugViewport: { left: number; top: number; width: number; height: number } | null = null;
   private cameraDebugEnabled = true;
   private cameraDebugDirty = true;
-  private cameraDebugRayGrid = { columns: 5, rows: 3 };
+  private cameraDebugRayGrid = { columns: 5, rows: 1 };
   private cameraDebugMaxDepth = 1;
-  private cameraDebugBvhEnabled = true;
+  private cameraDebugBvhEnabled = false;
   private cameraDebugBvhDepth = 2;
   private cameraDebugControls: OrbitControls | null = null;
   private cameraDebugUserControlled = false;
   private cameraDebugInteractionActive = false;
+  private readonly cameraDebugTarget = new THREE.WebGLRenderTarget(1, 1, {
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+  private readonly cameraDebugCompositeScene = new THREE.Scene();
+  private readonly cameraDebugCompositeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private readonly cameraDebugCompositeMaterial = new THREE.MeshBasicMaterial({
+    map: this.cameraDebugTarget.texture,
+    depthTest: false,
+    depthWrite: false,
+  });
+  private cameraDebugTargetWidth = 1;
+  private cameraDebugTargetHeight = 1;
+  private cameraDebugLastRefreshAt = -Infinity;
+  private cameraDebugStaticDirty = true;
+  private static readonly CAMERA_DEBUG_REFRESH_INTERVAL_MS = 1000 / 25;
+  private static readonly CAMERA_DEBUG_MAX_TARGET_WIDTH = 512;
+  private static readonly CAMERA_DEBUG_MAX_TARGET_HEIGHT = 384;
   private readonly triangleWireframes = new Map<string, THREE.LineSegments>();
   private readonly triangleWireframeOverrides = new Map<string, boolean>();
   private readonly bvhOverlayNodes: BvhOverlayNode[] = [];
@@ -907,6 +926,10 @@ export default class PtRenderer {
 
   public invalidate(level: PtInvalidationLevel, reason: string) {
     this.cameraDebugDirty = true;
+    // Camera and render-setting changes only affect the frustum, image plane,
+    // and representative rays. Preserve the much more expensive object-edge
+    // and BVH batches unless authored geometry actually changed.
+    if (level >= PtInvalidationLevel.Geometry) this.cameraDebugStaticDirty = true;
     if (level >= PtInvalidationLevel.Geometry && this.bvhTraversalState) {
       this.setBvhTraversalVisualization(null);
       this.bvhTraversalInvalidated?.();
@@ -950,7 +973,7 @@ export default class PtRenderer {
   }
 
   public setCameraDebugMaxDepth(depth: number) {
-    this.cameraDebugMaxDepth = THREE.MathUtils.clamp(Math.round(depth), 1, 3);
+    this.cameraDebugMaxDepth = THREE.MathUtils.clamp(Math.round(depth), 1, 10);
     this.cameraDebugDirty = true;
   }
 
@@ -1044,12 +1067,14 @@ export default class PtRenderer {
     const next = Math.max(0, Math.round(depth));
     if (this.cameraDebugBvhDepth === next) return;
     this.cameraDebugBvhDepth = next;
+    this.cameraDebugStaticDirty = true;
     this.cameraDebugDirty = true;
   }
 
   public setCameraDebugBvhEnabled(enabled: boolean) {
     if (this.cameraDebugBvhEnabled === enabled) return;
     this.cameraDebugBvhEnabled = enabled;
+    this.cameraDebugStaticDirty = true;
     this.cameraDebugDirty = true;
   }
 
@@ -1059,7 +1084,14 @@ export default class PtRenderer {
     const key = new THREE.DirectionalLight(0xffffff, 2.5);
     key.position.set(4, 7, 5);
     this.cameraDebugScene.add(key);
+    this.cameraDebugScene.add(this.cameraDebugStaticGroup);
     this.cameraDebugScene.add(this.cameraDebugGroup);
+    const composite = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      this.cameraDebugCompositeMaterial
+    );
+    composite.frustumCulled = false;
+    this.cameraDebugCompositeScene.add(composite);
   }
 
   private rebuildCameraDebugView() {
@@ -1074,6 +1106,19 @@ export default class PtRenderer {
     this.cameraDebugGroup = new THREE.Group();
     this.cameraDebugScene.add(this.cameraDebugGroup);
 
+    if (this.cameraDebugStaticDirty) {
+      this.cameraDebugStaticGroup.traverse((object) => {
+        const renderable = object as THREE.Mesh;
+        renderable.geometry?.dispose?.();
+        const material = renderable.material;
+        if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+        else material?.dispose?.();
+      });
+      this.cameraDebugScene.remove(this.cameraDebugStaticGroup);
+      this.cameraDebugStaticGroup = new THREE.Group();
+      this.cameraDebugScene.add(this.cameraDebugStaticGroup);
+    }
+
     this.camera.updateMatrixWorld(true);
     const traceableMeshes = [
       ...this.ptScene.getSphereMeshes(),
@@ -1081,7 +1126,7 @@ export default class PtRenderer {
       ...this.ptScene.getBoxMeshes(),
       ...this.ptScene.getTriangleMeshes(),
     ];
-    for (const mesh of traceableMeshes.slice(0, 48)) {
+    for (const mesh of this.cameraDebugStaticDirty ? traceableMeshes.slice(0, 48) : []) {
       if (!mesh.visible) continue;
       mesh.updateWorldMatrix(true, false);
       const primitiveType = mesh.userData.pathTracer.primitiveType;
@@ -1109,7 +1154,7 @@ export default class PtRenderer {
       );
       outline.matrixAutoUpdate = false;
       outline.matrix.copy(mesh.matrixWorld);
-      this.cameraDebugGroup.add(outline);
+      this.cameraDebugStaticGroup.add(outline);
     }
 
     const diagramCamera = this.camera.clone();
@@ -1263,7 +1308,18 @@ export default class PtRenderer {
           const hit = raycaster.intersectObjects(rayTargets, true)[0];
           const end = hit?.point ?? raycaster.ray.at(diagramRange, new THREE.Vector3());
           rayPositions.push(origin.x, origin.y, origin.z, end.x, end.y, end.z);
-          const bounceColors = [0xa3e635, 0x38bdf8, 0xc084fc];
+          const bounceColors = [
+            0xa3e635,
+            0x38bdf8,
+            0xc084fc,
+            0xf472b6,
+            0x2dd4bf,
+            0xfacc15,
+            0x818cf8,
+            0xfb7185,
+            0x22d3ee,
+            0xd8b4fe,
+          ];
           const color = new THREE.Color(hit ? bounceColors[depth] : 0xf59e0b);
           colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
           if (!hit) break;
@@ -1292,7 +1348,7 @@ export default class PtRenderer {
     ));
 
     const debugBvhBatches = new Map<string, { positions: number[]; color: number; opacity: number }>();
-    if (this.cameraDebugBvhEnabled) {
+    if (this.cameraDebugStaticDirty && this.cameraDebugBvhEnabled) {
       for (const node of this.bvhOverlayNodes) {
         if (node.depth > this.cameraDebugBvhDepth) continue;
         const color = node.kind === "sphere"
@@ -1322,36 +1378,50 @@ export default class PtRenderer {
         })
       );
       lines.frustumCulled = false;
-      this.cameraDebugGroup.add(lines);
+      this.cameraDebugStaticGroup.add(lines);
     }
 
-    // Keep the observer camera in a stable camera-relative pose. Deriving its
-    // framing from hit endpoints causes visible jumps whenever a sample ray
-    // crosses a silhouette and changes discontinuously between hit and miss.
+    // Give the observer a predictable over-the-shoulder view of the authored
+    // camera, aimed at the same focal point as that camera. This keeps both the
+    // scene and the camera/frustum in view; aiming back at the camera marker
+    // itself points away from the scene.
     const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(diagramCamera.quaternion);
-    const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(diagramCamera.quaternion);
-    const overviewCenter = diagramCamera.position.clone().addScaledVector(forward, diagramRange * 0.42);
+    // Look beyond the authored focal target so the camera marker, image plane,
+    // and forward ray volume are pulled back into the viewport together.
+    const overviewCenter = diagramCamera.position
+      .clone()
+      .lerp(this.orbitControls.target, 5.0);
     if (!this.cameraDebugUserControlled) {
+      const overviewScale = Math.max(
+        cameraViewDistance,
+        1
+      );
       this.cameraDebugCamera.position
         .copy(diagramCamera.position)
-        .addScaledVector(cameraRight, diagramRange * 0.72)
-        .addScaledVector(cameraUp, diagramRange * 0.44)
-        .addScaledVector(forward, -diagramRange * 0.08);
+        .addScaledVector(forward, overviewScale * -1.9)
+        .addScaledVector(this.worldUp, overviewScale * 1.6)
+        .addScaledVector(cameraRight, overviewScale * 1.5);
       this.cameraDebugCamera.lookAt(overviewCenter);
       this.cameraDebugControls?.target.copy(overviewCenter);
       this.cameraDebugControls?.update();
+      const overviewDistance = this.cameraDebugCamera.position.distanceTo(overviewCenter);
+      this.cameraDebugCamera.near = Math.max(0.01, overviewDistance / 500);
+      this.cameraDebugCamera.far = Math.max(
+        overviewDistance + diagramRange * 2,
+        diagramRange * 4
+      );
+    } else {
+      this.cameraDebugCamera.near = Math.max(0.01, diagramRange / 100);
+      this.cameraDebugCamera.far = diagramRange * 4;
     }
-    this.cameraDebugCamera.near = Math.max(0.01, diagramRange / 100);
-    this.cameraDebugCamera.far = diagramRange * 4;
     this.cameraDebugCamera.updateProjectionMatrix();
+    this.cameraDebugStaticDirty = false;
     this.cameraDebugDirty = false;
   }
 
   private renderCameraDebugView() {
     const viewport = this.cameraDebugViewport;
     if (!this.cameraDebugEnabled || !viewport || viewport.width < 2 || viewport.height < 2) return;
-    if (this.cameraDebugDirty) this.rebuildCameraDebugView();
-
     const canvasHeight = this.canvas.clientHeight;
     // WebGLRenderer's viewport/scissor API accepts logical CSS pixels and
     // applies its pixel ratio internally for the default framebuffer.
@@ -1359,14 +1429,54 @@ export default class PtRenderer {
     const bottom = Math.round(canvasHeight - viewport.top - viewport.height);
     const width = Math.round(viewport.width);
     const height = Math.round(viewport.height);
-    this.cameraDebugCamera.aspect = width / height;
-    this.cameraDebugCamera.updateProjectionMatrix();
 
+    // The camera diagram is an educational inset, not part of the primary
+    // render. Keep it in a modest offscreen buffer so opening or enlarging the
+    // panel cannot double the application's fragment workload on HiDPI screens.
+    const targetScale = Math.min(
+      1,
+      PtRenderer.CAMERA_DEBUG_MAX_TARGET_WIDTH / width,
+      PtRenderer.CAMERA_DEBUG_MAX_TARGET_HEIGHT / height
+    );
+    const targetWidth = Math.max(2, Math.round(width * targetScale));
+    const targetHeight = Math.max(2, Math.round(height * targetScale));
+    const targetResized =
+      targetWidth !== this.cameraDebugTargetWidth ||
+      targetHeight !== this.cameraDebugTargetHeight;
+    if (targetResized) {
+      this.cameraDebugTargetWidth = targetWidth;
+      this.cameraDebugTargetHeight = targetHeight;
+      this.cameraDebugTarget.setSize(targetWidth, targetHeight);
+    }
+
+    const now = performance.now();
+    const refreshDue =
+      targetResized ||
+      now - this.cameraDebugLastRefreshAt >= PtRenderer.CAMERA_DEBUG_REFRESH_INTERVAL_MS;
+    if (refreshDue) {
+      this.cameraDebugCamera.aspect = targetWidth / targetHeight;
+      this.cameraDebugCamera.updateProjectionMatrix();
+      if (this.cameraDebugDirty) this.rebuildCameraDebugView();
+
+      const previousTarget = this.renderer.getRenderTarget();
+      const previousScissorTest = this.renderer.getScissorTest();
+      this.renderer.setRenderTarget(this.cameraDebugTarget);
+      this.renderer.setScissorTest(false);
+      this.renderer.setViewport(0, 0, targetWidth, targetHeight);
+      this.renderer.clear(true, true, false);
+      this.renderer.render(this.cameraDebugScene, this.cameraDebugCamera);
+      this.renderer.setRenderTarget(previousTarget);
+      this.renderer.setScissorTest(previousScissorTest);
+      this.cameraDebugLastRefreshAt = now;
+    }
+
+    // Compositing one cached textured quad is intentionally the only debug-view
+    // GPU work performed on primary frames between the bounded refreshes above.
     this.renderer.setScissorTest(true);
     this.renderer.setViewport(left, bottom, width, height);
     this.renderer.setScissor(left, bottom, width, height);
     this.renderer.clear(true, true, false);
-    this.renderer.render(this.cameraDebugScene, this.cameraDebugCamera);
+    this.renderer.render(this.cameraDebugCompositeScene, this.cameraDebugCompositeCamera);
     this.renderer.setScissorTest(false);
     const fullSize = this.renderer.getSize(new THREE.Vector2());
     this.renderer.setViewport(0, 0, fullSize.x, fullSize.y);
@@ -2605,6 +2715,18 @@ export default class PtRenderer {
       const material = renderable.material;
       if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
       else material?.dispose?.();
+    });
+    this.cameraDebugStaticGroup.traverse((object) => {
+      const renderable = object as THREE.Mesh;
+      renderable.geometry?.dispose?.();
+      const material = renderable.material;
+      if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+      else material?.dispose?.();
+    });
+    this.cameraDebugTarget.dispose();
+    this.cameraDebugCompositeMaterial.dispose();
+    this.cameraDebugCompositeScene.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.geometry.dispose();
     });
     this.disposePostProcessing();
     this.renderer.dispose();

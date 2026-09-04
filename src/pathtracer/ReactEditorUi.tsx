@@ -2558,6 +2558,13 @@ function clampPanelSize(size: PanelSize): PanelSize {
   };
 }
 
+function clampCameraDebugSize(size: PanelSize): PanelSize {
+  return {
+    width: Math.min(Math.max(320, size.width), Math.max(320, window.innerWidth - 32)),
+    height: Math.min(Math.max(220, size.height), Math.max(220, window.innerHeight - 32)),
+  };
+}
+
 function readPersistedPanelSize(
   sceneKey: string,
   panelKey: string,
@@ -3663,6 +3670,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
     <>
     <CameraRayDebugViewport
       actions={actions}
+      sceneKey={state.sceneKey}
       projectionMode={state.settings.cameraProjectionMode}
       fov={state.settings.fov}
       orthographicHeight={state.settings.orthographicHeight}
@@ -3884,11 +3892,13 @@ function EditorShell({ actions }: { actions: PtActions }) {
 
 function CameraRayDebugViewport({
   actions,
+  sceneKey,
   projectionMode,
   fov,
   orthographicHeight,
 }: {
   actions: PtActions;
+  sceneKey: string;
   projectionMode: PtState["settings"]["cameraProjectionMode"];
   fov: number;
   orthographicHeight: number;
@@ -3898,18 +3908,75 @@ function CameraRayDebugViewport({
     actions.getSphereBvhStats().maxDepth
   );
   const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
-  const [rayDensity, setRayDensity] = useState<"sparse" | "medium" | "dense">("sparse");
-  const [rayDepth, setRayDepth] = useState<1 | 2 | 3>(3);
+  const [size, setSize] = usePersistentPanelSize(
+    sceneKey,
+    "camera-ray-debug",
+    { width: 360, height: 266 }
+  );
+  const resizeGesture = useRef<{
+    axis: ResizeAxis;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startSize: PanelSize;
+  } | null>(null);
+  const [rayDensity, setRayDensity] = useState<"single" | "small" | "sparse" | "medium">("small");
+  const [rayDepth, setRayDepth] = useState<1 | 2 | 3 | 5 | 10>(3);
   const [legendOpen, setLegendOpen] = useState(false);
-  const [bvhEnabled, setBvhEnabled] = useState(true);
+  const [bvhEnabled, setBvhEnabled] = useState(false);
   const [bvhDepth, setBvhDepth] = useState(() => Math.min(2, maxBvhDepth));
   const viewportRef = useRef<HTMLDivElement>(null);
   const orbitSurfaceRef = useRef<HTMLDivElement>(null);
-  const rayGrid = rayDensity === "sparse"
-    ? { columns: 5, rows: 3 }
-    : rayDensity === "dense"
-      ? { columns: 15, rows: 5 }
+  const rayGrid = rayDensity === "single"
+    ? { columns: 1, rows: 1 }
+    : rayDensity === "small"
+      ? { columns: 5, rows: 1 }
+    : rayDensity === "sparse"
+      ? { columns: 5, rows: 3 }
       : { columns: 9, rows: 5 };
+
+  useEffect(() => {
+    const handleResize = () => setSize((current) => clampCameraDebugSize(current));
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const beginResize = (
+    axis: ResizeAxis,
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (collapsed || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeGesture.current = {
+      axis,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startSize: size,
+    };
+  };
+
+  const continueResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = resizeGesture.current;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    setSize(clampCameraDebugSize({
+      width: gesture.axis === "width" || gesture.axis === "both"
+        ? gesture.startSize.width - (event.clientX - gesture.startX)
+        : gesture.startSize.width,
+      height: gesture.axis === "height" || gesture.axis === "both"
+        ? gesture.startSize.height - (event.clientY - gesture.startY)
+        : gesture.startSize.height,
+    }));
+  };
+
+  const finishResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    resizeGesture.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
 
   useEffect(() => {
     actions.setCameraDebugBvhEnabled(bvhEnabled);
@@ -3928,6 +3995,22 @@ function CameraRayDebugViewport({
     if (validDepth !== bvhDepth) setBvhDepth(validDepth);
     actions.setCameraDebugBvhDepth(validDepth);
   }, [actions, bvhDepth, maxBvhDepth]);
+
+  // Keep the shared WebGL scissor aligned with the flex viewport in the same
+  // layout pass as a resize. ResizeObserver remains the fallback for changes
+  // originating outside the panel, but can otherwise trail pointer movement
+  // by a frame and briefly expose the scene between the header and inset.
+  useLayoutEffect(() => {
+    const element = viewportRef.current;
+    if (!element || collapsed) return;
+    const bounds = element.getBoundingClientRect();
+    actions.setCameraDebugViewport({
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    });
+  }, [actions, collapsed, size.height, size.width]);
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -3960,7 +4043,12 @@ function CameraRayDebugViewport({
   }, [actions, collapsed]);
 
   return (
-    <aside className="camera-ray-debug" data-collapsed={collapsed} aria-label="Camera and primary ray debug view">
+    <aside
+      className="camera-ray-debug"
+      data-collapsed={collapsed}
+      aria-label="Camera and primary ray debug view"
+      style={collapsed ? undefined : { width: size.width, height: size.height }}
+    >
       <button
         className="camera-ray-debug__header"
         type="button"
@@ -3979,7 +4067,7 @@ function CameraRayDebugViewport({
           />
           <div className="camera-ray-debug__depth" aria-label="Representative ray depth">
             <span>Depth</span>
-            {([1, 2, 3] as const).map((depth) => (
+            {([1, 2, 3, 5, 10] as const).map((depth) => (
               <button
                 key={depth}
                 type="button"
@@ -3992,15 +4080,16 @@ function CameraRayDebugViewport({
             ))}
           </div>
           <div className="camera-ray-debug__density" aria-label="Representative ray density">
-            {(["sparse", "medium", "dense"] as const).map((density) => (
+            {(["single", "small", "sparse", "medium"] as const).map((density) => (
               <button
                 key={density}
                 type="button"
                 aria-pressed={rayDensity === density}
+                title={density === "single" ? "Trace one ray through the center of the camera" : undefined}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setRayDensity(density)}
               >
-                {density === "sparse" ? "15" : density === "medium" ? "45" : "75"}
+                {density === "single" ? "1" : density === "small" ? "5" : density === "sparse" ? "15" : "45"}
               </button>
             ))}
             <button
@@ -4052,6 +4141,7 @@ function CameraRayDebugViewport({
               <span><i style={{ background: "#a3e635" }} />hit 1</span>
               <span><i style={{ background: "#38bdf8" }} />hit 2</span>
               <span><i style={{ background: "#c084fc" }} />hit 3</span>
+              <span><i style={{ background: "#f472b6" }} />later hits</span>
               <span><i style={{ background: "#f59e0b" }} />miss</span>
             </div>
             <div>
@@ -4074,6 +4164,17 @@ function CameraRayDebugViewport({
           </span>
         </div>
       )}
+      {(["width", "height", "both"] as const).map((axis) => (
+        <div
+          key={axis}
+          className={`camera-ray-debug__resize-handle camera-ray-debug__resize-handle--${axis}`}
+          aria-hidden="true"
+          onPointerDown={(event) => beginResize(axis, event)}
+          onPointerMove={continueResize}
+          onPointerUp={finishResize}
+          onPointerCancel={finishResize}
+        />
+      ))}
     </aside>
   );
 }
