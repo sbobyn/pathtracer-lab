@@ -34,6 +34,8 @@ const editorUiStoragePrefix = "three-pathtracer:editor-ui:v1:";
 const pathTracerScrubSpeed = 0.25;
 const minimumInteractiveFps = 15;
 const contextualHelpOpenEvent = "three-pathtracer:contextual-help-open";
+const mobilePanelRequestEvent = "three-pathtracer:mobile-panel-request";
+const mobilePanelMediaQuery = "(max-width: 700px), (max-width: 900px) and (max-height: 500px)";
 
 type ContextualHelpContent = {
   meaning: ReactNode;
@@ -200,6 +202,62 @@ function usePersistentBoolean(key: string, fallback: boolean) {
     });
   };
   return [value, update] as const;
+}
+
+type MobilePanelKey = "scene" | "object" | "render" | "offline-render" | "camera-ray-debug";
+
+function requestMobilePanel(key: MobilePanelKey) {
+  window.dispatchEvent(new CustomEvent(mobilePanelRequestEvent, {
+    detail: { key, toggle: true },
+  }));
+}
+
+function usePersistentPanelCollapsed(key: MobilePanelKey, fallback: boolean) {
+  const mobileAtMount = useRef(window.matchMedia(mobilePanelMediaQuery).matches).current;
+  const [collapsed, setCollapsedBase] = usePersistentBoolean(
+    `${mobileAtMount ? "mobile-panel" : "panel"}:${key}`,
+    mobileAtMount ? true : fallback
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(mobilePanelMediaQuery);
+    const collapseForMobile = () => {
+      if (media.matches) setCollapsedBase(true);
+    };
+    const handleRequest = (event: Event) => {
+      if (!media.matches) return;
+      const detail = (event as CustomEvent<{ key: MobilePanelKey; toggle?: boolean }>).detail;
+      if (detail.key === key) {
+        if (detail.toggle) setCollapsedBase((current) => !current);
+        else setCollapsedBase(false);
+      } else {
+        setCollapsedBase(true);
+      }
+    };
+    collapseForMobile();
+    media.addEventListener("change", collapseForMobile);
+    window.addEventListener(mobilePanelRequestEvent, handleRequest);
+    return () => {
+      media.removeEventListener("change", collapseForMobile);
+      window.removeEventListener(mobilePanelRequestEvent, handleRequest);
+    };
+  }, [key]);
+
+  const setCollapsed = (next: boolean | ((current: boolean) => boolean)) => {
+    setCollapsedBase((current) => {
+      const resolved = typeof next === "function" ? next(current) : next;
+      if (!resolved && window.matchMedia(mobilePanelMediaQuery).matches) {
+        queueMicrotask(() => {
+          window.dispatchEvent(new CustomEvent(mobilePanelRequestEvent, {
+            detail: { key, toggle: false },
+          }));
+        });
+      }
+      return resolved;
+    });
+  };
+
+  return [collapsed, setCollapsed] as const;
 }
 
 function PersistentDetails({
@@ -1546,7 +1604,7 @@ function OfflineRenderJobCard({ job, actions }: {
 }
 
 function OfflineRenderPanel({ state, actions }: { state: Readonly<PtState>; actions: PtActions }) {
-  const [collapsed, setCollapsed] = usePersistentBoolean("panel:offline-render", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("offline-render", false);
   const [size, setSize] = usePersistentPanelSize(
     state.sceneKey,
     "offline-render",
@@ -2431,7 +2489,7 @@ function SelectedObjectInspector({
   actions: PtActions;
   renameFocusRequest: number;
 }) {
-  const [collapsed, setCollapsed] = usePersistentBoolean("panel:object", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("object", false);
   const [size, setSize] = usePersistentPanelSize(
     state.sceneKey,
     "object",
@@ -2830,7 +2888,7 @@ function RenderPanel({
   actions: PtActions;
   performanceSettingsRequest: number;
 }) {
-  const [collapsed, setCollapsed] = usePersistentBoolean("panel:render", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("render", false);
   const [size, setSize] = usePersistentPanelSize(
     state.sceneKey,
     "render",
@@ -3386,7 +3444,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
     (listener) => actions.subscribe(listener),
     () => actions.getState()
   );
-  const [collapsed, setCollapsed] = usePersistentBoolean("panel:scene", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("scene", false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
@@ -3836,6 +3894,15 @@ function EditorShell({ actions }: { actions: PtActions }) {
     />
     <OfflineRenderPanel state={state} actions={actions} />
     </div>
+    <nav className="mobile-panel-dock" aria-label="Editor panels">
+      <button type="button" onClick={() => requestMobilePanel("scene")}>Scene</button>
+      {state.selection.objectId !== null && (
+        <button type="button" onClick={() => requestMobilePanel("object")}>Object</button>
+      )}
+      <button type="button" onClick={() => requestMobilePanel("render")}>Render</button>
+      <button type="button" onClick={() => requestMobilePanel("offline-render")}>Offline</button>
+      <button type="button" onClick={() => requestMobilePanel("camera-ray-debug")}>Rays</button>
+    </nav>
     <PerformanceCalibrationHud
       state={state}
       actions={actions}
@@ -3907,7 +3974,7 @@ function CameraRayDebugViewport({
     actions.getTriangleBvhStats().maxDepth,
     actions.getSphereBvhStats().maxDepth
   );
-  const [collapsed, setCollapsed] = usePersistentBoolean("panel:camera-ray-debug", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("camera-ray-debug", false);
   const [size, setSize] = usePersistentPanelSize(
     sceneKey,
     "camera-ray-debug",

@@ -15,6 +15,7 @@ body {
   height: 100%;
   display: block;
   outline: none;
+  touch-action: none;
 }
 
 #editor-root {
@@ -2450,6 +2451,437 @@ body {
 
   .transform-toolbar__group[aria-label="Transform mode"] button span { display: none; }
   .transform-toolbar__group[aria-label="Transform mode"] kbd { font-size: 10px; opacity: 1; }
+}
+
+.mobile-panel-dock {
+  display: none;
+}
+
+@media (max-width: 700px), (max-width: 900px) and (max-height: 500px) {
+  html,
+  body {
+    width: 100%;
+    height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  #editor-root {
+    --mobile-safe-top: max(8px, env(safe-area-inset-top));
+    --mobile-safe-right: max(8px, env(safe-area-inset-right));
+    --mobile-safe-bottom: max(8px, env(safe-area-inset-bottom));
+    --mobile-safe-left: max(8px, env(safe-area-inset-left));
+    --mobile-dock-height: 48px;
+    --eui-field-label-width: min(42vw, 8.5rem);
+  }
+
+  .editor-left-stack,
+  .editor-right-stack {
+    display: contents;
+  }
+
+  .editor-left-stack > .editor-shell,
+  .editor-left-stack > .object-inspector,
+  .editor-right-stack > .render-panel,
+  .camera-ray-debug {
+    position: fixed;
+    z-index: 42;
+    top: auto;
+    right: var(--mobile-safe-right);
+    bottom: calc(var(--mobile-safe-bottom) + var(--mobile-dock-height) + 8px);
+    left: var(--mobile-safe-left);
+    width: auto !important;
+    height: min(60dvh, 620px) !important;
+    max-width: none;
+    max-height: min(60dvh, 620px) !important;
+    border-radius: 12px;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 48%);
+  }
+
+  .editor-left-stack > [data-collapsed="true"],
+  .editor-right-stack > [data-collapsed="true"],
+  .camera-ray-debug[data-collapsed="true"] {
+    display: none;
+  }
+
+  .editor-shell__header,
+  .editor-shell__toggle,
+  .object-inspector__toggle,
+  .render-panel__toggle,
+  .camera-ray-debug__header {
+    min-height: 44px;
+  }
+
+  .editor-shell__body,
+  .object-inspector__content,
+  .render-panel__content {
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .editor-shell input,
+  .editor-shell select,
+  .object-inspector input,
+  .object-inspector select,
+  .render-panel input,
+  .render-panel select {
+    min-height: 32px;
+    font-size: 16px;
+  }
+
+  .editor-shell button,
+  .object-inspector button,
+  .render-panel button {
+    min-height: 40px;
+    touch-action: manipulation;
+  }
+
+  .editor-color-picker {
+    min-width: 40px;
+  }
+
+  .editor-contextual-help__trigger,
+  .editor-help-button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+
+  /* Help triggers are absolutely positioned beside compact field rows. Keep
+     the visible circle in its reserved 16 px slot, but extend its invisible
+     hit area to a touch-friendly size so it cannot overlap the control. */
+  #editor-root .editor-contextual-help__trigger {
+    flex: 0 0 16px;
+    width: 16px;
+    min-width: 16px;
+    max-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    max-height: 16px;
+    aspect-ratio: 1;
+    box-sizing: border-box;
+  }
+
+  .editor-contextual-help__trigger::before {
+    position: absolute;
+    content: "";
+    inset: -12px;
+    border-radius: 50%;
+  }
+
+  .mobile-panel-dock {
+    position: fixed;
+    z-index: 45;
+    right: var(--mobile-safe-right);
+    bottom: var(--mobile-safe-bottom);
+    left: var(--mobile-safe-left);
+    height: var(--mobile-dock-height);
+    display: flex;
+    align-items: stretch;
+    gap: 3px;
+    padding: 4px;
+    overflow-x: auto;
+    color: #e4e4e7;
+    background: rgb(24 24 27 / 94%);
+    border: 1px solid rgb(255 255 255 / 15%);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 38%);
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-panel-dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-panel-dock button {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 40px;
+    flex: 1 1 0;
+    padding: 5px 4px;
+    color: #d4d4d8;
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    font: 700 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+    touch-action: manipulation;
+  }
+
+  .mobile-panel-dock button:active {
+    color: #18200d;
+    background: #bef264;
+  }
+
+  .history-panel {
+    position: fixed;
+    z-index: 22;
+    top: var(--mobile-safe-top);
+    left: var(--mobile-safe-left);
+    width: 104px;
+  }
+
+  .history-panel button,
+  .editor-repository-link,
+  .scene-toolbar__add,
+  .scene-toolbar__capture,
+  .scene-toolbar__capture-options,
+  .transform-toolbar button {
+    min-height: 40px;
+  }
+
+  .editor-repository-link {
+    top: var(--mobile-safe-top);
+    right: var(--mobile-safe-right);
+    display: grid;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    place-items: center;
+  }
+
+  .editor-repository-link span {
+    display: none;
+  }
+
+  .editor-repository-link svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .editor-top-toolbar {
+    top: var(--mobile-safe-top);
+    right: auto;
+    left: calc(var(--mobile-safe-left) + 120px);
+    width: max-content;
+    max-width: calc(100vw - var(--mobile-safe-left) - var(--mobile-safe-right) - 176px);
+    min-height: 32px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    transform: none;
+    scrollbar-width: none;
+  }
+
+  .editor-top-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .editor-top-toolbar:not(:has(.transform-toolbar)) {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .history-panel button,
+  .scene-toolbar__add,
+  .scene-toolbar__capture,
+  .scene-toolbar__capture-options,
+  .transform-toolbar button {
+    box-sizing: border-box;
+    min-height: 32px;
+    height: 32px;
+  }
+
+  .scene-toolbar__add {
+    min-width: 44px;
+    width: 44px;
+    padding-inline: 0;
+  }
+
+  .scene-toolbar__capture {
+    width: 44px;
+    padding-inline: 0;
+  }
+
+  .scene-toolbar__capture span:last-child {
+    display: none;
+  }
+
+  .scene-toolbar__capture-options {
+    width: 32px;
+    min-width: 32px;
+  }
+
+  .transform-toolbar {
+    flex: 0 0 auto;
+    gap: 4px;
+    padding-left: 6px;
+    padding-right: 4px;
+  }
+
+  .transform-toolbar__divider {
+    display: none;
+  }
+
+  .transform-toolbar__group {
+    flex: 0 0 auto;
+    gap: 0;
+    overflow: hidden;
+    background: rgb(9 9 11 / 24%);
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 7px;
+  }
+
+  .transform-toolbar__group[aria-label="Transform mode"] button,
+  .transform-toolbar__group[aria-label="Transform orientation"] button {
+    flex: 0 0 34px;
+    width: 34px;
+    min-width: 34px;
+    height: 32px;
+    min-height: 32px;
+    padding-inline: 0;
+    border-radius: 0;
+  }
+
+  .transform-toolbar__group button + button {
+    border-left: 1px solid rgb(255 255 255 / 10%);
+  }
+
+  .transform-toolbar__group[aria-label="Transform orientation"] button {
+    flex-basis: 30px;
+    width: 30px;
+    min-width: 30px;
+    justify-content: center;
+    font-size: 0;
+    text-align: center;
+  }
+
+  .transform-toolbar__group[aria-label="Transform orientation"] button:first-child::after {
+    content: "G";
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .transform-toolbar__group[aria-label="Transform orientation"] button:last-child::after {
+    content: "L";
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .capture-toolbar__menu,
+  .scene-toolbar__add-wrap .creation-menu {
+    position: fixed;
+    top: calc(var(--mobile-safe-top) + 56px);
+    right: var(--mobile-safe-right);
+    left: var(--mobile-safe-left);
+    width: auto;
+    max-height: calc(100dvh - 170px - var(--mobile-safe-bottom));
+    overflow-y: auto;
+    transform: none;
+  }
+
+  .creation-menu button {
+    min-height: 44px;
+  }
+
+  .performance-calibration-hud {
+    right: var(--mobile-safe-right);
+    bottom: calc(var(--mobile-safe-bottom) + var(--mobile-dock-height) + 8px);
+    left: var(--mobile-safe-left);
+    width: auto;
+    max-height: calc(100dvh - 88px - var(--mobile-safe-top) - var(--mobile-safe-bottom));
+    overflow-y: auto;
+    transform: none;
+  }
+
+  .performance-calibration-hud__dismiss,
+  .performance-calibration-hud__actions button,
+  .capture-preview button,
+  .capture-preview a {
+    min-height: 44px;
+  }
+
+  .selected-object-empty-notice,
+  .hybrid-comparison-seam__label {
+    bottom: calc(var(--mobile-safe-bottom) + var(--mobile-dock-height) + 16px);
+  }
+
+  .hybrid-comparison-seam__handle {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .hybrid-comparison-region__handle--n,
+  .hybrid-comparison-region__handle--s {
+    right: 20px;
+    left: 20px;
+    height: 28px;
+  }
+
+  .hybrid-comparison-region__handle--n { top: -15px; }
+  .hybrid-comparison-region__handle--s { bottom: -15px; }
+
+  .hybrid-comparison-region__handle--e,
+  .hybrid-comparison-region__handle--w {
+    top: 20px;
+    bottom: 20px;
+    width: 28px;
+  }
+
+  .hybrid-comparison-region__handle--e { right: -15px; }
+  .hybrid-comparison-region__handle--w { left: -15px; }
+
+  .hybrid-comparison-region__handle--ne,
+  .hybrid-comparison-region__handle--se,
+  .hybrid-comparison-region__handle--sw,
+  .hybrid-comparison-region__handle--nw {
+    width: 36px;
+    height: 36px;
+  }
+
+  .camera-ray-debug__depth button,
+  .camera-ray-debug__density button,
+  .camera-ray-debug__bvh-controls button,
+  .camera-ray-debug__legend-toggle {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .camera-ray-debug__bvh-controls {
+    top: 50px;
+  }
+
+  .camera-ray-debug__camera-label,
+  .camera-ray-debug__legend-toggle,
+  .camera-ray-debug__color-key {
+    bottom: 10px;
+  }
+
+  .capture-preview {
+    padding:
+      var(--mobile-safe-top)
+      var(--mobile-safe-right)
+      var(--mobile-safe-bottom)
+      var(--mobile-safe-left);
+  }
+
+  .capture-preview__dialog {
+    width: 100%;
+    max-height: 100%;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 900px) and (max-height: 500px) and (orientation: landscape) {
+  .editor-left-stack > .editor-shell,
+  .editor-left-stack > .object-inspector,
+  .editor-right-stack > .render-panel,
+  .camera-ray-debug {
+    height: min(72dvh, 480px) !important;
+    max-height: min(72dvh, 480px) !important;
+  }
+
+}
+
+@media (pointer: coarse) {
+  .editor-shell__resize-handle,
+  .object-inspector__resize-handle,
+  .render-panel__resize-handle,
+  .camera-ray-debug__resize-handle {
+    display: none !important;
+  }
 }
 .import-warning {
   display: grid;
