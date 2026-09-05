@@ -40,7 +40,7 @@ Step through a picked ray's BVH traversal. This is a CPU diagnostic, not live GP
 
 ## Run locally
 
-Requires **Node.js 22.22.2**, **pnpm**, and a WebGL2-capable browser and GPU.
+Requires **Node.js 22.22.2**, **pnpm 10.9.0**, and a WebGL2-capable browser and GPU.
 
 ```sh
 git clone https://github.com/sbobyn/pathtracer-lab.git
@@ -59,6 +59,8 @@ Automatic calibration targets 30 FPS and prioritizes resolution. Higher FPS targ
 pnpm verify  # Tests, RNG precision check, typecheck, production build
 pnpm build   # Production files in dist/, served under /pathtracer-lab/
 ```
+
+GitHub Actions runs `pnpm verify`. Vercel uses the checked-in configuration to build for the domain root; for other root-hosted deployments, run `pnpm build --base=/`.
 
 ## Limitations
 
