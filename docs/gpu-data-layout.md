@@ -21,7 +21,7 @@ Each triangle occupies eight RGBA texels:
 
 ## Materials
 
-Each material occupies four RGBA texels:
+Each material occupies seven RGBA texels:
 
 | Offset | R | G | B | A |
 | --- | --- | --- | --- | --- |
@@ -29,6 +29,9 @@ Each material occupies four RGBA texels:
 | 1 | base-color factor r | base-color factor g | base-color factor b | index of refraction |
 | 2 | emission factor r | emission factor g | emission factor b | emission strength |
 | 3 | two-sided emission flag | metallic-roughness texture ID | metallic factor | texture-enable bit mask |
+| 4 | transmission texture ID | transmission factor | thickness texture ID | thickness factor |
+| 5 | attenuation color r | attenuation color g | attenuation color b | dispersion |
+| 6 | attenuation distance | unused | unused | unused |
 
 This is a WebGL storage layout, not the authored material model. `GpuMaterial`
 defines the renderer-level meaning of these fields; a future WebGPU backend may
@@ -62,4 +65,13 @@ The CPU builder emits depth-first nodes and a separate triangle-index list. Each
 
 A positive triangle count marks a leaf, where `payload` is the first offset in the triangle-index texture. A zero count marks a branch: its left child is the next node and `payload` is its right-child node index. The iterative shader traversal uses a fixed stack of 64 entries. If it encounters stack overflow or malformed indices it falls back to brute-force triangle traversal so geometry is not silently omitted.
 
-Spheres, quads, lights, and the four image samplers still use the earlier bounded uniforms. They can migrate independently when their authored counts justify it; triangle and material storage no longer depend on those limits.
+## Spheres
+
+Each sphere occupies two RGBA texels in a packed data texture:
+
+| Offset | R | G | B | A |
+| --- | --- | --- | --- | --- |
+| 0 | position x | position y | position z | radius |
+| 1 | material ID | UV mapping mode | unused | unused |
+
+Material images remain separate from these geometry records, with four image-sampler slots available per scene.

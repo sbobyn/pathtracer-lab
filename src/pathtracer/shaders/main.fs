@@ -72,7 +72,7 @@ uniform bool uObjectMaskHasSelection;
 #include textures.glsl
 #include materials.glsl
 #include environment.glsl
-// Light estimators are kept separate from path-state bookkeeping (STE-488).
+// Light estimators are kept separate from path-state bookkeeping.
 #include lighting.glsl
 #include camera.glsl
 #include integrator.glsl
