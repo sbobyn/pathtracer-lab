@@ -4,21 +4,23 @@
 
 # Path Tracer Lab
 
+**[Try it here](https://pathtracer-lab.vercel.app/)**
+
 An interactive browser lab for exploring light transport. Edit a scene, compare rasterization with path tracing, and follow the rays behind the image.
 
-Built with Three.js, React, GLSL, and a custom WebGL2 path tracer.
+Built with Three.js, React, and a custom WebGL2 path tracer.
 
 [![Six captures from Path Tracer Lab: Cornell-box global illumination using MIS, dragon transmission and dispersion, glTF raster/path-traced comparison, selected-object comparison, camera-ray visualization, and BVH traversal](docs/media/showcase.webp)](docs/media/showcase.webp)
 
 Captured with the app's offline renderer and capture tools. [Individual images, settings, and asset credits](docs/media/README.md). The traversal view is a CPU diagnostic of the production BVH; the dragon retains visible sampling noise.
 
-[![Emissive Study demo: enable debug BVH, orbit with five camera rays, then sweep the comparison divider across an orange teapot and reflective sphere](docs/media/emissive-demo.gif)](docs/media/emissive-demo.mp4)
+[![Emissive Study demo: enable debug BVH, orbit with five camera rays, then sweep the comparison divider across an orange teapot and reflective sphere](docs/media/emissive-demo.gif)](https://pathtracer-lab.vercel.app/)
 
-Explore the Emissive Study: move the camera, inspect its rays, and compare raster with path-traced lighting and reflections. [Watch the 14-second demo (MP4)](docs/media/emissive-demo.mp4). The looping preview has reduced resolution and frame rate; playback timing is unchanged.
+Explore the Emissive Study: move the camera, inspect its rays, and compare raster with path-traced lighting and reflections. Click the preview to try the app. The looping preview has reduced resolution and frame rate; playback timing is unchanged.
 
-[![CPU ray-traversal demo: visualize BVH bounds, pick a ray, and inspect its traversal](docs/media/bvh-traversal-viz.gif)](docs/media/bvh-traversal-viz.mp4)
+[![CPU ray-traversal demo: visualize BVH bounds, pick a ray, and inspect its traversal](docs/media/bvh-traversal-viz.gif)](https://pathtracer-lab.vercel.app/)
 
-Follow a picked ray through the BVH in the **CPU traversal diagnostic**—not a readback of a live GPU pixel. [Watch the 27-second demo (MP4)](docs/media/bvh-traversal-viz.mp4).
+Follow a picked ray through the BVH in the **CPU traversal diagnostic**—not a readback of a live GPU pixel. Click the preview to explore it yourself.
 
 ## Explore, inspect, render
 
@@ -46,9 +48,9 @@ pnpm dev
 
 Open the URL printed by Vite, normally `http://localhost:3005/pathtracer-lab/`. If that port is occupied, Vite may select another. The shared editor UI package is included in `vendor/`; no sibling checkout is required.
 
-Start with the default Cornell box comparison. Drag the divider, select an object to edit it, and open **Camera Rays** to inspect the scene. On small screens, use the bottom navigation to open one inspector at a time.
+Start with the default Emissive Study comparison: an orange teapot, a reflective sphere, and colored emissive lights. Drag the divider, select an object to edit it, and open **Camera Rays** to inspect the scene. On small screens, use the bottom navigation to open one inspector at a time.
 
-First-visit calibration chooses interactive settings for the scene and device. For smoother interaction during an offline render, switch the interactive view to Raster; both renderers still share the device's GPU.
+First-visit calibration targets 30 FPS, prioritizing the highest sustainable resolution before adding more samples per frame. Higher FPS targets remain available in performance settings. For smoother interaction during an offline render, switch the interactive view to Raster; both renderers still share the device's GPU.
 
 ```sh
 pnpm verify  # Tests, RNG precision check, typecheck, production build
