@@ -3,6 +3,38 @@
   padding: 0;
 }
 
+.startup-status {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: max(24px, env(safe-area-inset-top)) 24px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: #18181b;
+  color: #f4f4f5;
+  font: 16px/1.5 system-ui, sans-serif;
+  text-align: center;
+}
+.startup-status[hidden] { display: none; }
+.startup-status h1 { font-size: clamp(22px, 5vw, 32px); }
+.startup-status p { max-width: 36rem; color: #d4d4d8; }
+.startup-status button {
+  min-height: 44px;
+  padding: 10px 24px;
+  border: 0;
+  border-radius: 8px;
+  background: #bef264;
+  color: #18181b;
+  font: inherit;
+  cursor: pointer;
+}
+.startup-status button:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+
 html,
 body {
   overflow: hidden;
