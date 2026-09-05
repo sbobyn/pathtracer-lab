@@ -168,6 +168,7 @@ export default class PtRenderer {
   private readonly frameTimingListeners = new Set<(frameTimeMs: number) => void>();
   private readonly cameraPoseListeners = new Set<() => void>();
   private previousFrameStartedAt = 0;
+  private readonly resetFrameTiming = () => { this.previousFrameStartedAt = 0; };
   private renderingPaused = false;
 
   public orbitControls!: OrbitControls;
@@ -402,6 +403,8 @@ export default class PtRenderer {
 
     this.clock = new THREE.Clock();
     this.renderer.setAnimationLoop(this.renderLoop);
+    document.addEventListener("visibilitychange", this.resetFrameTiming);
+    window.addEventListener("pageshow", this.resetFrameTiming);
 
     // Event listeners
     this.attachEventListeners();
@@ -418,6 +421,7 @@ export default class PtRenderer {
   }
 
   public setRenderingPaused(paused: boolean) {
+    if (this.renderingPaused !== paused) this.resetFrameTiming();
     this.renderingPaused = paused;
   }
 
@@ -2644,6 +2648,8 @@ export default class PtRenderer {
   }
 
   public dispose() {
+    document.removeEventListener("visibilitychange", this.resetFrameTiming);
+    window.removeEventListener("pageshow", this.resetFrameTiming);
     this.bvhTraversalInvalidated = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.handleResize);

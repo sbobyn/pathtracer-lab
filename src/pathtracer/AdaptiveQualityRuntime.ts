@@ -30,6 +30,10 @@ export default class AdaptiveQualityRuntime {
   private validatingStoredProfile = false;
   private readonly unsubscribeState: () => boolean;
   private readonly unsubscribeTiming: () => boolean;
+  private readonly handleVisibilityChange = () => {
+    // A trial must not combine measurements from before and after a tab pause.
+    this.resetMeasurement();
+  };
 
   constructor(
     private readonly actions: PtActions,
@@ -41,10 +45,12 @@ export default class AdaptiveQualityRuntime {
     });
     this.unsubscribeState = actions.subscribe(() => this.sync());
     this.unsubscribeTiming = actions.subscribeFrameTiming((frameTimeMs) => this.onFrame(frameTimeMs));
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
     this.sync();
   }
 
   public dispose() {
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     this.assets.dispose();
     this.unsubscribeState();
     this.unsubscribeTiming();
