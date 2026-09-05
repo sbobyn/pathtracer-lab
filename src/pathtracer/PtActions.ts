@@ -160,6 +160,14 @@ export default class PtActions {
     return this.store.getState();
   }
 
+  public getSceneAssetLoads() {
+    return {
+      environment: this.renderer.settings.environmentMode === "map"
+        ? this.renderer.ptScene.environmentLoaded : null,
+      model: this.renderer.ptScene.staticAssetsLoaded,
+    };
+  }
+
   public setCameraDebugViewEnabled(enabled: boolean) {
     this.renderer.setCameraDebugViewEnabled(enabled);
   }

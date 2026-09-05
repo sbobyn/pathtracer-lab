@@ -51,7 +51,7 @@ pnpm dev
 
 Open the URL printed by Vite, normally `http://localhost:3005/pathtracer-lab/`. The editor UI dependency is bundled in `vendor/`.
 
-The default scene is Emissive Study in Comparison mode. Drag the divider, select an object to edit it, or open **Camera Rays**. On mobile, use the bottom navigation to switch inspectors.
+The default scene is Emissive Study in Comparison mode with MIS. Drag the divider, select an object to edit it, or open **Camera Rays**. On mobile, use the bottom navigation to switch inspectors. **Copy preset link** in the Scene panel shares a preset, not your local edits.
 
 Automatic calibration targets 30 FPS and prioritizes resolution. Higher FPS targets are available in performance settings.
 

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { sceneFromSearch } from "./SceneLinks";
 import PtActions from "./PtActions";
 import { PresetPtScenes, resolutionScaleForPreset } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
@@ -140,6 +141,13 @@ export default class PtApp {
       defaults,
       Object.keys(PresetPtScenes)
     );
+    const linkedScene = sceneFromSearch(window.location.search, Object.keys(PresetPtScenes));
+    if (linkedScene) {
+      // A shared preset should use its authored camera/environment, not settings
+      // saved for an unrelated scene on the recipient's device.
+      loadedState.sceneKey = linkedScene;
+      loadedState.settings = { ...defaults.settings };
+    }
     const initialState = {
       ...loadedState,
       settings: {
@@ -151,6 +159,15 @@ export default class PtApp {
       },
     };
     const ptScene = PresetPtScenes[initialState.sceneKey]();
+    if (linkedScene) {
+      initialState.settings.fov = ptScene.camera.fov;
+      initialState.settings.backgroundColorTop = `#${ptScene.backgroundColorTop.getHexString()}`;
+      initialState.settings.backgroundColorBottom = `#${ptScene.backgroundColorBottom.getHexString()}`;
+      initialState.settings.environmentMode = ptScene.environmentSource ? "map" : "gradient";
+      initialState.settings.environmentSource = ptScene.environmentSource;
+      initialState.settings.environmentLabel = ptScene.environmentLabel;
+      if (ptScene.initialEnvironmentIntensity !== null) initialState.settings.environmentIntensity = ptScene.initialEnvironmentIntensity;
+    }
     // Environment presets own their loading fallback. Do not replace that
     // fallback with globally persisted gradient colors during startup, or an
     // HDR scene can briefly flash another scene's blue/white sky on refresh.
@@ -167,7 +184,7 @@ export default class PtApp {
     ptScene.dirLight.color.copy(
       ptScene.environmentSource ? new THREE.Color(0xffffff) : ptScene.backgroundColorTop
     );
-    if (initialState.settings.environmentMode === "map" && initialState.settings.environmentSource) {
+    if (!linkedScene && initialState.settings.environmentMode === "map" && initialState.settings.environmentSource) {
       ptScene.setEnvironmentMap(
         initialState.settings.environmentSource,
         initialState.settings.environmentLabel

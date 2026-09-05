@@ -1,3 +1,4 @@
+import { AssetLoadStatus, FirstUseHint, SceneLink } from "./ReleaseUi";
 import {
   useEffect,
   useId,
@@ -522,6 +523,7 @@ function SceneSettings({
         layout="horizontal"
         onChange={(value) => actions.setScene(value)}
       />
+      <SceneLink sceneKey={state.sceneKey} />
       {presetPtSceneInfo[state.sceneKey] && (
         <PersistentDetails
           className="editor-subpanel scene-about"
@@ -1604,7 +1606,7 @@ function OfflineRenderJobCard({ job, actions }: {
 }
 
 function OfflineRenderPanel({ state, actions }: { state: Readonly<PtState>; actions: PtActions }) {
-  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("offline-render", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("offline-render", true);
   const [size, setSize] = usePersistentPanelSize(
     state.sceneKey,
     "offline-render",
@@ -2892,7 +2894,7 @@ function RenderPanel({
   actions: PtActions;
   performanceSettingsRequest: number;
 }) {
-  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("render", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("render", true);
   const [size, setSize] = usePersistentPanelSize(
     state.sceneKey,
     "render",
@@ -3448,7 +3450,7 @@ function EditorShell({ actions }: { actions: PtActions }) {
     (listener) => actions.subscribe(listener),
     () => actions.getState()
   );
-  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("scene", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("scene", true);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [renameFocusRequest, setRenameFocusRequest] = useState(0);
@@ -3898,6 +3900,8 @@ function EditorShell({ actions }: { actions: PtActions }) {
     />
     <OfflineRenderPanel state={state} actions={actions} />
     </div>
+    <FirstUseHint />
+    <AssetLoadStatus actions={actions} sceneKey={state.sceneKey} environmentSource={state.settings.environmentSource} />
     <nav className="mobile-panel-dock" aria-label="Editor panels">
       <button type="button" onClick={() => requestMobilePanel("scene")}>Scene</button>
       {state.selection.objectId !== null && (
@@ -3978,7 +3982,7 @@ function CameraRayDebugViewport({
     actions.getTriangleBvhStats().maxDepth,
     actions.getSphereBvhStats().maxDepth
   );
-  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("camera-ray-debug", false);
+  const [collapsed, setCollapsed] = usePersistentPanelCollapsed("camera-ray-debug", true);
   const [size, setSize] = usePersistentPanelSize(
     sceneKey,
     "camera-ray-debug",

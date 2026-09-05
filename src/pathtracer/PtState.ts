@@ -197,7 +197,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   orthographicHeight: 4,
   numSamples: 1,
   maxRayDepth: 10,
-  integratorMode: "bsdf",
+  integratorMode: "mis",
   triangleTraversalMode: "bvh",
   triangleOverlayMode: "off",
   bvhOverlayEnabled: false,

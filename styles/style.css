@@ -3,6 +3,36 @@
   padding: 0;
 }
 
+.scene-link { display: grid; gap: 6px; font-size: 12px; }
+.scene-link input { width: 100%; box-sizing: border-box; min-height: 32px; }
+.first-use-hint, .asset-load-status {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid #52525b;
+  border-radius: 10px;
+  background: #242428ed;
+  color: #e4e4e7;
+  font: 13px/1.5 system-ui, sans-serif;
+  pointer-events: auto;
+  z-index: 30;
+}
+.first-use-hint { bottom: 70px; display: flex; align-items: center; gap: 10px; }
+.first-use-hint button { flex: 0 0 32px; height: 32px; color: inherit; background: transparent; border: 0; font-size: 22px; cursor: pointer; }
+.asset-load-status { top: 140px; }
+.asset-load-status[role="alert"] { border-color: #f59e0b; }
+.asset-load-status p { margin-top: 6px; }
+@media (max-width: 700px) {
+  #editor-root:has([data-collapsed="false"]) .first-use-hint { display: none; }
+  .first-use-hint { bottom: calc(74px + env(safe-area-inset-bottom)); }
+  .first-use-hint button { flex-basis: 44px; height: 44px; }
+  .asset-load-status { top: 68px; }
+}
+
 .startup-status {
   position: fixed;
   inset: 0;
