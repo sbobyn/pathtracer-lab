@@ -14,9 +14,11 @@ Captured with the app's offline renderer and capture tools. [Individual images, 
 
 [![Emissive Study demo: enable debug BVH, orbit with five camera rays, then sweep the comparison divider across an orange teapot and reflective sphere](docs/media/emissive-demo.gif)](docs/media/emissive-demo.mp4)
 
-Explore the Emissive Study: orbit with debug BVH bounds, vary BVH depth, ray count and bounces, then sweep between raster and path-traced lighting and reflections. [Watch or download the 16-second demo (MP4)](docs/media/emissive-demo.mp4). Recorded at real speed; the looping preview has reduced resolution and frame rate.
+Explore the Emissive Study: move the camera, inspect its rays, and compare raster with path-traced lighting and reflections. [Watch the 14-second demo (MP4)](docs/media/emissive-demo.mp4). The looping preview has reduced resolution and frame rate; playback timing is unchanged.
 
-Also watch the [dense sphere-BVH scene demo](docs/media/sphere-bvh-demo.mp4): the same interactions in scene 10, with debug BVH bounds enabled partway through.
+[![CPU ray-traversal demo: visualize BVH bounds, pick a ray, and inspect its traversal](docs/media/bvh-traversal-viz.gif)](docs/media/bvh-traversal-viz.mp4)
+
+Follow a picked ray through the BVH in the **CPU traversal diagnostic**—not a readback of a live GPU pixel. [Watch the 27-second demo (MP4)](docs/media/bvh-traversal-viz.mp4).
 
 ## Explore, inspect, render
 

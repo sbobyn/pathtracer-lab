@@ -15,9 +15,13 @@ Captured from Path Tracer Lab at source commit `6549aea` on September 4, 2026, u
 
 [MP4](emissive-demo.mp4) · [Animated preview](emissive-demo.gif) · [Static poster](emissive-demo-poster.jpg)
 
-Recorded from the running development app with the revised orange Utah teapot in `EmissiveStudy`. Chrome viewport: 1100 × 800; authored 45° FOV; MIS; manual 0.75 resolution scale. The sequence enables debug BVH bounds, orbits the scene camera out and back, changes BVH depth 2→3→4→3, ray count 5→15→1→5, and ray bounce depth 3→5→10→3, then sweeps the comparison divider from near the left edge to near the right edge and back. Pauses show the teapot fully path traced and the metal sphere fully rasterized, ending on path-traced output. Actual frame timestamps are preserved without speedups; MP4 is encoded at 30 fps with CRF 18 and the 880 × 640 GIF at 12 fps. Sampling noise is retained, and displayed FPS is not a benchmark. Earlier demo variants remain available below.
+User-recorded retake from `emissive-demo-new.mov`, supplied in commit `91f152e`. Shows the revised emissive scene, comparison divider, camera movement, and camera-ray visualization. Source: 1734 × 1402, 120 fps, 13.98 seconds. Web copy: H.264 MP4, 1280 × 1034, 30 fps, CRF 22, fast-start enabled. The GIF is 660 × 534 at 10 fps. No speed changes, synthetic frames, or denoising; displayed application FPS is not a benchmark. The original MOV is retained.
 
-The latest hero includes a reddish emissive sphere on the left and a roughly 16-second sequence with swift actual camera/divider movements and brief control demonstrations, not accelerated playback. It uses a closer over-the-shoulder debug camera: position (3.8, 3.6, 8.8), aimed at (0, 0.9, 1.8). This is recording-specific framing, not a change to the app's default debug camera.
+## CPU BVH ray-traversal demo
+
+[MP4](bvh-traversal-viz.mp4) · [Animated preview](bvh-traversal-viz.gif) · [Static poster](bvh-traversal-viz-poster.jpg)
+
+User-recorded `bvh-traversal-viz.mov`, supplied in commit `91f152e`. Demonstrates the packed-triangle scene's BVH bounds and CPU “Pick ray” traversal visualization. This mirrors the reference traversal algorithm over the production flattened BVH, not a live GPU pixel readback. Source: 1734 × 1402, 120 fps, 27.435 seconds. Web copy: H.264 MP4, 1280 × 1034, 30 fps, CRF 22, fast-start enabled; GIF: 660 × 534 at 10 fps. Timing is unchanged and the original MOV is retained.
 
 ## RTIOW Final demo
 

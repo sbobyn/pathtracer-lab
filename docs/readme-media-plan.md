@@ -1,6 +1,6 @@
 # README media capture plan
 
-The six-tile showcase collage is in [media/showcase.webp](media/showcase.webp), with [individual PNGs and capture settings](media/README.md). A [short Emissive Study demo](media/emissive-demo.mp4), with a looping GIF preview, now follows it in the README. It enables debug BVH first, immediately orbits out and back with five debug rays, then quickly sweeps the comparison divider widely across the orange teapot and metal sphere. The scene includes a reddish emissive sphere on the left. Earlier RTIOW variants remain available. The concepts below are optional future expansions, not release blockers.
+The six-tile showcase collage remains in [media/showcase.webp](media/showcase.webp), with [individual PNGs and capture settings](media/README.md). The README now uses the user's new recordings: a [14-second Emissive Study demo](media/emissive-demo.mp4) and a [27-second CPU picked-ray BVH traversal demo](media/bvh-traversal-viz.mp4). Both have compact MP4 copies and animated previews; original MOVs are retained. The proposed helmet/dragon still refresh was stopped before replacing the collage. Earlier RTIOW variants remain available. The concepts below are optional future expansions, not release blockers.
 
 ## Interactive hero video
 
