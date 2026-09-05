@@ -8,7 +8,15 @@ An interactive browser lab for exploring light transport. Edit a scene, compare 
 
 Built with Three.js, React, GLSL, and a custom WebGL2 path tracer.
 
-> **Video · Interactive rendering** — Drag the Cornell box comparison divider, orbit the scene, then change a material. Show the path-traced side converging after the edit. Target: 15–20 seconds.
+[![Six captures from Path Tracer Lab: Cornell-box global illumination using MIS, dragon transmission and dispersion, glTF raster/path-traced comparison, selected-object comparison, camera-ray visualization, and BVH traversal](docs/media/showcase.webp)](docs/media/showcase.webp)
+
+Captured with the app's offline renderer and capture tools. [Individual images, settings, and asset credits](docs/media/README.md). The traversal view is a CPU diagnostic of the production BVH; the dragon retains visible sampling noise.
+
+[![Emissive Study demo: enable debug BVH, orbit with five camera rays, then sweep the comparison divider across an orange teapot and reflective sphere](docs/media/emissive-demo.gif)](docs/media/emissive-demo.mp4)
+
+Explore the Emissive Study: orbit with debug BVH bounds, vary BVH depth, ray count and bounces, then sweep between raster and path-traced lighting and reflections. [Watch or download the 16-second demo (MP4)](docs/media/emissive-demo.mp4). Recorded at real speed; the looping preview has reduced resolution and frame rate.
+
+Also watch the [dense sphere-BVH scene demo](docs/media/sphere-bvh-demo.mp4): the same interactions in scene 10, with debug BVH bounds enabled partway through.
 
 ## Explore, inspect, render
 
@@ -17,17 +25,11 @@ Built with Three.js, React, GLSL, and a custom WebGL2 path tracer.
 - **See the algorithms.** Inspect camera rays and bounces, visualize the renderer's BVH, and step through an individual ray's traversal. Scene descriptions and tooltips explain what to look for.
 - **Keep the result.** Capture the current view with optional overlays and panels, or render an offline still at a separate resolution and sample count. Preview progress, pause, cancel while retaining the partial image, and download PNGs.
 
-> **Video · Inside the renderer** — Show five rays in the Camera Rays viewport, then enable BVH bounds and step through a picked ray's traversal. Target: 15–20 seconds.
-
 ## Rendering capabilities
 
 Progressive accumulation with configurable samples, bounce depth, resolution, and precision; BSDF-only, direct-light, and multiple importance sampling; perspective and orthographic cameras with depth-of-field controls.
 
 The renderer supports analytic spheres, quads and oriented boxes, indexed triangle meshes, custom sphere/triangle BVHs, image and procedural textures, emissive geometry, analytic point/spot/directional lights, and importance-sampled HDR environments. Materials include the original RTIOW learning models and principled metallic-roughness shading with rough transmission, volume attenuation, and dispersion.
-
-> **Image · Render gallery, 3 × 2** — Six offline stills labeled “Indirect light,” “Metal & roughness,” “Transmission,” “Volume attenuation,” “Dispersion,” and “Textures.” Include asset credits with the finished collage.
-
-> **Image · Inspectable rendering, 2 × 2** — Four captures labeled “Raster / path traced,” “Region rendering,” “Camera rays,” and “BVH traversal.” Keep relevant overlays visible and unrelated panels closed.
 
 ## Run locally
 
@@ -71,5 +73,3 @@ The project continues [three-pathtracer](https://github.com/sbobyn/three-pathtra
 The project's source code is licensed under the [MIT License](LICENSE).
 
 Bundled models, textures, environments, and dependencies retain their own licenses. See the [asset credits](src/assets/README.md) and [Khronos showcase notices](src/assets/gltf/khronos-pbr/README.md). Dragon geometry is credited to the Stanford Computer Graphics Laboratory; its included license contains non-commercial restrictions. Do not treat the entire asset collection as covered by the project's source-code license.
-
-<!-- Release preparation: replace media descriptions with final captures. -->

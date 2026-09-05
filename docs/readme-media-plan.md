@@ -1,6 +1,6 @@
 # README media capture plan
 
-Use two short interaction videos and two collages, captured from Path Tracer Lab. Keep original captures so crops and labels can be adjusted later.
+The six-tile showcase collage is in [media/showcase.webp](media/showcase.webp), with [individual PNGs and capture settings](media/README.md). A [short Emissive Study demo](media/emissive-demo.mp4), with a looping GIF preview, now follows it in the README. It enables debug BVH first, immediately orbits out and back with five debug rays, then quickly sweeps the comparison divider widely across the orange teapot and metal sphere. The scene includes a reddish emissive sphere on the left. Earlier RTIOW variants remain available. The concepts below are optional future expansions, not release blockers.
 
 ## Interactive hero video
 
@@ -34,5 +34,5 @@ Four captures in a 2 × 2 grid: Comparison, Region rendering, Camera rays, BVH t
 - Export collages as PNG or WebP and inspect at actual README display width.
 - Add nearby captions with scene/asset credits.
 - Give videos static poster images and usable links; verify playback in the rendered GitHub README before publication.
-- Replace the four visible README media descriptions when final captures are available.
+- The launch README media placeholders have been replaced with captures and a recording.
 - Use the release build for captures; include device/settings context if showing performance claims.
