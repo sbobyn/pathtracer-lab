@@ -1,4 +1,5 @@
 import type PtActions from "./PtActions";
+import { AssetReadiness } from "./AssetReadiness";
 import {
   cancelCalibration,
   createCalibrationSession,
@@ -17,6 +18,8 @@ const SETTLE_FRAMES = 2;
 const MEASURED_FRAMES = 12;
 
 export default class AdaptiveQualityRuntime {
+  private readonly assets = new AssetReadiness(() => this.sync());
+  private forceAfterAssets = false;
   private session: CalibrationSession | null = null;
   private frameTimes: number[] = [];
   private warmupFrames = 0;
@@ -42,6 +45,7 @@ export default class AdaptiveQualityRuntime {
   }
 
   public dispose() {
+    this.assets.dispose();
     this.unsubscribeState();
     this.unsubscribeTiming();
   }
@@ -66,6 +70,15 @@ export default class AdaptiveQualityRuntime {
       }
       return;
     }
+    if (!this.assets.ready(Object.values(this.actions.getSceneAssetLoads()))) {
+      this.forceAfterAssets ||= force;
+      this.session = null;
+      this.signature = "";
+      if (state.qualityCalibration !== null) this.actions.publishQualityCalibration(null);
+      return;
+    }
+    force ||= this.forceAfterAssets;
+    this.forceAfterAssets = false;
     const renderContext = this.actions.getAdaptiveQualityContext();
     const context: AdaptiveQualityProfileContext = {
       sceneKey: state.sceneKey,
@@ -110,6 +123,7 @@ export default class AdaptiveQualityRuntime {
   }
 
   private onFrame(frameTimeMs: number) {
+    if (!this.assets.ready(Object.values(this.actions.getSceneAssetLoads()))) return;
     const session = this.session;
     if (!session || session.phase === "complete" || session.phase === "cancelled") return;
     if (document.visibilityState !== "visible") return;
