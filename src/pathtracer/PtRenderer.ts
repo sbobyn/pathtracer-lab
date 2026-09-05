@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createCameraDebugOutlines } from "./CameraDebugOutlines";
 import { configureRasterRenderer } from "./RasterPreviewQuality";
 import { ShaderCanvas } from "../utils/ShaderCanvas";
 import fragShader from "./shaders/main.fs";
@@ -1126,35 +1127,8 @@ export default class PtRenderer {
       ...this.ptScene.getBoxMeshes(),
       ...this.ptScene.getTriangleMeshes(),
     ];
-    for (const mesh of this.cameraDebugStaticDirty ? traceableMeshes.slice(0, 48) : []) {
-      if (!mesh.visible) continue;
-      mesh.updateWorldMatrix(true, false);
-      const primitiveType = mesh.userData.pathTracer.primitiveType;
-      const color = primitiveType === "sphere"
-        ? 0xc084fc
-        : primitiveType === "quad"
-          ? 0x38bdf8
-          : primitiveType === "box"
-            ? 0xf59e0b
-          : 0x94a3b8;
-      let outlineGeometry: THREE.BufferGeometry;
-      if (primitiveType === "sphere") {
-        const proxy = new THREE.SphereGeometry(1, 14, 9);
-        outlineGeometry = new THREE.WireframeGeometry(proxy);
-        proxy.dispose();
-      } else {
-        outlineGeometry = new THREE.EdgesGeometry(
-          mesh.geometry,
-          primitiveType === "triangleMesh" ? 1 : 24
-        );
-      }
-      const outline = new THREE.LineSegments(
-        outlineGeometry,
-        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.46 })
-      );
-      outline.matrixAutoUpdate = false;
-      outline.matrix.copy(mesh.matrixWorld);
-      this.cameraDebugStaticGroup.add(outline);
+    if (this.cameraDebugStaticDirty) {
+      this.cameraDebugStaticGroup.add(createCameraDebugOutlines(traceableMeshes));
     }
 
     const diagramCamera = this.camera.clone();
