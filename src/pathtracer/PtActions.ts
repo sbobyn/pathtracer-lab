@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { setSceneGradientColor } from "./SceneBackgroundColors";
 import { PresetPtScenes, resolutionScaleForPreset } from "./PresetPtScenes";
 import PtRenderer from "./PtRenderer";
 import {
@@ -743,9 +744,8 @@ export default class PtActions {
   }
 
   public setBackgroundColorTop(value: THREE.ColorRepresentation) {
-    const color = new THREE.Color(value);
-    this.renderer.ptScene.scene.background = color;
-    this.renderer.ptScene.dirLight.color = color;
+    const color = setSceneGradientColor(this.renderer.ptScene, "top", value,
+      this.renderer.settings.environmentMode === "gradient");
     this.renderer.uniforms.uBackgroundColorTop.value = color;
     this.renderer.invalidate(
       PtInvalidationLevel.Settings,
@@ -755,7 +755,8 @@ export default class PtActions {
   }
 
   public setBackgroundColorBottom(value: THREE.ColorRepresentation) {
-    const color = new THREE.Color(value);
+    const color = setSceneGradientColor(this.renderer.ptScene, "bottom", value,
+      this.renderer.settings.environmentMode === "gradient");
     this.renderer.uniforms.uBackgroundColorBottom.value = color;
     this.renderer.invalidate(
       PtInvalidationLevel.Settings,
