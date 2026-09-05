@@ -2,7 +2,7 @@
 
 Captured from Path Tracer Lab at source commit `6549aea` on September 4, 2026, using an isolated Chrome session. The collage combines real application output with caption strips. No generated imagery, denoising, relighting, or synthetic ray/geometry overlays were added. Cropping and resizing were used for layout; the collage is compressed as WebP and individual tiles are PNGs.
 
-The Cornell tile was recaptured on September 4, 2026 from the working tree based on `bcad27e`, with sky and horizon explicitly set to black. It retains the settings below; the other five captures are unchanged.
+The Cornell tile was recaptured on September 4, 2026 with black sky and horizon, using the settings below.
 
 | Image | Scene and capture settings |
 | --- | --- |
@@ -17,13 +17,13 @@ The Cornell tile was recaptured on September 4, 2026 from the working tree based
 
 [Animated preview](emissive-demo.gif) · [Static poster](emissive-demo-poster.jpg)
 
-User-recorded retake from `emissive-demo-new.mov`, supplied in commit `91f152e`. Shows the revised emissive scene, comparison divider, camera movement, and camera-ray visualization. Source: 1734 × 1402, 120 fps, 13.98 seconds. The GIF is 660 × 534 at 10 fps. No speed changes, synthetic frames, or denoising; displayed application FPS is not a benchmark. The original recording is recoverable from Git history.
+Shows the emissive scene, comparison divider, camera movement, and camera-ray visualization. The 14-second GIF is 660 × 534 at 10 fps, with original playback timing. Displayed application FPS is not a benchmark.
 
 ## CPU BVH ray-traversal demo
 
 [Animated preview](bvh-traversal-viz.gif) · [Static poster](bvh-traversal-viz-poster.jpg)
 
-User-recorded `bvh-traversal-viz.mov`, supplied in commit `91f152e`. Demonstrates the packed-triangle scene's BVH bounds and CPU “Pick ray” traversal visualization. This mirrors the reference traversal algorithm over the production flattened BVH, not a live GPU pixel readback. Source: 1734 × 1402, 120 fps, 27.435 seconds. GIF: 660 × 534 at 10 fps. Timing is unchanged; the original recording is recoverable from Git history.
+Demonstrates the packed-triangle scene's BVH bounds and CPU “Pick ray” traversal visualization. This uses the reference traversal algorithm over the production flattened BVH, not live GPU pixel readback. The 27-second GIF is 660 × 534 at 10 fps, with original playback timing.
 
 ## Credits
 

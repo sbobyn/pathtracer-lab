@@ -108,7 +108,7 @@ metallic-roughness data remains linear.
 Only `TEXCOORD_0` with an identity texture transform is currently accepted.
 Secondary UV sets and `KHR_texture_transform` fail explicitly instead of being
 sampled with the wrong coordinates. Normal maps, occlusion semantics, alpha
-modes, and double-sided transport remain scoped to STE-714.
+modes, and double-sided transport remain future importer improvements.
 
 The WebGL shader currently exposes four material-image sampler uniforms. Shared
 Three.js texture objects are deduplicated before consuming those slots, and a
