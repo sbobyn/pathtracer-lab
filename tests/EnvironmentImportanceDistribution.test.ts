@@ -10,6 +10,32 @@ function texture(data: Float32Array, width: number, height: number) {
   return new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType);
 }
 
+test("HDR flipY maps bright source rows into the same texture-v rows as radiance", () => {
+  const data = new Float32Array(2 * 4 * 4);
+  data.set([100, 100, 100, 1], 0);
+  const map = texture(data, 2, 4);
+  map.flipY = true; // RGBELoader's upload convention.
+  const flipped = buildEnvironmentImportanceDistribution(map);
+  const marginal = flipped.marginal.image.data as Float32Array;
+  assert.equal(marginal[1], 0);
+  assert.equal(marginal[3 * 4 + 1], 1);
+  const conditional = flipped.conditional.image.data as Float32Array;
+  assert.equal(conditional[(3 * 2) * 4 + 1], 1);
+  map.flipY = false;
+  const unflipped = buildEnvironmentImportanceDistribution(map);
+  assert.equal((unflipped.marginal.image.data as Float32Array)[1], 1);
+});
+
+test("flipped HDR pooling mirrors source rows before downsampling", () => {
+  const data = new Float32Array(513 * 4);
+  data.set([100, 100, 100, 1], 0);
+  const map = texture(data, 1, 513);
+  map.flipY = true;
+  const distribution = buildEnvironmentImportanceDistribution(map);
+  assert.equal(distribution.size.y, 256);
+  assert.equal((distribution.marginal.image.data as Float32Array)[255 * 4 + 1], 1);
+});
+
 test("dominant environment direction follows the brightest texel and rotation", () => {
   const data = new Float32Array(4 * 2 * 4);
   data.fill(0);

@@ -89,7 +89,11 @@ export function buildEnvironmentImportanceDistribution(
   const luminanceSums = new Float64Array(width * height);
   const sampleCounts = new Uint32Array(width * height);
   for (let sourceY = 0; sourceY < image.height; sourceY++) {
-    const targetY = Math.min(height - 1, Math.floor(sourceY * height / image.height));
+    // The CDF textures use GPU texture-v order, not the source array's row
+    // order. RGBELoader sets flipY=true on its HDR texture; mirror its rows
+    // here so the PDF and sampled directions match the uploaded radiance.
+    const textureY = texture.flipY ? image.height - 1 - sourceY : sourceY;
+    const targetY = Math.min(height - 1, Math.floor(textureY * height / image.height));
     for (let sourceX = 0; sourceX < image.width; sourceX++) {
       const targetX = Math.min(width - 1, Math.floor(sourceX * width / image.width));
       const sourceOffset = (sourceY * image.width + sourceX) * channels;
