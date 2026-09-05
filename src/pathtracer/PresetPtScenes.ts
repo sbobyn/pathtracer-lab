@@ -642,12 +642,16 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
       PtMaterial.legacyFuzzyMetal(new THREE.Color(0xd8e2ee), 0),
       PtMaterial.emissive(new THREE.Color(1, 0.64, 0.28), 14),
       PtMaterial.emissive(new THREE.Color(0.2, 0.48, 1), 9, true),
-      PtMaterial.emissive(new THREE.Color(1, 0.12, 0.06), 7, true),
+      PtMaterial.emissive(new THREE.Color(1, 0.005, 0.003), 10, true),
+      PtMaterial.emissive(new THREE.Color(0.08, 0.25, 1), 7, true),
+      PtMaterial.emissive(new THREE.Color(0.55, 0.08, 1), 6, true),
     ];
     const spheres = [
       new PtSphere(new THREE.Vector3(0.65, 0.05, -1.1), 0.55, 2),
       new PtSphere(new THREE.Vector3(2.1, 1.15, -0.35), 0.3, 4),
       new PtSphere(new THREE.Vector3(-2.45, 0.95, -0.25), 0.25, 5),
+      // Secondary colored emitters add rear lighting and distinct reflected highlights.
+      new PtSphere(new THREE.Vector3(-1.0, -0.05, -1.35), 0.24, 6),
     ];
     const quads = [
       new PtQuad(
@@ -671,11 +675,18 @@ export const PresetPtScenes: { [key: string]: () => PtScene } = {
     });
     camera.fov = 45;
     const scene = new PtScene(spheres, materials, camera, quads);
+    scene.insertBoxMesh(scene.createBoxMesh(
+      new THREE.Vector3(2.35, 0.1, 0.65),
+      new THREE.Quaternion(),
+      new THREE.Vector3(0.44, 0.44, 0.44),
+      7,
+      "Purple emissive cube"
+    ));
     // Replace the diffuse sphere with an orange silhouette reflected in the metal sphere.
     const teapotGeometry = new TeapotGeometry(0.5, 8, true, true, true, true, true);
     teapotGeometry.computeBoundingBox();
     const teapot = scene.addTriangleMesh(teapotGeometry, 1, "Utah teapot");
-    teapot.position.set(-1.25, -0.5 - (teapotGeometry.boundingBox?.min.y ?? 0), 0.2);
+    teapot.position.set(-1.45, -0.5 - (teapotGeometry.boundingBox?.min.y ?? 0), 0.55);
     teapot.rotation.y = THREE.MathUtils.degToRad(-25);
     teapot.updateMatrixWorld(true);
     scene.backgroundColorTop.set(0x000000);
