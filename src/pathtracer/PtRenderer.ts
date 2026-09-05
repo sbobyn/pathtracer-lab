@@ -551,6 +551,15 @@ export default class PtRenderer {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
     });
+    this.renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
+      console.error("Shader compilation/link failed", {
+        program: gl.getProgramInfoLog(program),
+        vertex: gl.getShaderInfoLog(vertex),
+        fragment: gl.getShaderInfoLog(fragment),
+      });
+      this.renderer.setAnimationLoop(null);
+      this.canvas.dispatchEvent(new Event("pathtracer-shader-error"));
+    };
     if (!this.renderer.capabilities.isWebGL2) {
       throw new Error("The packed scene-data path requires WebGL2");
     }

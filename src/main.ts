@@ -35,16 +35,26 @@ function showFailure(title: string, message: string) {
   reload.focus();
 }
 
-const handleContextLost = (event: Event) => {
-  event.preventDefault();
-  showFailure("The graphics connection was lost", "The browser stopped the GPU session. Close other graphics-heavy tabs, then reload to restart. Unsaved scene edits will be lost when you reload.");
-  // Let Three.js finish handling the event before releasing the application.
+function disposeAfterFailure() {
+  // Let the current render/event finish before releasing its resources.
   queueMicrotask(() => {
     try { app?.dispose(); } catch (error) { console.error("GPU cleanup failed", error); }
     app = undefined;
   });
+}
+const handleContextLost = (event: Event) => {
+  event.preventDefault();
+  if (stopped) return;
+  showFailure("The graphics connection was lost", "The browser stopped the GPU session. Close other graphics-heavy tabs, then reload to restart. Unsaved scene edits will be lost when you reload.");
+  disposeAfterFailure();
+};
+const handleShaderError = () => {
+  if (stopped) return;
+  showFailure("A rendering shader couldn’t run", "Try reloading or using another browser or device. If it keeps happening, report the scene and browser with the shader error from the developer console. Reloading will discard unsaved scene edits.");
+  disposeAfterFailure();
 };
 canvas.addEventListener("webglcontextlost", handleContextLost);
+canvas.addEventListener("pathtracer-shader-error", handleShaderError);
 
 async function start() {
   try {
@@ -58,7 +68,7 @@ async function start() {
     ]);
     if (stopped) return;
     app = new PtApp(canvas, (actions) => new ReactEditorUi(editorRoot, actions));
-    status.hidden = true;
+    if (!stopped) status.hidden = true;
   } catch (error) {
     console.error("Pathtracer Lab startup failed", error);
     if (!stopped) showFailure("Pathtracer Lab couldn’t start", "Check your connection and reload. If the problem persists, try another browser or device. Technical details are available in the browser console.");
@@ -70,6 +80,7 @@ if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     stopped = true;
     canvas.removeEventListener("webglcontextlost", handleContextLost);
+    canvas.removeEventListener("pathtracer-shader-error", handleShaderError);
     app?.dispose();
     canvas.remove();
     editorRoot.remove();
