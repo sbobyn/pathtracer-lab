@@ -101,6 +101,25 @@ test("30 FPS target accepts frame times that fail a 60 FPS target", () => {
   assert.equal(sixty.measurements[0].passed, false);
 });
 
+test("30 FPS keeps full resolution where 60 FPS selects half resolution", () => {
+  const select = (targetFps: 30 | 60) => {
+    let session = finishWarmup(createCalibrationSession({
+      targetFps,
+      minimumResolutionScale: 0.5,
+      maximumSamplesPerFrame: 1,
+      resolutionSteps: [0.5, 1],
+      sampleSteps: [1],
+    }));
+    session = recordCalibrationTrial(session, fast60);
+    session = recordCalibrationTrial(session, Array(10).fill(29));
+    session = recordCalibrationTrial(session,
+      Array(10).fill(session.candidate.resolutionScale === 1 ? 29 : 12));
+    return session.selected;
+  };
+  assert.deepEqual(select(30), { resolutionScale: 1, samplesPerFrame: 1 });
+  assert.deepEqual(select(60), { resolutionScale: 0.5, samplesPerFrame: 1 });
+});
+
 test("limits constrain the search ladder and progress remains determinate", () => {
   const session = createCalibrationSession({
     targetFps: 120,

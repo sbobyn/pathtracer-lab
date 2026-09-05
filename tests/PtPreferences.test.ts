@@ -18,10 +18,15 @@ class MemoryStorage {
   removeItem() { this.value = null; }
 }
 
-test("new users begin with the Cornell box comparison showcase", () => {
+test("new users begin with the Emissive Study comparison showcase", () => {
   const state = createDefaultPtState();
-  assert.equal(state.sceneKey, "CornellBox");
+  assert.equal(state.sceneKey, "EmissiveStudy");
   assert.equal(state.settings.renderMode, "comparison");
+  const loaded = loadPtPreferences(new MemoryStorage(), state, ["EmissiveStudy"]);
+  assert.equal(loaded.settings.fov, 45);
+  assert.equal(loaded.settings.qualityTargetFps, 30);
+  assert.equal(loaded.settings.backgroundColorTop, "#000000");
+  assert.equal(loaded.settings.backgroundColorBottom, "#000000");
 });
 
 test("loads valid versioned preferences over authoritative defaults", () => {

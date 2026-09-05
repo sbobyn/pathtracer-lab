@@ -174,7 +174,8 @@ export interface PtState {
 
 const defaultSettings: Readonly<PtSettings> = Object.freeze({
   qualityMode: "auto",
-  qualityTargetFps: 60,
+  // Spend the interactive frame budget on resolution before chasing high FPS.
+  qualityTargetFps: 30,
   qualityMinimumResolutionScale: 0.125,
   qualityMaximumSamples: 8,
   renderMode: "comparison",
@@ -188,9 +189,10 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
   environmentLightingIntensity: 1,
   environmentBackgroundVisible: true,
   environmentLightingEnabled: true,
-  backgroundColorTop: "#bcdaff",
-  backgroundColorBottom: "#ffffff",
-  fov: 75,
+  // Match the initial EmissiveStudy preset; other presets supply their own colors.
+  backgroundColorTop: "#000000",
+  backgroundColorBottom: "#000000",
+  fov: 45,
   cameraProjectionMode: "perspective",
   orthographicHeight: 4,
   numSamples: 1,
@@ -214,7 +216,7 @@ const defaultSettings: Readonly<PtSettings> = Object.freeze({
 
 export function createDefaultPtState(): PtState {
   return {
-    sceneKey: "CornellBox",
+    sceneKey: "EmissiveStudy",
     sceneRevision: 0,
     stillRenderJobs: [],
     sceneObjects: [],
