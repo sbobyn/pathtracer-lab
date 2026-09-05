@@ -20,6 +20,12 @@ export function createFullScreenPerspectiveCamera({
     far
   );
   camera.position.copy(position);
+  camera.userData.orbitTarget = lookAt.toArray();
+  // Preserve horizontal scene coverage on narrow first-load viewports.
+  // This changes only the preset pose, never an ongoing orbit/resize gesture.
+  if (window.innerWidth <= 700 && camera.aspect < 1) {
+    camera.position.sub(lookAt).multiplyScalar(1 / camera.aspect).add(lookAt);
+  }
   camera.lookAt(lookAt);
 
   return camera;

@@ -1386,11 +1386,11 @@ export default class PtRenderer {
     // scene and the camera/frustum in view; aiming back at the camera marker
     // itself points away from the scene.
     const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(diagramCamera.quaternion);
-    // Look beyond the authored focal target so the camera marker, image plane,
-    // and forward ray volume are pulled back into the viewport together.
+    // Center the useful diagram between the source camera and its focal point.
+    // Extrapolating past the target sends the actual scene into a corner.
     const overviewCenter = diagramCamera.position
       .clone()
-      .lerp(this.orbitControls.target, 5.0);
+      .lerp(this.orbitControls.target, 0.5);
     if (!this.cameraDebugUserControlled) {
       const overviewScale = Math.max(
         cameraViewDistance,
@@ -1755,6 +1755,10 @@ export default class PtRenderer {
     }
 
     this.orbitControls = new OrbitControls(this.camera, this.canvas);
+    const authoredTarget = this.camera.userData.orbitTarget;
+    if (Array.isArray(authoredTarget) && authoredTarget.length === 3) {
+      this.orbitControls.target.fromArray(authoredTarget);
+    }
     this.orbitControls.rotateSpeed = 0.5;
     this.orbitControls.addEventListener("change", this.handleOrbitChange);
     // this.orbitControls.enableDamping = true;
