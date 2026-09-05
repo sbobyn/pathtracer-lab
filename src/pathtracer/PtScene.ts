@@ -95,6 +95,7 @@ export default class PtScene {
   rasterGradientEnvironmentTexture: THREE.Texture | null = null;
   environmentDistribution: EnvironmentImportanceDistribution | null = null;
   environmentLoaded: Promise<THREE.Texture> | null = null;
+  private environmentLoadRevision = 0;
   initialEnvironmentIntensity: number | null = null;
   staticAssetsLoaded: Promise<void> | null = null;
   staticAssetError: Error | null = null;
@@ -205,6 +206,7 @@ export default class PtScene {
   }
 
   public setEnvironmentMap(source: string, label: string) {
+    const revision = ++this.environmentLoadRevision;
     this.environmentSource = source;
     this.environmentLabel = label;
     // HDR presets use black as a temporary loading fallback. Keep that
@@ -222,6 +224,11 @@ export default class PtScene {
     }
     this.environmentLoaded = new Promise((resolve, reject) => {
       new RGBELoader().load(source, (texture) => {
+        if (revision !== this.environmentLoadRevision) {
+          texture.dispose();
+          resolve(texture);
+          return;
+        }
         texture.mapping = THREE.EquirectangularReflectionMapping;
         texture.wrapS = THREE.RepeatWrapping;
         this.environmentTexture = texture;

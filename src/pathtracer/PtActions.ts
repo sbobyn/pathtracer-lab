@@ -774,6 +774,8 @@ export default class PtActions {
   }
 
   public setEnvironmentGradient() {
+    // Invalidate pending HDR loads so they cannot overwrite a later gradient.
+    this.renderer.ptScene.setEnvironmentMap("", "Gradient");
     this.renderer.ptScene.scene.background = this.renderer.ptScene.backgroundColorTop;
     this.renderer.ptScene.scene.environment = this.renderer.settings.environmentLightingEnabled
       ? this.renderer.ptScene.rasterGradientEnvironmentTexture

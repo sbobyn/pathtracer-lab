@@ -2039,11 +2039,12 @@ export default class PtRenderer {
         this.ptScene.environmentTexture ?? this.fallbackImageTexture;
       this.updateEnvironmentDistributionUniforms();
       this.uniforms.uEnvironmentEnabled.value = this.settings.environmentMode === "map";
-      this.ptScene.scene.background = this.settings.environmentBackgroundVisible
-        ? this.ptScene.environmentTexture
-        : null;
+      this.ptScene.scene.background = this.settings.environmentMode === "map"
+        ? (this.settings.environmentBackgroundVisible ? this.ptScene.environmentTexture : null)
+        : this.ptScene.backgroundColorTop;
       this.ptScene.scene.environment = this.settings.environmentLightingEnabled
-        ? this.ptScene.environmentTexture
+        ? (this.settings.environmentMode === "map"
+          ? this.ptScene.environmentTexture : this.ptScene.rasterGradientEnvironmentTexture)
         : null;
       this.invalidate(PtInvalidationLevel.Settings, "environment map loaded");
     }).catch((error) => console.error("Failed to load environment map", error));
