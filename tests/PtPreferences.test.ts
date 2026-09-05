@@ -29,6 +29,17 @@ test("new users begin with the Emissive Study comparison showcase", () => {
   assert.equal(loaded.settings.backgroundColorBottom, "#000000");
 });
 
+test("intermediate resolution and calibration minimum persist", () => {
+  const storage = new MemoryStorage();
+  const state = createDefaultPtState();
+  state.settings.resolutionScale = 0.75;
+  state.settings.qualityMinimumResolutionScale = 0.75;
+  savePtPreferences(storage, state);
+  const loaded = loadPtPreferences(storage, createDefaultPtState(), [state.sceneKey]);
+  assert.equal(loaded.settings.resolutionScale, 0.75);
+  assert.equal(loaded.settings.qualityMinimumResolutionScale, 0.75);
+});
+
 test("loads valid versioned preferences over authoritative defaults", () => {
   const storage = new MemoryStorage();
   storage.value = JSON.stringify({

@@ -120,17 +120,32 @@ test("30 FPS keeps full resolution where 60 FPS selects half resolution", () => 
   assert.deepEqual(select(60), { resolutionScale: 0.5, samplesPerFrame: 1 });
 });
 
+test("intermediate resolution is selected before spending budget on samples", () => {
+  let session = finishWarmup(createCalibrationSession({
+    targetFps: 30, minimumResolutionScale: 0.5, maximumSamplesPerFrame: 2,
+  }));
+  session = recordCalibrationTrial(session, Array(10).fill(12));
+  assert.deepEqual(session.candidate, { resolutionScale: 0.75, samplesPerFrame: 1 });
+  session = recordCalibrationTrial(session, Array(10).fill(26));
+  session = recordCalibrationTrial(session, Array(10).fill(42));
+  assert.deepEqual(session.candidate, { resolutionScale: 0.75, samplesPerFrame: 2 });
+  session = recordCalibrationTrial(session, Array(10).fill(45));
+  session = recordCalibrationTrial(session, Array(10).fill(26));
+  assert.deepEqual(session.selected, { resolutionScale: 0.75, samplesPerFrame: 1 });
+  assert.equal(session.phase, "complete");
+});
+
 test("limits constrain the search ladder and progress remains determinate", () => {
   const session = createCalibrationSession({
     targetFps: 120,
     minimumResolutionScale: 0.5,
     maximumSamplesPerFrame: 4,
   });
-  assert.deepEqual(session.resolutionSteps, [0.5, 1, 2]);
+  assert.deepEqual(session.resolutionSteps, [0.5, 0.75, 1, 2]);
   assert.deepEqual(session.sampleSteps, [1, 2, 4]);
   assert.deepEqual(calibrationProgress(session), {
     completed: 0,
-    maximum: 6,
+    maximum: 7,
     fraction: 0,
   });
 });

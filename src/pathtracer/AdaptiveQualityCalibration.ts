@@ -48,7 +48,7 @@ export interface CalibrationSession {
 
 let nextCalibrationRunId = 1;
 
-const DEFAULT_RESOLUTION_STEPS = [0.0625, 0.125, 0.25, 0.5, 1, 2] as const;
+const DEFAULT_RESOLUTION_STEPS = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 2] as const;
 const DEFAULT_SAMPLE_STEPS = [1, 2, 4, 8, 12, 16, 20] as const;
 
 export function createCalibrationSession(config: CalibrationConfig): CalibrationSession {

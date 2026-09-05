@@ -2669,8 +2669,18 @@ body {
   }
 
   .editor-top-toolbar:not(:has(.transform-toolbar)) {
-    left: 50%;
-    transform: translateX(-50%);
+    /* Center within the free space, not underneath the history controls. */
+    left: calc(var(--mobile-safe-left) + 120px);
+    right: calc(var(--mobile-safe-right) + 48px);
+    width: auto;
+    max-width: none;
+    justify-content: center;
+    transform: none;
+  }
+
+  #editor-root:has(.editor-shell[data-collapsed="false"], .object-inspector[data-collapsed="false"], .render-panel[data-collapsed="false"], .camera-ray-debug[data-collapsed="false"]) .performance-calibration-hud--complete,
+  #editor-root:has(.editor-shell[data-collapsed="false"], .object-inspector[data-collapsed="false"], .render-panel[data-collapsed="false"], .camera-ray-debug[data-collapsed="false"]) .performance-calibration-hud--cancelled {
+    display: none;
   }
 
   .history-panel button,

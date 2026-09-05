@@ -1,7 +1,8 @@
 import type { CalibrationTargetFps } from "./AdaptiveQualityCalibration";
 
 export const ADAPTIVE_QUALITY_PROFILES_KEY = "three-pathtracer.adaptive-quality-profiles";
-export const ADAPTIVE_QUALITY_PROFILES_VERSION = 1;
+// Recalibrate profiles measured before the intermediate resolution ladder.
+export const ADAPTIVE_QUALITY_PROFILES_VERSION = 2;
 
 export interface AdaptiveQualityProfileContext {
   sceneKey: string;
@@ -27,7 +28,7 @@ export interface AdaptiveQualityProfileStorage {
 }
 
 interface StoredProfiles {
-  version: 1;
+  version: 2;
   profiles: Record<string, AdaptiveQualityProfile>;
 }
 

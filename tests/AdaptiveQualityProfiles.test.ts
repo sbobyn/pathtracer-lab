@@ -37,7 +37,7 @@ describe("adaptive quality profiles", () => {
   it("round trips a profile", () => {
     const storage = memoryStorage();
     const profile = {
-      resolutionScale: 0.5,
+      resolutionScale: 0.75,
       samples: 4,
       medianFrameTimeMs: 14,
       p90FrameTimeMs: 16,
@@ -48,6 +48,13 @@ describe("adaptive quality profiles", () => {
   });
 
   it("ignores corrupt and incompatible storage", () => {
+    const old = memoryStorage(JSON.stringify({version: 1, profiles: {
+      [adaptiveQualityProfileKey(context)]: {
+        resolutionScale: 0.5, samples: 2, medianFrameTimeMs: 25,
+        p90FrameTimeMs: 28, measuredAt: 1234,
+      },
+    }}));
+    assert.equal(loadAdaptiveQualityProfile(old, context), null);
     assert.equal(loadAdaptiveQualityProfile(memoryStorage("not json"), context), null);
     const storage = memoryStorage(JSON.stringify({ version: 99, profiles: {} }));
     assert.equal(loadAdaptiveQualityProfile(storage, context), null);

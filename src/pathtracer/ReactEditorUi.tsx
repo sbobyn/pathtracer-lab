@@ -741,7 +741,7 @@ function RenderSettings({
   const calibrationP90Fps = finalCalibrationMeasurement
     ? 1000 / Math.max(finalCalibrationMeasurement.p90FrameTimeMs, 1e-6)
     : null;
-  const lowerResolutionSuggestion = [1, 0.5, 0.25, 0.125, 0.0625]
+  const lowerResolutionSuggestion = [1, 0.75, 0.5, 0.25, 0.125, 0.0625]
     .find((scale) => scale < settings.qualityMinimumResolutionScale) ?? null;
   const lowerTargetSuggestion = [120, 90, 60, 30]
     .find((fps) => fps < settings.qualityTargetFps) as typeof settings.qualityTargetFps | undefined;
@@ -881,7 +881,7 @@ function RenderSettings({
               <SelectField
                 label="Min resolution"
                 value={String(settings.qualityMinimumResolutionScale)}
-                options={[1, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({ value: String(scale), label: `${scale}×` }))}
+                options={[1, 0.75, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({ value: String(scale), label: `${scale}×` }))}
                 density="compact"
                 layout="horizontal"
                 onChange={(value) => actions.setQualityMinimumResolutionScale(Number(value))}
@@ -1113,7 +1113,7 @@ function RenderSettings({
       }}><SelectField
           label="Resolution"
           value={String(settings.resolutionScale)}
-          options={[2, 1, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({
+          options={[2, 1, 0.75, 0.5, 0.25, 0.125, 0.0625].map((scale) => ({
             value: String(scale),
             label: `${scale}×`,
           }))}
@@ -2759,6 +2759,10 @@ function PerformanceCalibrationHud({
     }
     const element = hud.current;
     const updateOffset = () => {
+      if (element.getClientRects().length === 0) {
+        onBottomOffsetChange(16);
+        return;
+      }
       onBottomOffsetChange(Math.max(16, window.innerHeight - element.getBoundingClientRect().top + 10));
     };
     const observer = new ResizeObserver(updateOffset);
@@ -2777,7 +2781,7 @@ function PerformanceCalibrationHud({
   const measurement = calibration.measurements.at(-1) ?? null;
   const targetMissed = calibration.phase === "complete" && measurement !== null && !measurement.passed;
   const p90Fps = measurement ? 1000 / Math.max(measurement.p90FrameTimeMs, 1e-6) : null;
-  const lowerResolutionSuggestion = [1, 0.5, 0.25, 0.125, 0.0625]
+  const lowerResolutionSuggestion = [1, 0.75, 0.5, 0.25, 0.125, 0.0625]
     .find((scale) => scale < state.settings.qualityMinimumResolutionScale) ?? null;
   const lowerTargetSuggestion = [120, 90, 60, 30]
     .find((fps) => fps < state.settings.qualityTargetFps) as typeof state.settings.qualityTargetFps | undefined;
