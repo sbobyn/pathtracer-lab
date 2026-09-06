@@ -45,6 +45,13 @@ type ContextualHelpContent = {
   performance?: ReactNode;
 };
 
+const integratorHelp: ContextualHelpContent = {
+  meaning: "Chooses how paths sample illumination. BSDF means bidirectional scattering distribution function; MIS means multiple importance sampling.",
+  math: "BSDF only samples scattering directions. Direct adds explicit light samples at each bounce. MIS combines light and BSDF samples using power-heuristic weights based on their probability densities.",
+  lookFor: "BSDF-only sampling can have high variance under small, bright HDR sources and need many more samples than MIS. Ideal point, spot, and directional lights require Direct or MIS; BSDF-only paths cannot hit them.",
+  performance: "Direct and MIS add shadow-ray work, but usually need fewer samples for a clean result.",
+};
+
 function ContextualHelp({ label, content, triggerLeft }: {
   label: string;
   content: ContextualHelpContent;
@@ -52,28 +59,33 @@ function ContextualHelp({ label, content, triggerLeft }: {
 }) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
+  const surface = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0 });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const updatePosition = () => {
       const bounds = button.current?.getBoundingClientRect();
       if (!bounds) return;
       const width = Math.min(320, window.innerWidth - 24);
       const left = Math.min(Math.max(12, bounds.left), Math.max(12, window.innerWidth - width - 12));
-      const estimatedHeight = 260;
+      const height = surface.current?.getBoundingClientRect().height ?? 260;
       const below = bounds.bottom + 8;
-      const top = below + estimatedHeight <= window.innerHeight - 12
+      const preferredTop = below + height <= window.innerHeight - 12
         ? below
-        : Math.max(12, bounds.top - estimatedHeight - 8);
+        : bounds.top - height - 8;
+      const top = Math.max(12, Math.min(preferredTop, window.innerHeight - height - 12));
       setPosition({ left, top });
     };
     updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    if (surface.current) observer.observe(surface.current);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -87,7 +99,7 @@ function ContextualHelp({ label, content, triggerLeft }: {
       }
     };
     const dismiss = (event: PointerEvent) => {
-      if (open && !button.current?.contains(event.target as Node)) {
+      if (open && !button.current?.contains(event.target as Node) && !surface.current?.contains(event.target as Node)) {
         setOpen(false);
         setPinned(false);
       }
@@ -140,7 +152,7 @@ function ContextualHelp({ label, content, triggerLeft }: {
       }}
     >?</button>
     {open && createPortal(
-      <aside id={id} className="editor-contextual-help__surface" role="tooltip" style={{ left: position.left, top: position.top }}>
+      <aside ref={surface} id={id} className="editor-contextual-help__surface" role="tooltip" style={{ left: position.left, top: position.top, pointerEvents: pinned ? "auto" : "none" }}>
         <strong>{label}</strong>
         <dl>
           <div><dt>Meaning</dt><dd>{content.meaning}</dd></div>
@@ -1011,7 +1023,7 @@ function RenderSettings({
         )}
         <details className="quality-calibration__guide">
           <summary>How to improve performance</summary>
-          <p>Path tracing measures fresh interactive frames, then uses the highest resolution and sample count that leave a safety margin around your target.</p>
+          <p>Calibration measures fresh frames without accumulated samples. It prioritizes resolution, then samples per frame, within your FPS target and quality limits.</p>
           <ul>
             <li><strong>Raster</strong> is fastest and useful for navigation.</li>
             <li><strong>Comparison, ROI, and selected-object modes</strong> trace fewer pixels when configured to trace only their visible region.</li>
@@ -1040,7 +1052,7 @@ function RenderSettings({
           help={{
             meaning: "Independent camera rays traced per pixel during each rendered frame.",
             math: <>The frame estimate is the average <code>(1/N) Σ Lᵢ</code> of N samples.</>,
-            lookFor: "More samples reduce fresh-frame noise and make the image settle faster.",
+            lookFor: "More samples reduce noise per frame, but do not necessarily reduce the time needed to converge.",
             performance: "Cost is approximately linear: doubling samples roughly doubles path-tracing work per frame.",
           }}
           setValue={(value) => {
@@ -1061,19 +1073,14 @@ function RenderSettings({
           sensitivity={0.5}
           integer
           help={{
-            meaning: "Maximum number of surface interactions allowed along one camera path.",
-            math: "Tracing stops after this many bounces even if the path has not escaped or reached a light.",
+            meaning: "Limits the number of ray segments evaluated along each camera path.",
+            math: "Depth 1 evaluates the camera ray and lighting at its first hit. Scattered rays require additional depth; paths cut off at the limit contribute no further light.",
             lookFor: "Higher depths recover multi-bounce light, especially inside glass, reflections, and enclosed scenes.",
             performance: "Raises worst-case work per sample; actual cost depends on how long paths survive.",
           }}
           setValue={(value) => actions.setMaxRayDepth(value)}
         />
-      <HelpedControl label="Integrator" content={{
-        meaning: "Chooses how the renderer samples indirect scattering and explicit light sources.",
-        math: "BSDF samples scattering only; Direct samples lights explicitly; MIS combines both estimators with balance weights.",
-        lookFor: "With small or delta lights, Direct and MIS should converge much faster than BSDF only.",
-        performance: "Direct and MIS add shadow-ray work, but usually need fewer samples for a clean result.",
-      }}><SelectField
+      <HelpedControl label="Integrator" content={integratorHelp}><SelectField
           label="Integrator"
           value={settings.integratorMode}
           options={[
@@ -1168,8 +1175,8 @@ function RenderSettings({
           help={{
             meaning: "Stops progressive accumulation after this many frames; zero means no limit.",
             math: "The final sample budget is approximately frames × samples per frame.",
-            lookFor: "The image stops changing at the limit and resumes after a scene invalidation.",
-            performance: "Caps total idle rendering and prevents very long accumulation from wasting GPU time.",
+            lookFor: "Accumulation restarts when the camera, scene, or relevant render settings change.",
+            performance: "Stops additional path-tracing samples at the limit; overlays and other views may still use the GPU.",
           }}
           setValue={(value) => actions.setMaxAccumulationFrames(value)}
         />
@@ -1177,8 +1184,8 @@ function RenderSettings({
         <HelpedControl label="Acceleration" content={{
           meaning: "Chooses how rays search packed spheres and triangles for the closest intersection.",
           math: "Brute force tests every primitive; the BVH rejects spatial groups using bounding-box tests before exact intersections.",
-          lookFor: "Both modes should produce the same image. Differences indicate an intersection or BVH correctness bug.",
-          performance: "BVH traversal scales far better for large meshes; brute force is retained as a correctness baseline.",
+          lookFor: "Both modes should converge to the same image. Persistent differences beyond sampling noise may indicate an intersection bug.",
+          performance: "BVHs usually reduce intersection work in larger scenes. Savings depend on spatial overlap and ray direction; brute force provides a reference.",
         }}><SelectField
           label="Acceleration"
           value={settings.triangleTraversalMode}
@@ -1260,8 +1267,9 @@ function RenderSettings({
               <span>CPU diagnostic</span>
             </div>
             <p>
-              Records one camera ray through the production flattened BVH. It
-              mirrors the reference algorithm; it is not a readback of a live GPU pixel.
+              Steps through a CPU ray query over the renderer's flattened sphere
+              and triangle BVHs. This inspects intersection traversal, not shading
+              bounces or a readback of a rendered GPU pixel.
             </p>
             <div className="render-panel__traversal-actions">
               <button
@@ -1416,7 +1424,7 @@ function CameraSettings({
         help={{
           meaning: "Controls the vertical angular extent captured by the perspective camera.",
           math: <>Projection scale is proportional to <code>1 / tan(FOV / 2)</code>.</>,
-          lookFor: "Wider angles show more of the scene with stronger perspective; narrower angles magnify and flatten depth.",
+          lookFor: "Wider angles include more of the scene; narrower angles magnify a smaller region. At a fixed camera position, FOV does not change perspective relationships.",
           performance: "It does not directly change the number of rays, though framing different geometry can change average path cost.",
         }}
         setValue={(value) => actions.setFov(value)}
@@ -1444,7 +1452,7 @@ function CameraSettings({
       )}
       <HelpedControl label="Depth of field" content={{
         meaning: "Samples rays across a finite lens instead of sending every ray through one camera point.",
-        math: "Each ray starts at a random aperture position and aims toward the focal plane.",
+        math: "Each ray starts on a sampled lens disk and aims at a point focus-distance units along its pinhole direction.",
         lookFor: "Objects near the focus distance remain sharp while nearer and farther objects blur.",
         performance: "Ray count is unchanged, but lens blur increases variance and can require more samples to converge.",
       }}><CheckboxField
@@ -1475,8 +1483,8 @@ function CameraSettings({
           snapInterval={0.01}
           sensitivity={1}
           help={{
-            meaning: "Sets the radius of the lens region from which camera rays originate.",
-            math: "A larger aperture samples a wider disk around the camera origin.",
+            meaning: "Sets the lens diameter in scene units, not a photographic f-number.",
+            math: "The sampled lens disk has radius aperture / 2.",
             lookFor: "Increasing it strengthens out-of-focus blur; zero behaves like a pinhole camera.",
             performance: "It does not add rays, but stronger blur generally needs more samples to look smooth.",
           }}
@@ -1494,9 +1502,9 @@ function CameraSettings({
           snapInterval={1}
           sensitivity={1}
           help={{
-            meaning: "Sets the distance from the camera at which sampled lens rays converge.",
-            math: "The renderer aims lens samples toward points on the focal plane at this distance.",
-            lookFor: "Move the sharp band forward or backward through the scene while aperture is above zero.",
+            meaning: "Sets the focus distance along each pinhole ray, in scene units.",
+            math: "Focus points lie at equal radial distance from the camera: a curved focus surface, not a flat focal plane.",
+            lookFor: "Move the sharp region nearer or farther while aperture is above zero. The curved focus surface is more noticeable at wide FOVs.",
             performance: "No meaningful direct cost; it changes which parts of the image converge sharply.",
           }}
           setValue={(value) => actions.setFocusDistance(value)}
@@ -1687,7 +1695,7 @@ function OfflineRenderPanel({ state, actions }: { state: Readonly<PtState>; acti
       </button>
       {!collapsed && <div className="render-panel__content still-render-queue">
         <p className="still-render-queue__intro">
-          Render a frozen copy of the current scene, camera position, direction, and lens settings without changing the interactive viewport.
+          Render a snapshot of the current scene and camera. Samples is the total per-pixel budget, not samples per frame; later scene edits do not change queued renders.
         </p>
         <p className="still-render-queue__performance-note">
           <strong>Performance:</strong> Offline rendering shares your GPU and may lower the interactive frame rate. Switch the main Render mode to Raster for maximum responsiveness while you wait.
@@ -1712,9 +1720,9 @@ function OfflineRenderPanel({ state, actions }: { state: Readonly<PtState>; acti
           <EditorNumberField label="Samples" value={samples} min={1} max={100000} step={1} precisionStep={1} snapInterval={16} sensitivity={2 * pathTracerScrubSpeed} integer density="compact" layout="horizontal" onChange={setSamples} />
         </fieldset>
         <EditorNumberField label="Ray depth" value={rayDepth} min={1} max={100} step={1} precisionStep={1} snapInterval={1} sensitivity={pathTracerScrubSpeed} integer density="compact" layout="horizontal" onChange={setRayDepth} />
-        <SelectField label="Integrator" value={integratorMode} options={[
+        <HelpedControl label="Integrator" content={integratorHelp}><SelectField label="Integrator" value={integratorMode} options={[
           { value: "bsdf", label: "BSDF only" }, { value: "direct", label: "Direct lighting" }, { value: "mis", label: "MIS" },
-        ]} density="compact" layout="horizontal" onChange={(value) => setIntegratorMode(value as typeof integratorMode)} />
+        ]} density="compact" layout="horizontal" onChange={(value) => setIntegratorMode(value as typeof integratorMode)} /></HelpedControl>
         <SelectField label="Accumulation" value={accumulationFormat} options={[
           { value: "rgba8", label: "8-bit" }, { value: "rgba16f", label: "16-bit float" }, { value: "rgba32f", label: "32-bit float" },
         ]} density="compact" layout="horizontal" onChange={(value) => setAccumulationFormat(value as typeof accumulationFormat)} />
@@ -4160,7 +4168,7 @@ function CameraRayDebugViewport({
                 key={density}
                 type="button"
                 aria-pressed={rayDensity === density}
-                title={density === "single" ? "Trace one ray through the center of the camera" : undefined}
+                title={density === "single" ? "Show one representative center ray; does not change render samples" : "Show more representative camera paths; does not change render samples"}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setRayDensity(density)}
               >
@@ -4170,7 +4178,7 @@ function CameraRayDebugViewport({
             <button
               type="button"
               className="camera-ray-debug__reset"
-              title="Reset debug camera"
+              title="Reframe the debug view without moving the scene camera"
               aria-label="Reset debug camera"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => actions.resetCameraDebugView()}
