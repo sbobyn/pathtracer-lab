@@ -549,6 +549,50 @@ body {
   background: transparent;
 }
 
+.camera-ray-debug__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px;
+  border-bottom: 1px solid #3f3f46;
+  background: #181b20;
+}
+
+.camera-ray-debug__toolbar .camera-ray-debug__depth,
+.camera-ray-debug__toolbar .camera-ray-debug__density,
+.camera-ray-debug__toolbar .camera-ray-debug__bvh-controls {
+  position: static;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.camera-ray-debug__density > span {
+  padding: 3px 6px;
+  color: #a1a1aa;
+  font-size: 9px;
+  font-weight: 700;
+  border-right: 1px solid rgb(113 113 122 / 45%);
+}
+
+.camera-ray-debug__toolbar > .camera-ray-debug__reset {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid #52525b;
+  border-radius: 5px;
+  background: #27272a;
+  color: #e4e4e7;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  order: 1;
+}
+
+.camera-ray-debug__toolbar > .camera-ray-debug__reset:hover {
+  background: #3f3f46;
+}
+
 .camera-ray-debug__resize-handle {
   position: absolute;
   z-index: 4;
@@ -2906,6 +2950,7 @@ body {
   .camera-ray-debug__depth button,
   .camera-ray-debug__density button,
   .camera-ray-debug__bvh-controls button,
+  .camera-ray-debug__toolbar > .camera-ray-debug__reset,
   .camera-ray-debug__legend-toggle {
     min-width: 36px;
     min-height: 36px;

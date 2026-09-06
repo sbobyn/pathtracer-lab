@@ -3994,7 +3994,7 @@ function CameraRayDebugViewport({
   const [size, setSize] = usePersistentPanelSize(
     sceneKey,
     "camera-ray-debug",
-    { width: 360, height: 266 }
+    { width: 400, height: 340 }
   );
   const resizeGesture = useRef<{
     axis: ResizeAxis;
@@ -4142,19 +4142,16 @@ function CameraRayDebugViewport({
         <span className="camera-ray-debug__chevron" aria-hidden="true">⌃</span>
       </button>
       {!collapsed && (
-        <div ref={viewportRef} className="camera-ray-debug__viewport">
-          <div
-            ref={orbitSurfaceRef}
-            className="camera-ray-debug__orbit-surface"
-            aria-label="Orbit the camera ray debug view"
-          />
+        <>
+        <div className="camera-ray-debug__toolbar" aria-label="Debug visualization controls">
           <div className="camera-ray-debug__depth" aria-label="Representative ray depth">
-            <span>Depth</span>
+            <span>Ray depth</span>
             {([1, 2, 3, 5, 10] as const).map((depth) => (
               <button
                 key={depth}
                 type="button"
                 aria-pressed={rayDepth === depth}
+                title={`Show up to ${depth} debug ray segments; does not change render depth`}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setRayDepth(depth)}
               >
@@ -4163,6 +4160,7 @@ function CameraRayDebugViewport({
             ))}
           </div>
           <div className="camera-ray-debug__density" aria-label="Representative ray density">
+            <span>Rays</span>
             {(["single", "small", "sparse", "medium"] as const).map((density) => (
               <button
                 key={density}
@@ -4175,6 +4173,7 @@ function CameraRayDebugViewport({
                 {density === "single" ? "1" : density === "small" ? "5" : density === "sparse" ? "15" : "45"}
               </button>
             ))}
+          </div>
             <button
               type="button"
               className="camera-ray-debug__reset"
@@ -4183,9 +4182,8 @@ function CameraRayDebugViewport({
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => actions.resetCameraDebugView()}
             >
-              ↺
+              ↺ Reset view
             </button>
-          </div>
           <div className="camera-ray-debug__bvh-controls">
             <button
               type="button"
@@ -4197,17 +4195,26 @@ function CameraRayDebugViewport({
             <button
               type="button"
               disabled={!bvhEnabled || bvhDepth <= 0}
+              aria-label="Decrease visible BVH depth"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => setBvhDepth((depth) => Math.max(0, depth - 1))}
             >−</button>
-            <span className="camera-ray-debug__bvh-depth" aria-disabled={!bvhEnabled}>Depth {bvhDepth}</span>
+            <span className="camera-ray-debug__bvh-depth" aria-disabled={!bvhEnabled}>BVH depth {bvhDepth}</span>
             <button
               type="button"
               disabled={!bvhEnabled || bvhDepth >= maxBvhDepth}
+              aria-label="Increase visible BVH depth"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => setBvhDepth((depth) => Math.min(maxBvhDepth, depth + 1))}
             >+</button>
           </div>
+        </div>
+        <div ref={viewportRef} className="camera-ray-debug__viewport">
+          <div
+            ref={orbitSurfaceRef}
+            className="camera-ray-debug__orbit-surface"
+            aria-label="Debug camera: drag to orbit, right-drag to pan, scroll to zoom. Touch: one finger to orbit, two fingers to pan or pinch."
+          />
           <button
             type="button"
             className="camera-ray-debug__legend-toggle"
@@ -4219,6 +4226,7 @@ function CameraRayDebugViewport({
             ?
           </button>
           {legendOpen && <div className="camera-ray-debug__color-key" aria-label="Debug view color legend">
+            <p>Drag to orbit · Right-drag to pan · Scroll to zoom.<br />Touch: one finger to orbit; two fingers to pan or pinch. These controls move only the debug camera.</p>
             <div>
               <span className="camera-ray-debug__key-title">Rays</span>
               <span><i style={{ background: "#a3e635" }} />hit 1</span>
@@ -4246,6 +4254,7 @@ function CameraRayDebugViewport({
               : `FOV ${Math.round(fov)}°`}
           </span>
         </div>
+        </>
       )}
       {(["width", "height", "both"] as const).map((axis) => (
         <div

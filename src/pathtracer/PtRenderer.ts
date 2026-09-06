@@ -189,6 +189,7 @@ export default class PtRenderer {
   private cameraDebugBvhEnabled = false;
   private cameraDebugBvhDepth = 2;
   private cameraDebugControls: OrbitControls | null = null;
+  private readonly cameraDebugOrbitTarget = new THREE.Vector3();
   private cameraDebugUserControlled = false;
   private cameraDebugInteractionActive = false;
   private readonly cameraDebugTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -1055,6 +1056,7 @@ export default class PtRenderer {
   }
 
   public attachCameraDebugControls(element: HTMLElement | null) {
+    if (this.cameraDebugControls) this.cameraDebugOrbitTarget.copy(this.cameraDebugControls.target);
     this.cameraDebugControls?.dispose();
     this.cameraDebugControls = null;
     this.cameraDebugInteractionActive = false;
@@ -1062,12 +1064,20 @@ export default class PtRenderer {
     const controls = new OrbitControls(this.cameraDebugCamera, element);
     controls.enableDamping = false;
     controls.screenSpacePanning = true;
+    controls.target.copy(this.cameraDebugOrbitTarget);
+    controls.panSpeed = 0.7;
+    // OrbitControls normalizes drag distance by viewport height. Cancel that
+    // normalization so a 60 CSS-pixel drag always rotates about 24 degrees.
+    controls.rotateSpeed = Math.max(1, element.clientHeight) / 900;
+    controls.update();
     controls.addEventListener("start", () => {
+      controls.rotateSpeed = Math.max(1, element.clientHeight) / 900;
       this.cameraDebugUserControlled = true;
       this.cameraDebugInteractionActive = true;
     });
     controls.addEventListener("end", () => {
       this.cameraDebugInteractionActive = false;
+      this.cameraDebugLastRefreshAt = -Infinity;
     });
     this.cameraDebugControls = controls;
   }
@@ -1368,16 +1378,15 @@ export default class PtRenderer {
       this.cameraDebugStaticGroup.add(lines);
     }
 
-    // Give the observer a predictable over-the-shoulder view of the authored
-    // camera, aimed at the same focal point as that camera. This keeps both the
-    // scene and the camera/frustum in view; aiming back at the camera marker
-    // itself points away from the scene.
+    // Look along the source camera's rays from just above its right shoulder.
+    // A steep side/top view makes the image plane edge-on and separates the
+    // source camera from the scene instead of showing their relationship.
     const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(diagramCamera.quaternion);
     // Center the useful diagram between the source camera and its focal point.
     // Extrapolating past the target sends the actual scene into a corner.
     const overviewCenter = diagramCamera.position
       .clone()
-      .lerp(this.orbitControls.target, 0.5);
+      .lerp(this.orbitControls.target, 0.6);
     if (!this.cameraDebugUserControlled) {
       const overviewScale = Math.max(
         cameraViewDistance,
@@ -1385,10 +1394,11 @@ export default class PtRenderer {
       );
       this.cameraDebugCamera.position
         .copy(diagramCamera.position)
-        .addScaledVector(forward, overviewScale * -1.9)
-        .addScaledVector(this.worldUp, overviewScale * 1.6)
-        .addScaledVector(cameraRight, overviewScale * 1.5);
+        .addScaledVector(forward, overviewScale * -0.65)
+        .addScaledVector(this.worldUp, overviewScale * 0.3)
+        .addScaledVector(cameraRight, overviewScale * 0.4);
       this.cameraDebugCamera.lookAt(overviewCenter);
+      this.cameraDebugOrbitTarget.copy(overviewCenter);
       this.cameraDebugControls?.target.copy(overviewCenter);
       this.cameraDebugControls?.update();
       const overviewDistance = this.cameraDebugCamera.position.distanceTo(overviewCenter);
@@ -1398,8 +1408,9 @@ export default class PtRenderer {
         diagramRange * 4
       );
     } else {
+      const overviewDistance = this.cameraDebugCamera.position.distanceTo(this.cameraDebugControls?.target ?? this.cameraDebugOrbitTarget);
       this.cameraDebugCamera.near = Math.max(0.01, diagramRange / 100);
-      this.cameraDebugCamera.far = diagramRange * 4;
+      this.cameraDebugCamera.far = Math.max(overviewDistance + diagramRange * 2, diagramRange * 4);
     }
     this.cameraDebugCamera.updateProjectionMatrix();
     this.cameraDebugStaticDirty = false;
@@ -1439,7 +1450,9 @@ export default class PtRenderer {
     const now = performance.now();
     const refreshDue =
       targetResized ||
-      now - this.cameraDebugLastRefreshAt >= PtRenderer.CAMERA_DEBUG_REFRESH_INTERVAL_MS;
+      now - this.cameraDebugLastRefreshAt >= (this.cameraDebugInteractionActive
+        ? 1000 / 60
+        : PtRenderer.CAMERA_DEBUG_REFRESH_INTERVAL_MS);
     if (refreshDue) {
       this.cameraDebugCamera.aspect = targetWidth / targetHeight;
       this.cameraDebugCamera.updateProjectionMatrix();
@@ -1447,9 +1460,12 @@ export default class PtRenderer {
 
       const previousTarget = this.renderer.getRenderTarget();
       const previousScissorTest = this.renderer.getScissorTest();
+      // Render-target viewports use physical texels. setViewport() applies the
+      // renderer's device pixel ratio even with a target bound, which would
+      // crop this inset toward the upper-right on Retina displays.
+      this.cameraDebugTarget.viewport.set(0, 0, targetWidth, targetHeight);
       this.renderer.setRenderTarget(this.cameraDebugTarget);
       this.renderer.setScissorTest(false);
-      this.renderer.setViewport(0, 0, targetWidth, targetHeight);
       this.renderer.clear(true, true, false);
       this.renderer.render(this.cameraDebugScene, this.cameraDebugCamera);
       this.renderer.setRenderTarget(previousTarget);
