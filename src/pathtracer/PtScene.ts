@@ -18,6 +18,7 @@ import {
   type EnvironmentImportanceDistribution,
 } from "./EnvironmentImportanceDistribution";
 import { loadStaticGltf } from "./StaticGltfLoader";
+import { AssetTransfer, trackAssetTransfer } from "./AssetLoadProgress";
 import { translateStaticGltfMaterial } from "./GltfMaterialTranslator";
 import {
   createFuzzyMetalPreviewMaterial,
@@ -222,7 +223,8 @@ export default class PtScene {
       this.environmentLoaded = null;
       return;
     }
-    this.environmentLoaded = new Promise((resolve, reject) => {
+    const transfer = new AssetTransfer();
+    this.environmentLoaded = trackAssetTransfer(new Promise<THREE.Texture>((resolve, reject) => {
       new RGBELoader().load(source, (texture) => {
         if (revision !== this.environmentLoadRevision) {
           texture.dispose();
@@ -239,8 +241,8 @@ export default class PtScene {
         this.scene.background = texture;
         this.scene.environment = texture;
         resolve(texture);
-      }, undefined, reject);
-    });
+      }, transfer.update, reject);
+    }), transfer);
   }
 
   public syncEnvironmentShadowDirection(rotationDegrees: number) {
@@ -391,7 +393,8 @@ export default class PtScene {
   ) {
     this.staticAssetError = null;
     this.staticAssetWarnings = [];
-    this.staticAssetsLoaded = loadStaticGltf(source).then((primitives) => {
+    const transfer = new AssetTransfer();
+    this.staticAssetsLoaded = trackAssetTransfer(loadStaticGltf(source, transfer.update).then((primitives) => {
       const materialIds = new Map<string, number>();
       primitives.forEach((primitive, index) => {
         if (importScale !== 1) primitive.geometry.scale(importScale, importScale, importScale);
@@ -417,7 +420,7 @@ export default class PtScene {
     }).catch((error: unknown) => {
       this.staticAssetError = error instanceof Error ? error : new Error(String(error));
       throw this.staticAssetError;
-    });
+    }), transfer);
     return this.staticAssetsLoaded;
   }
 

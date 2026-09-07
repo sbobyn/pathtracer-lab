@@ -7,8 +7,8 @@ export interface StaticGltfPrimitive {
   name: string;
 }
 
-export async function loadStaticGltf(source: string): Promise<StaticGltfPrimitive[]> {
-  const gltf = await new GLTFLoader().loadAsync(source);
+export async function loadStaticGltf(source: string, onProgress?: (event: ProgressEvent) => void): Promise<StaticGltfPrimitive[]> {
+  const gltf = await new GLTFLoader().loadAsync(source, onProgress);
   if (gltf.animations.length > 0) {
     throw new Error("Static glTF loading does not support animations");
   }
