@@ -14,7 +14,7 @@ Built with Three.js, React, and a custom WebGL2 path tracer.
 
 Captured in the app. [Images, settings, and credits](docs/media/README.md).
 
-[![Emissive Study demo: enable debug BVH, orbit with five camera rays, then sweep the comparison divider across an orange teapot and reflective sphere](docs/media/emissive-demo.gif)](https://pathtracer-lab.vercel.app/)
+[![Emissive Study demo: orbit the camera, adjust BVH and ray settings, then sweep the comparison divider across an orange teapot and reflective sphere](docs/media/emissive-demo.gif)](https://pathtracer-lab.vercel.app/)
 
 Camera movement, ray visualization, and raster/path-traced comparison.
 

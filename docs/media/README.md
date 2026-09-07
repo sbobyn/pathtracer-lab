@@ -1,29 +1,27 @@
 # Showcase captures
 
-Captured from Path Tracer Lab at source commit `6549aea` on September 4, 2026, using an isolated Chrome session. The collage combines real application output with caption strips. No generated imagery, denoising, relighting, or synthetic ray/geometry overlays were added. Cropping and resizing were used for layout; the collage is compressed as WebP and individual tiles are PNGs.
-
-The Cornell tile was recaptured on September 4, 2026 with black sky and horizon, using the settings below.
+Captured from the deployed `main` build at commit `148423b` on September 6, 2026, using isolated Chrome sessions. The collage combines application output with caption strips. No generated imagery, denoising, relighting, or synthetic ray/geometry overlays were added. Cropping and resizing were used for layout; the collage is WebP and individual tiles are PNGs. Recordings include a white pointer indicator.
 
 | Image | Scene and capture settings |
 | --- | --- |
-| [Global illumination · MIS](cornell.png) | CornellBox; offline path tracing; 800 × 600; 512 samples; depth 8; MIS; 32-bit accumulation; 38° FOV. Demonstrates indirect lighting, not a matched convergence-speed benchmark. |
-| [Transmission · Dispersion](dragon.png) | KhronosDragonDispersion; offline path tracing; 800 × 600; 512 samples; depth 8; MIS; 32-bit accumulation; authored camera and Meadow environment. Visible residual noise is retained. |
-| [glTF · Raster / path traced](helmet.png) | DamagedHelmetStudy; offline Comparison; 800 × 600; 256 samples; depth 8; MIS; divider at 50%. Meadow environment. |
-| [Selective path tracing](selected.png) | TextureStudy; offline Selected comparison; central metal sphere selected; 800 × 600; 256 samples; depth 8; MIS; divider at 50%. The surrounding objects remain rasterized. |
-| [Inspect camera rays](rays.png) | RTIOW1Simple; live capture including panels; Camera Rays panel cropped from the full image; five representative rays, depth 3, BVH bounds off; debug orbit camera adjusted for framing. |
-| [Explore BVH traversal](bvh.png) | PackedTrianglesStudy; live raster capture including the debug overlay layer; 2,048-triangle wave; BVH visible depth 3; picked ray at NDC (0, −0.12); camera orbited after picking; environment background hidden. Final traversal step: 36 node tests, 8 primitive tests, triangle 1247 hit, agrees with brute force. This is a CPU reference diagnostic, not GPU pixel readback. |
+| [Global illumination · MIS](cornell.png) | CornellBox; offline path tracing; 800 × 600; 512 samples; depth 10; MIS; 32-bit accumulation; 38° FOV; black sky and horizon. Demonstrates indirect lighting, not a matched convergence-speed benchmark. |
+| [Transmission · Dispersion](dragon.png) | KhronosDragonDispersion; offline path tracing; 800 × 600; 512 samples; depth 10; MIS; 32-bit accumulation; 38° FOV; Meadow environment. Visible residual noise is retained. |
+| [glTF · Raster / path traced](helmet.png) | DamagedHelmetStudy; offline Comparison; 800 × 600; 512 samples; depth 10; MIS; 32-bit accumulation; 42° FOV; divider at 50%; Meadow environment. |
+| [Selective path tracing](selected.png) | TextureStudy; offline Selected comparison; central metal sphere selected; 800 × 600; 512 samples; depth 10; MIS; 32-bit accumulation; 48° FOV; divider at 50%. Surrounding objects remain rasterized. |
+| [Inspect camera rays](rays.png) | EmissiveStudy; browser screenshot cropped to the Camera Rays panel; five representative rays, depth 3, BVH bounds off; current reset-view framing and toolbar. |
+| [CPU BVH traversal](bvh.png) | PackedTrianglesStudy; browser screenshot of raster output, BVH overlay, and traversal controls; 2,048-triangle wave; BVH visible depth 3; picked ray at NDC (−0.3, −0.12); final traversal step; camera orbited after picking; environment background hidden. This is a CPU diagnostic, not GPU pixel readback. |
 
 ## Emissive Study hero demo
 
 [Animated preview](emissive-demo.gif) · [Static poster](emissive-demo-poster.jpg)
 
-Shows the emissive scene, comparison divider, camera movement, and camera-ray visualization. The 14-second GIF is 660 × 534 at 10 fps, with original playback timing. Displayed application FPS is not a benchmark.
+Enables debug BVH bounds, moves the scene camera out and back, changes BVH depth, ray depth, and ray count, then sweeps the comparison divider across the teapot and metal sphere. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. The GIF is 800 × 600 at 12 fps with original playback timing. Noise during camera movement is retained; displayed application FPS is not a benchmark.
 
 ## CPU BVH ray-traversal demo
 
 [Animated preview](bvh-traversal-viz.gif) · [Static poster](bvh-traversal-viz-poster.jpg)
 
-Demonstrates the packed-triangle scene's BVH bounds and CPU “Pick ray” traversal visualization. This uses the reference traversal algorithm over the production flattened BVH, not live GPU pixel readback. The 27-second GIF is 660 × 534 at 10 fps, with original playback timing.
+Demonstrates the packed-triangle scene's BVH bounds, picking a ray, playing through its traversal, and orbiting the result. This uses the CPU reference traversal algorithm over the production flattened BVH, not GPU pixel readback. The approximately 13-second GIF is 800 × 600 at 12 fps with original playback timing.
 
 ## Credits
 
