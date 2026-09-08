@@ -1,6 +1,6 @@
 # Showcase captures
 
-Captured from the deployed `main` build at commit `148423b` on September 6, 2026, using isolated Chrome sessions. The collage combines application output with caption strips. No generated imagery, denoising, relighting, or synthetic ray/geometry overlays were added. Cropping and resizing were used for layout; the collage is WebP and individual tiles are PNGs. Recordings include a white pointer indicator.
+Captured from the deployed `main` build at commit `148423b` on September 6, 2026, using isolated Chrome sessions. The collage combines application output with caption strips. No generated imagery, denoising, relighting, or synthetic ray/geometry overlays were added. Cropping and resizing were used for layout; the collage is WebP and individual tiles are PNGs. Recordings include a rendered arrow cursor following the recorded mouse input.
 
 | Image | Scene and capture settings |
 | --- | --- |
@@ -15,13 +15,13 @@ Captured from the deployed `main` build at commit `148423b` on September 6, 2026
 
 [Animated preview](emissive-demo.gif) · [Static poster](emissive-demo-poster.jpg)
 
-Recaptured from deployed commit `0bfa80d` on September 7, 2026. Enables debug BVH bounds, moves the scene camera out and back, changes BVH depth, ray depth, and ray count, then sweeps the comparison divider across the teapot and metal sphere. Drags ease in and out, with a quarter-second pause at either end of the divider sweep. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. The approximately 9-second GIF is 800 × 600 at 20 fps with original playback timing. Noise during camera movement is retained; displayed application FPS is not a benchmark.
+Recaptured from the live deployment on September 8, 2026. Sweeps the comparison divider across the teapot and metal sphere, enables debug BVH bounds, moves the scene camera out and back, and disables the debug bounds. Then clicks the teapot with the CPU ray picker, makes a small camera orbit to reveal the ray, briefly plays the traversal, and quickly scrubs its step slider to the end. The picked triangle agrees with the brute-force diagnostic. Comparison rendering stays active throughout; a rendered arrow cursor follows the recorded input, with eased travel between controls and brief pauses before clicks. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. The approximately 18-second GIF is 800 × 600 at 15 fps with original playback timing. A 1000 × 750, 30-fps MP4 is kept outside the repository for social posts. Noise during camera movement is retained; displayed application FPS is not a benchmark.
 
 ## CPU BVH ray-traversal demo
 
 [Animated preview](bvh-traversal-viz.gif) · [Static poster](bvh-traversal-viz-poster.jpg)
 
-Recaptured from deployed commit `0bfa80d` on September 7, 2026. Demonstrates the packed-triangle scene in Comparison mode: raster on the left 25%, path tracing on the right, with BVH bounds and picked-ray traversal overlaid. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. Picks a ray, plays through its traversal, and orbits the result with eased camera movements. The traversal uses the CPU reference algorithm over the production flattened BVH, not GPU pixel readback. The approximately 14-second GIF is 800 × 600 at 20 fps with original playback timing.
+Recaptured from the live deployment on September 8, 2026. Demonstrates the packed-triangle scene in Comparison mode: raster on the left 25%, path tracing on the right, with BVH bounds and picked-ray traversal overlaid. HDR environment lighting remains enabled with its camera background hidden. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. Picks a ray, plays its complete traversal at Fast speed, and orbits the result. A rendered arrow cursor follows the recorded input with eased travel between controls. The picked triangle agrees with the brute-force diagnostic. The traversal uses the CPU reference algorithm over the production flattened BVH, not GPU pixel readback. The approximately 14-second GIF is 800 × 600 at 20 fps with original playback timing. A 1000 × 750, 30-fps MP4 is kept outside the repository for social posts.
 
 ## Credits
 
