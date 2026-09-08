@@ -15,13 +15,13 @@ Captured from the deployed `main` build at commit `148423b` on September 6, 2026
 
 [Animated preview](emissive-demo.gif) · [Static poster](emissive-demo-poster.jpg)
 
-Enables debug BVH bounds, moves the scene camera out and back, changes BVH depth, ray depth, and ray count, then sweeps the comparison divider across the teapot and metal sphere. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. The GIF is 800 × 600 at 12 fps with original playback timing. Noise during camera movement is retained; displayed application FPS is not a benchmark.
+Recaptured from deployed commit `0bfa80d` on September 7, 2026. Enables debug BVH bounds, moves the scene camera out and back, changes BVH depth, ray depth, and ray count, then sweeps the comparison divider across the teapot and metal sphere. Drags ease in and out, with a quarter-second pause at either end of the divider sweep. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. The approximately 9-second GIF is 800 × 600 at 20 fps with original playback timing. Noise during camera movement is retained; displayed application FPS is not a benchmark.
 
 ## CPU BVH ray-traversal demo
 
 [Animated preview](bvh-traversal-viz.gif) · [Static poster](bvh-traversal-viz-poster.jpg)
 
-Demonstrates the packed-triangle scene's BVH bounds, picking a ray, playing through its traversal, and orbiting the result. This uses the CPU reference traversal algorithm over the production flattened BVH, not GPU pixel readback. The approximately 13-second GIF is 800 × 600 at 12 fps with original playback timing.
+Recaptured from deployed commit `0bfa80d` on September 7, 2026. Demonstrates the packed-triangle scene in Comparison mode: raster on the left 25%, path tracing on the right, with BVH bounds and picked-ray traversal overlaid. Recorded at 0.75× resolution, one sample per frame, depth 8, and MIS. Picks a ray, plays through its traversal, and orbits the result with eased camera movements. The traversal uses the CPU reference algorithm over the production flattened BVH, not GPU pixel readback. The approximately 14-second GIF is 800 × 600 at 20 fps with original playback timing.
 
 ## Credits
 

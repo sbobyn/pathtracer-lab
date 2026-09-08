@@ -18,7 +18,7 @@ Captured in the app. [Images, settings, and credits](docs/media/README.md).
 
 Camera movement, ray visualization, and raster/path-traced comparison.
 
-[![CPU ray-traversal demo: visualize BVH bounds, pick a ray, and inspect its traversal](docs/media/bvh-traversal-viz.gif)](https://pathtracer-lab.vercel.app/)
+[![CPU ray-traversal demo in raster/path-traced comparison mode: visualize BVH bounds, pick a ray, and inspect its traversal](docs/media/bvh-traversal-viz.gif)](https://pathtracer-lab.vercel.app/)
 
 Step through a picked ray's BVH traversal. This is a CPU diagnostic, not live GPU pixel readback.
 
