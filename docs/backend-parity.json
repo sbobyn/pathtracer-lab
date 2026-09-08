@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "baselineRevision": "e261be7",
+  "settings": {
+    "width": 800,
+    "height": 600,
+    "resolutionScale": 1,
+    "samplesPerFrame": 1,
+    "maxRayDepth": 8,
+    "integrator": "mis",
+    "accumulation": "rgba32f",
+    "renderMode": "pathtraced",
+    "aperture": 0,
+    "adaptiveQuality": false,
+    "overlays": false,
+    "environmentBackgroundVisible": true
+  },
+  "measurement": {
+    "warmupSeconds": 5,
+    "windowSeconds": 10,
+    "repetitions": 5,
+    "convergenceSamples": [16, 64, 256, 1024],
+    "referenceSamples": 4096,
+    "independentReferenceRuns": 4
+  },
+  "scenes": [
+    { "key": "RTIOW1Simple", "purpose": "Analytic spheres, diffuse, metal and dielectric transport", "camera": { "position": [0, 0.5, 2], "target": [0, 0.5, 0], "fovDegrees": 45 } },
+    { "key": "CornellBox", "purpose": "Emissive quad, indirect lighting, analytic boxes and teapot triangles", "camera": { "position": [0, 0, 5.4], "target": [0, 0, 0], "fovDegrees": 38 } },
+    { "key": "PackedTrianglesStudy", "purpose": "Indexed triangle BVH, procedural texture and HDR reflections", "camera": { "position": [4.8, 3.5, 5.8], "target": [0, -0.3, -0.7], "fovDegrees": 43 } },
+    { "key": "DamagedHelmetStudy", "purpose": "Static glTF metallic-roughness materials and image textures", "camera": { "position": [0, 0, 3.2], "target": [0, 0, 0], "fovDegrees": 42 } }
+  ]
+}

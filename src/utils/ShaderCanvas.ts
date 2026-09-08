@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GpuSampleTimer } from './GpuSampleTimer';
 import type PtUniforms from "../pathtracer/PtUniforms";
 import type { AccumulationFormat } from "../pathtracer/PtState";
 
@@ -21,6 +22,21 @@ export class ShaderCanvas {
   private pingRenderTarget: THREE.WebGLRenderTarget;
   private pongRenderTarget: THREE.WebGLRenderTarget;
   private randomSequenceIndex = 0;
+  private parityTimer?: GpuSampleTimer;
+
+  public startParityGpuTiming(renderer: THREE.WebGLRenderer) {
+    this.parityTimer?.dispose();
+    const gl = renderer.getContext();
+    if (!('beginQuery' in gl)) throw new Error('Parity GPU timing requires WebGL2.');
+    this.parityTimer = new GpuSampleTimer(gl as WebGL2RenderingContext);
+  }
+
+  public pollParityGpuTiming() { return this.parityTimer?.poll(); }
+
+  public stopParityGpuTiming() {
+    this.parityTimer?.dispose();
+    this.parityTimer = undefined;
+  }
   private readonly floatColorBufferSupported: boolean;
   private maxAccumulationFrames: number;
 
@@ -154,7 +170,12 @@ export class ShaderCanvas {
     this.updateRandomSequenceUniform();
     this.material.uniforms.uAccumTexture.value = this.pingRenderTarget.texture;
 
-    renderer.render(this.scene, this.canvasCamera);
+    this.parityTimer?.begin();
+    try {
+      if (this.parityTimer) this.parityTimer.measureCpuSubmission(() => renderer.render(this.scene, this.canvasCamera));
+      else renderer.render(this.scene, this.canvasCamera);
+    }
+    finally { this.parityTimer?.end(); }
     if (region) renderer.setScissorTest(false);
     renderer.setRenderTarget(null);
     this.screenMaterial.map = this.pongRenderTarget.texture;
@@ -240,6 +261,22 @@ export class ShaderCanvas {
     this.setRandomSequenceIndex(0);
   }
 
+  /** Synchronous diagnostic readback; never call inside a timed render window. */
+  public readLinearAccumulation(renderer: THREE.WebGLRenderer) {
+    if (this.accumulationTextureType !== THREE.FloatType) {
+      throw new Error("Linear parity capture requires RGBA32F accumulation.");
+    }
+    if (this.accumulatedFrames < 1) throw new Error("No accumulated samples to capture.");
+    // render() swaps the targets after each batch: ping is the completed image.
+    const target = this.pingRenderTarget;
+    const data = new Float32Array(target.width * target.height * 4);
+    renderer.readRenderTargetPixels(target, 0, 0, target.width, target.height, data);
+    if (!data.every(Number.isFinite)) throw new Error("Non-finite linear accumulation.");
+    return { width: target.width, height: target.height, data,
+      batches: this.accumulatedFrames, sequenceIndex: this.randomSequenceIndex,
+      rowOrder: "bottom-up" as const };
+  }
+
   public setStencilMaskEnabled(enabled: boolean) {
     this.material.stencilWrite = enabled;
     this.material.stencilFunc = THREE.EqualStencilFunc;
@@ -262,6 +299,7 @@ export class ShaderCanvas {
   }
 
   public dispose() {
+    this.parityTimer?.dispose();
     this.pingRenderTarget.dispose();
     this.pongRenderTarget.dispose();
 

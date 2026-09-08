@@ -421,6 +421,42 @@ export default class PtRenderer {
     return this.shaderCanvas.accumulatedFrames;
   }
 
+  /** Explicit diagnostic entry points; normal editor sampling is unchanged. */
+  public resetParitySequence(completedBatches: number) {
+    if (!this.renderingPaused) throw new Error("Pause rendering before resetting a parity sequence.");
+    if (!Number.isSafeInteger(completedBatches) || completedBatches < 0) throw new RangeError("Invalid sequence offset.");
+    this.shaderCanvas.resetAccumulation();
+    this.shaderCanvas.setRandomSequenceIndex(completedBatches);
+  }
+
+  public captureLinearParityFrame() {
+    if (!this.renderingPaused) throw new Error("Pause rendering before linear readback.");
+    if (this.settings.renderMode !== "pathtraced") throw new Error("Parity capture requires full-frame path tracing.");
+    return this.shaderCanvas.readLinearAccumulation(this.renderer);
+  }
+
+  public startParityGpuTiming() {
+    if (!this.renderingPaused) throw new Error("Pause rendering before starting parity timing.");
+    this.shaderCanvas.startParityGpuTiming(this.renderer);
+  }
+
+  public pollParityGpuTiming() { return this.shaderCanvas.pollParityGpuTiming(); }
+
+  public stopParityGpuTiming() { this.shaderCanvas.stopParityGpuTiming(); }
+
+  public getParityDeviceInfo() {
+    const gl = this.renderer.getContext();
+    const debug = gl.getExtension('WEBGL_debug_renderer_info');
+    return { api: 'WebGL2', version: gl.getParameter(gl.VERSION),
+      shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      vendor: gl.getParameter(gl.VENDOR), renderer: gl.getParameter(gl.RENDERER),
+      unmaskedVendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : null,
+      unmaskedRenderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null,
+      contextAttributes: gl.getContextAttributes(),
+      timerQuerySupported: Boolean(gl.getExtension('EXT_disjoint_timer_query_webgl2')),
+      floatColorBufferSupported: Boolean(gl.getExtension('EXT_color_buffer_float')) };
+  }
+
   public setRenderingPaused(paused: boolean) {
     if (this.renderingPaused !== paused) this.resetFrameTiming();
     this.renderingPaused = paused;
