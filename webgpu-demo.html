@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebGPU sphere bring-up</title>
+<style>body{background:#18181b;color:#eee;font:16px system-ui;margin:24px}a{color:#b8e97a}canvas{display:block;width:min(100%,800px);aspect-ratio:4/3;margin-top:16px}button{padding:8px;margin-right:8px}</style>
+<h1>WebGPU bring-up</h1>
+<p><a href="?">Sphere path tracer</a> · <a href="?geometry=1">Packed geometry diagnostics</a></p>
+<p id="description">Initializing…</p>
+<p>Drag to orbit, scroll to zoom, right-drag to pan. Touch: one finger orbits; two fingers zoom/pan.</p>
+<button id="reset">Reset accumulation</button><button id="resize">Toggle resolution</button>
+<select id="mode" aria-label="Geometry diagnostic mode" hidden><option value="0">Shading normals</option><option value="1">UV checker</option><option value="2">Barycentric coordinates</option></select>
+<output id="status">Initializing WebGPU…</output><canvas></canvas>
+<script type="module" src="./src/webgpu/demo.ts"></script>
+</html>
